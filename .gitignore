@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# VS Code settings
+.vscode/
+*.code-workspace
+
 # Distribution / packaging
 .Python
 build/
@@ -133,6 +137,12 @@ venv.bak/
 # Spyder project settings
 .spyderproject
 .spyproject
+
+# Azure Functions related
+local.settings.json
+*.funcignore
+bin/
+obj/
 
 # Rope project settings
 .ropeproject
