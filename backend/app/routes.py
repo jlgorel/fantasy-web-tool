@@ -26,6 +26,8 @@ def load_sleeper_info():
         except Exception as e:
             print("Ran into exception setting cache. Exception is " + str(e))
             traceback.print_exc()
+            tb_str = traceback.format_exc()
+            return jsonify({'message': 'Error, ' + tb_str}), 500
 
         return jsonify({'message': 'Data cached successfully', 'cache_key': cache_key, 'league_names': suggested_lineups}), 200
     except Exception as e:
