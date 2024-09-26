@@ -2,6 +2,7 @@ from flask import request, Blueprint, jsonify, current_app
 from app.services.sleeper_service import cache_sleeper_user_info
 from flask_caching import Cache
 import traceback
+import json
 
 main = Blueprint('main', __name__)
     
@@ -22,10 +23,9 @@ def load_sleeper_info():
         redis_client = current_app.redis_client
 
         try:
-            redis_client.set(cache_key, suggested_lineups, ex=900)  # Timeout set to 300 seconds
+            redis_client.set(cache_key, json.dumps(suggested_lineups), ex=900)  # Timeout set to 300 seconds
         except Exception as e:
             print("Ran into exception setting cache. Exception is " + str(e))
-            traceback.print_exc()
             tb_str = traceback.format_exc()
             return jsonify({'message': 'Error, ' + tb_str}), 500
 
@@ -42,11 +42,13 @@ def load_cached_starts():
 
     redis_client = current_app.redis_client
 
-    cached_start_recommendations = redis_client.get(cache_key)
+    cached_data = redis_client.get(cache_key)
 
-    if not cached_start_recommendations:
+    if not cached_data:
         return jsonify({'message': 'Nothing has been cached for this user yet. Have you hit the load roster button?',
                         'cache_key': cache_key}), 404
+    else:
+        cached_start_recommendations = json.loads(cached_data)
 
     return jsonify({'league_names': list(cached_start_recommendations.keys())}), 200
 
@@ -66,12 +68,15 @@ def load_league_data():
     if not user_data:
         return jsonify({'error': 'No data found for the specified user',
                         'cache_key': cache_key}), 404
+    else:
+        jsonified_data = json.loads(user_data)
 
-    league_data = user_data.get(league)
+    league_data = jsonified_data.get(league)
 
     if not league_data:
         return jsonify({'error': 'No data found for the specified league',
-                        'cache_key': cache_key}), 404
+                        'cache_key': cache_key,
+                        'jsonified_data': jsonified_data}), 404
 
     return jsonify(league_data), 200
 
