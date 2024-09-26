@@ -1,0 +1,8 @@
+beautifulsoup4==4.12.3
+Flask==3.0.3
+Flask_Caching==2.3.0
+Flask_Cors==5.0.0
+redis==5.0.8
+Requests==2.32.3
+selenium==4.25.0
+azure-storage-blob==12.23.0
