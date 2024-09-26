@@ -11,6 +11,7 @@ import time
 from datetime import datetime
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+import pytz
 
 app = func.FunctionApp()
 
@@ -97,25 +98,29 @@ def get_boris_chen_tiers():
     logging.info("Got borischen links")
 
     # Start Playwright session
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
 
-        tiers = {}
-        for link, name in links:
-            logging.info(f"Getting data from link {link}")
-            page.goto(link)
+            tiers = {}
+            for link, name in links:
+                logging.info(f"Getting data from link {link}")
+                page.goto(link)
 
-            # Use BeautifulSoup to parse the page content
-            soup = BeautifulSoup(page.content(), 'html.parser')
-            text_tier = retrieve_tiers_from_soup(soup)
-            tier_lines = split_text_into_tier_dict(text_tier)
-            tier_dict = {}
-            for num, tier in enumerate(tier_lines):
-                tier_dict[num + 1] = [player.strip() for player in tier]
-            tiers[name] = tier_dict
+                # Use BeautifulSoup to parse the page content
+                soup = BeautifulSoup(page.content(), 'html.parser')
+                text_tier = retrieve_tiers_from_soup(soup)
+                tier_lines = split_text_into_tier_dict(text_tier)
+                tier_dict = {}
+                for num, tier in enumerate(tier_lines):
+                    tier_dict[num + 1] = [player.strip() for player in tier]
+                tiers[name] = tier_dict
 
-        browser.close()
+            browser.close()
+    except Exception as e:
+        logging.info("Playwright failed")
+        raise ValueError("Playwright not installed correctly")
 
     upload_to_azure_blob(tiers, "borischen_tiers.json")
 
@@ -213,20 +218,39 @@ def getProjectionsFromAllVegas():
     
 def download_necessary_fantasy_data():
 
-    now = datetime.now()
-    if not (now.month >= 9 or (now.month == 1 and now.day <= 31)):
-        logging.info("Not in football season. Skipping data download.")
-        return
-    
-    boris_chen_result = get_boris_chen_tiers()
+    success = False
     try:
-        player_info_list = get_fantasypros_top_players()
-    except:
-        logging.info("Couldn't get updated fantasypros players, matchup data might be slightly out of date")
-    sleeper_result = get_sleeper_player_data()
-    sportsbook_player_ranking = getProjectionsFromAllVegas()
+        now = datetime.now()
+        if not (now.month >= 9 or (now.month == 1 and now.day <= 31)):
+            logging.info("Not in football season. Skipping data download.")
+            return
+        
+        boris_chen_result = get_boris_chen_tiers()
+        try:
+            player_info_list = get_fantasypros_top_players()
+        except:
+            logging.info("Couldn't get updated fantasypros players, matchup data might be slightly out of date")
+        sleeper_result = get_sleeper_player_data()
+        sportsbook_player_ranking = getProjectionsFromAllVegas()
 
-    logging.info("Web scraping completed!")
+        logging.info("Web scraping completed!")
+        success = True
+    except Exception as e:
+        logging.error("Ran into error while testing, exception is " + str(e))
+    finally:
+        eastern = pytz.timezone('America/New_York')
+
+        # Get the current time in UTC and convert to Eastern Time
+        eastern_time = datetime.now(eastern)
+
+        # Format the date and time
+        formatted_time = eastern_time.strftime("%-m/%-d %I:%M:%S %p %Z")
+
+        run_info = {
+            "Successful": success,
+            "Runtime": formatted_time
+        }
+        upload_to_azure_blob(run_info, "runinfo.json")
 
 @app.function_name(name="test_http_trigger")
 @app.route(route="hello", auth_level=func.AuthLevel.ANONYMOUS)

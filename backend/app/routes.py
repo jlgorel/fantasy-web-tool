@@ -1,7 +1,8 @@
 from flask import request, Blueprint, jsonify, current_app
-from app.services.sleeper_service import cache_sleeper_user_info
+from app.services.sleeper_service import cache_sleeper_user_info, load_json_from_azure_storage
 from flask_caching import Cache
 import traceback
+from config import Config
 import json
 
 main = Blueprint('main', __name__)
@@ -79,6 +80,11 @@ def load_league_data():
                         'jsonified_data': jsonified_data}), 404
 
     return jsonify(league_data), 200
+
+@main.route('/load-last-run-info', methods=['GET'])
+def load_last_run_info():
+    run_info = load_json_from_azure_storage("runinfo.json", Config.containername, Config.azure_storage_connection_string)
+    return jsonify(run_info["Runtime"]), 200
 
 
 

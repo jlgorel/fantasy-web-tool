@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUUID } from '../context/UUIDContext'; // Import the hook
 import DynamicTabs from '../components/LeagueTabs';
 
@@ -6,7 +6,24 @@ const HomePage: React.FC = () => {
   const [name, setName] = useState<string>('');
   const [showTabs, setShowTabs] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(true); // State for instructions visibility
+  const [runtime, setRuntime] = useState('');
+
   const userUUID = useUUID(); // This should now work
+
+  // Function to load the last run info from the API
+  const loadLastRunInfo = async () => {
+    try {
+      const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-last-run-info'); // Adjust this URL as needed
+      const runtime = await response.json(); // Parse the response as JSON
+      setRuntime(runtime); // Assuming the API returns the runtime directly
+    } catch (error) {
+      console.error('Error fetching runtime info:', error);
+    }
+  };
+
+  useEffect(() => {
+    loadLastRunInfo();
+  }, []);
 
   const handleSaveClick = async () => {
     try {
@@ -46,6 +63,9 @@ const HomePage: React.FC = () => {
         <img src={`${process.env.PUBLIC_URL}/AmericanFootball.png`} alt="Football" style={{ width: '100px', marginRight: '10px' }} />
         <h1 style={{ fontSize: '2rem', textAlign: 'center' }}>Fantasy Football Team Visualizer</h1>
         <img src={`${process.env.PUBLIC_URL}/AmericanFootball.png`} alt="Football" style={{ width: '100px', marginLeft: '10px' }} />
+        <div style={{ position: 'absolute', top: '10px', right: '10px', fontSize: '16px', backgroundColor: 'rgba(255, 255, 255, 0.8)', padding: '5px', borderRadius: '5px' }}>
+          Data last updated at: {runtime || "Loading..."} 
+        </div>
       </div>
       <p style={{ textAlign: 'center', fontSize: '25px' }}>Enter your Sleeper username to load your fantasy football teams and visualize your lineups!</p>
 
