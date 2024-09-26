@@ -27,7 +27,7 @@ def load_sleeper_info():
             print("Ran into exception setting cache. Exception is " + str(e))
             traceback.print_exc()
 
-        return jsonify({'message': 'Data cached successfully', 'league_names': suggested_lineups}), 200
+        return jsonify({'message': 'Data cached successfully', 'cache_key': cache_key, 'league_names': suggested_lineups}), 200
     except Exception as e:
         print("Exception was " + str(e))
         traceback.print_exc()
@@ -43,7 +43,8 @@ def load_cached_starts():
     cached_start_recommendations = redis_client.get(cache_key)
 
     if not cached_start_recommendations:
-        return jsonify({'message': 'Nothing has been cached for this user yet. Have you hit the load roster button?'})
+        return jsonify({'message': 'Nothing has been cached for this user yet. Have you hit the load roster button?',
+                        'cache_key': cache_key}), 404
 
     return jsonify({'league_names': list(cached_start_recommendations.keys())}), 200
 
@@ -61,12 +62,14 @@ def load_league_data():
     user_data = redis_client.get(cache_key)
 
     if not user_data:
-        return jsonify({'error': 'No data found for the specified user'}), 404
+        return jsonify({'error': 'No data found for the specified user',
+                        'cache_key': cache_key}), 404
 
     league_data = user_data.get(league)
 
     if not league_data:
-        return jsonify({'error': 'No data found for the specified league'}), 404
+        return jsonify({'error': 'No data found for the specified league',
+                        'cache_key': cache_key}), 404
 
     return jsonify(league_data), 200
 

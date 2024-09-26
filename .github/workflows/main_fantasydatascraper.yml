@@ -81,4 +81,9 @@ jobs:
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           scm-do-build-during-deployment: true
           enable-oryx-build: true
+
+      - name: Post-deployment Playwright install
+        run: |
+          python -m playwright install
+        if: success()  # This ensures it runs only if the deployment is successful
           

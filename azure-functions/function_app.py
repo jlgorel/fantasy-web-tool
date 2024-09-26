@@ -14,11 +14,6 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
 app = func.FunctionApp()
 
-def install_browsers_if_needed(localtest = False):
-    if not os.path.exists("/home/site/wwwroot/browsers") and not localtest:
-        with sync_playwright() as p:
-            p.install()
-
 def upload_to_azure_blob(data_dict, blob_name, filename="file"):
     connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if not connect_str:
@@ -223,14 +218,20 @@ def download_necessary_fantasy_data():
         logging.info("Not in football season. Skipping data download.")
         return
     
-    install_browsers_if_needed()
-
     boris_chen_result = get_boris_chen_tiers()
     player_info_list = get_fantasypros_top_players()
     sleeper_result = get_sleeper_player_data()
     sportsbook_player_ranking = getProjectionsFromAllVegas()
 
     logging.info("Web scraping completed!")
+
+@app.function_name(name="test_http_trigger")
+@app.route(route="hello", auth_level=func.AuthLevel.ANONYMOUS)
+def test_http_trigger(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('Python HTTP trigger function processed a request.')
+    download_necessary_fantasy_data()
+
+    logging.info("Completed test!")
 
 # Non-game day schedule
 @app.function_name(name="non_game_day_schedule")
