@@ -12,14 +12,7 @@ from datetime import datetime
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
-
 app = func.FunctionApp()
-
-def load_config():
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
-    with open(config_path) as config_file:
-        config = json.load(config_file)
-    return config
 
 def install_browsers_if_needed(localtest = False):
     if not os.path.exists("/home/site/wwwroot/browsers") and not localtest:

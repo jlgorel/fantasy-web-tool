@@ -5,6 +5,7 @@ class Config:
     borischen_dir = "borischen"
     vegas_dir = "vegas"
     draftkings_dir = "draftkings_odds"
+    container_name = "fantasyjsons"
 
     boris_chen_fantasy_relevant_pos = ["K", "DEF", "DST", "QB", "TE", "WR", "RB", "Flex"]
     relevant_sleeper_keys = ["fantasy_positions", "full_name"]
