@@ -1,6 +1,4 @@
 from app import create_app
-import os
-import redis
 
 app = create_app()
 
