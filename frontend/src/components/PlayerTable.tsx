@@ -61,14 +61,14 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
             <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
               <td style={{ padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>{player.POS}</td>
               <td style={{ position: 'relative', padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', verticalAlign: 'middle', display: 'flex', alignItems: 'center' }}>
+              {player.PID && (
                 <div style={{ position: 'relative', width: '75px', height: '50px' }}> {/* Wrapper for the images */}
-                  {player.PID && (
                     <img
                       src={"https://sleepercdn.com/content/nfl/players/" + player.PID + ".jpg"}
                       alt={`${player.NAME} logo`}
                       style={{ width: '75px', height: '50px', borderRadius: '50%', marginRight: '10px' }}
                     />
-                  )}
+                  
                   {player.TEAM_NAME && (
                     <img
                       src={"https://sleepercdn.com/images/team_logos/nfl/" + player.TEAM_NAME.toLowerCase() + ".png"}
@@ -84,6 +84,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
                     />
                   )}
                 </div>
+              )}
                 {player.TEAM && (
                   <img
                     src={"https://sleepercdn.com/images/team_logos/nfl/" + player.TEAM.toLowerCase() + ".png"}
