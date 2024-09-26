@@ -7,7 +7,6 @@ from datetime import datetime
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient
 from copy import copy, deepcopy
-from .vegas_odds_service import normalize_name_to_sleeper
 import logging
 
 # Configure logging
