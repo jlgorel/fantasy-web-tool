@@ -109,7 +109,7 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
                   marginRight: '8px',
                   verticalAlign: 'middle'
                 }} />
-                {player.POS_RANK != "Unranked" ? "Tier " + player.POS_RANK : player.POS_RANK}
+                {player.POS_RANK !== "Unranked" ? "Tier " + player.POS_RANK : player.POS_RANK}
               </td>
               <td style={{ padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>
                 <div style={{

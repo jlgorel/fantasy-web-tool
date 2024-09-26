@@ -55,7 +55,7 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({showTabs}) => {
           setLoading(false); // Set loading to false even if there's an error
         });
       }
-    }, []);
+    }, [userUUID]);
   
 
   // Fetch data on initial render
