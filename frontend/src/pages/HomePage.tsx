@@ -14,7 +14,8 @@ const HomePage: React.FC = () => {
   const loadLastRunInfo = async () => {
     try {
       const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-last-run-info'); // Adjust this URL as needed
-      const runtime = await response.json(); // Parse the response as JSON
+      const data = await response.json(); // Parse the response as JSON
+      const runtime = data["Runtime"]
       setRuntime(runtime); // Assuming the API returns the runtime directly
     } catch (error) {
       console.error('Error fetching runtime info:', error);

@@ -84,7 +84,7 @@ def load_league_data():
 @main.route('/load-last-run-info', methods=['GET'])
 def load_last_run_info():
     run_info = load_json_from_azure_storage("runinfo.json", Config.containername, Config.azure_storage_connection_string)
-    return jsonify(run_info["Runtime"]), 200
+    return jsonify(run_info), 200
 
 
 
