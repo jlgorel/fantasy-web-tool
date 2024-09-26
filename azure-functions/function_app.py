@@ -57,7 +57,7 @@ def retrieve_tiers_from_soup(soup):
             data_response.raise_for_status()
             return data_response.text
     else:
-        print("No object tag")
+        logging.info("No object tag")
 
 def split_text_into_tier_dict(text):
     lines = str(text).split("\n")
@@ -85,7 +85,7 @@ def get_boris_chen_tiers():
                 href = a.get('href')
                 text = a.get_text()
                 if href:
-                    for pos in ['QB', 'RB', 'WR', 'TE']:  # Assuming these are relevant positions
+                    for pos in Config.boris_chen_fantasy_relevant_pos:
                         if pos in str(text).split():
                             links.append((href, text))
                             break
@@ -219,7 +219,10 @@ def download_necessary_fantasy_data():
         return
     
     boris_chen_result = get_boris_chen_tiers()
-    player_info_list = get_fantasypros_top_players()
+    try:
+        player_info_list = get_fantasypros_top_players()
+    except:
+        logging.info("Couldn't get updated fantasypros players, matchup data might be slightly out of date")
     sleeper_result = get_sleeper_player_data()
     sportsbook_player_ranking = getProjectionsFromAllVegas()
 
@@ -232,6 +235,7 @@ def test_http_trigger(req: func.HttpRequest) -> func.HttpResponse:
     download_necessary_fantasy_data()
 
     logging.info("Completed test!")
+    return ["Success!"]
 
 # Non-game day schedule
 @app.function_name(name="non_game_day_schedule")
@@ -294,5 +298,10 @@ def sunday_schedule_snf_pregame(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule pregame SNF...')
     download_necessary_fantasy_data()
 
+@app.function_name(name="weekly_sleeper_update")
+@app.timer_trigger(schedule="0 0 0 * * Sun", arg_name="mytimer")
+def sleeper_player_update(mytimer: func.TimerRequest) -> None:
+    logging.info('Executing sleeper player update')
+    get_sleeper_player_data()
 
 

@@ -180,7 +180,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                 for prefix in [normal_prefix, te_prefixes]:
                     cleaned_pos_name = cleaned_pos_name.replace(prefix, "")
                 pos_rank_dict[cleaned_pos_name] = tier_rank
-                if int(tier_rank) <= 3:
+                if int(tier_rank) <= 3 and cleaned_pos_name != "TE":
                     top_tier_player_flag = True
 
             if top_tier_player_flag and "Flex" not in pos_rank_dict:
