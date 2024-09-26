@@ -8,7 +8,7 @@ import redis
 
 def create_app():
     app = Flask(__name__)
-    CORS(app) 
+    CORS(app, resources={r"/*": {"origins": "https://ff-ranking-visualizer.azurewebsites.net/"}})
     
     # Load configurations
     app.config.from_object(Config)
