@@ -33,7 +33,7 @@ const HomePage: React.FC = () => {
 
   useEffect(() => {
     loadLastRunInfo();
-  }, []);
+  }, [loadLastRunInfo]);
 
   const handleSaveClick = async () => {
     try {
