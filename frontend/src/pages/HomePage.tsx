@@ -13,8 +13,17 @@ const HomePage: React.FC = () => {
   // Function to load the last run info from the API
   const loadLastRunInfo = async () => {
     try {
-      const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-last-run-info'); // Adjust this URL as needed
+      const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-last-run-info', {
+        method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-UUID': userUUID,
+          },
+        }); // Adjust this URL as needed
+      console.log(response)
       const data = await response.json(); // Parse the response as JSON
+      console.log("JSON is:")
+      console.log(data)
       const runtime = data["Runtime"]
       setRuntime(runtime); // Assuming the API returns the runtime directly
     } catch (error) {
