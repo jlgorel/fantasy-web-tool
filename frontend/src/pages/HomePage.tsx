@@ -19,7 +19,6 @@ const HomePage: React.FC = () => {
           method: 'GET',
             headers: {
               'Content-Type': 'application/json',
-              'X-User-UUID': userUUID,
             },
           }); // Adjust this URL as needed
         console.log(response)
