@@ -1,8 +1,7 @@
 from flask import request, Blueprint, jsonify, current_app
 from app.services.sleeper_service import cache_sleeper_user_info, load_json_from_azure_storage
-from flask_caching import Cache
 import traceback
-from config import Config
+from app.config import Config
 import json
 
 main = Blueprint('main', __name__)
