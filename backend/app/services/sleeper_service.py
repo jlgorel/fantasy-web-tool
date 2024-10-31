@@ -83,7 +83,13 @@ def get_rosters_for_user(username):
         data = fetch_json(url)
 
         your_roster = next((roster for roster in data if roster["owner_id"] == user_id), None)
-        curr_rosters.append({"league": league["name"], "pids": your_roster["players"], "settings": scoring_settings, "positions": starting_pos})
+
+        all_owned_players = []
+
+        for roster in data:
+            all_owned_players.extend([player for player in roster["players"]])
+
+        curr_rosters.append({"league": league["name"], "pids": your_roster["players"], "settings": scoring_settings, "positions": starting_pos, "all_owned": all_owned_players})
     
     return curr_rosters
     
@@ -144,13 +150,15 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
     #Use draftkings projections to calculate touchdowns since they give anytime and 2+ touchdown odds, and then default to the combined sportsbook for other stats
 
-    sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
+    #sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
+    sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
     fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
 
     for roster in user_rosters:
         position_groups = copy(league_position_groups[roster["league"]])
         normal_prefix, te_prefixes = get_tier_page_names_from_league_settings(roster["settings"])
         starting_positions = clean_up_pos_names(roster["positions"])
+        #free_agents = [name for name,pid in nameToPidDict.items() if pid not in roster["all_owned"]]
         settings = roster["settings"]
 
         tiers_to_lookup = set()
