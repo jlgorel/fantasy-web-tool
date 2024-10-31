@@ -385,9 +385,7 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
     else:
         logger.info("Didnt find " + player + " in projections")
         return 0, False
-    
-    missing_projections = set(backup_projections.keys()).difference(p_projections.keys)
-    
+        
     proj_points = 0
     for key, val in p_projections.items():
         if key == "Opponent Rating" or key == "Team Name":
@@ -398,6 +396,7 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
             proj_points += float(val) * stat_point_multipliers[key]
     
     try:
+        missing_projections = [key for key in backup_projections if key not in p_projections]
         for key in missing_projections:
             if key == "Opponent Rating" or key == "Team Name":
                 continue
