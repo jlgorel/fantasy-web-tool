@@ -152,6 +152,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
     #sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
     sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
+    backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
     fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
 
     for roster in user_rosters:
@@ -255,7 +256,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                     else:
                         temp_dict["FLEX"] = str(ranking)
                 if pos != "DST" and pos != "DEF" and pos != "K":
-                    projected_scoring, old_projection = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, stat_point_multipliers)
+                    projected_scoring, old_projection = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
                     temp_dict["VEGAS"] = str(round(projected_scoring, 2))
                     if old_projection:
                         temp_dict["VEGAS"] += "\t Old projection, no lines available, confirm uninjured"
@@ -369,7 +370,7 @@ def get_all_players_from_position_groups(position_groups):
         players.extend(names)
     return players
 
-def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, stat_point_multipliers):
+def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, backup_stat_projections, stat_point_multipliers):
 
     if pos_group == "TE":
         rec_points = stat_point_multipliers["TE Receptions"]
@@ -380,9 +381,12 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
 
     if playerkey in player_stat_projections:
         p_projections = player_stat_projections[playerkey]
+        backup_projections = backup_stat_projections[playerkey]
     else:
         logger.info("Didnt find " + player + " in projections")
         return 0, False
+    
+    missing_projections = set(backup_projections.keys()).difference(p_projections.keys)
     
     proj_points = 0
     for key, val in p_projections.items():
@@ -392,5 +396,16 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
             proj_points += float(val) * rec_points
         else:
             proj_points += float(val) * stat_point_multipliers[key]
+    
+    try:
+        for key in missing_projections:
+            if key == "Opponent Rating" or key == "Team Name":
+                continue
+            if key == "Receptions":
+                proj_points += float(backup_projections[key]) * rec_points
+            else:
+                proj_points += float(backup_projections[key]) * stat_point_multipliers[key]
+    except Exception as e:
+        logger.info("Exception was " + str(e))
 
     return proj_points, False
