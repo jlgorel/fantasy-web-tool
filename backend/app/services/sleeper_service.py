@@ -148,8 +148,6 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
     suggested_starts = {}
 
-    #Use draftkings projections to calculate touchdowns since they give anytime and 2+ touchdown odds, and then default to the combined sportsbook for other stats
-
     #sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
     sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
     backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
@@ -379,11 +377,10 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
 
     playerkey = ''.join(char for char in player if char.isalnum()).lower()
 
-    if playerkey in player_stat_projections:
-        p_projections = player_stat_projections[playerkey]
-        backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
-    else:
-        logger.info("Didnt find " + player + " in projections")
+    p_projections = player_stat_projections[playerkey] if playerkey in player_stat_projections else {}
+    backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
+    if len(p_projections) == 0 and len(backup_projections) == 0:
+        logger.info("Didnt find " + player + " in standard or backup projections")
         return 0, False
         
     proj_points = 0
