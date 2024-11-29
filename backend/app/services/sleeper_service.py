@@ -39,10 +39,10 @@ def cache_sleeper_user_info(username, user_uuid):
     user_rosters = get_rosters_for_user(username)
     pidToPlayerDict, nameToPidDict = prepare_pid_to_name_dict(user_rosters)
     boris_chen_dict = prepare_boris_chen_tier_dict()
-    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict)
-    suggested_lineups = form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_dict, nameToPidDict)
+    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict, nameToPidDict)
+    suggested_lineups, free_agent_pickups = form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_dict, nameToPidDict)
 
-    return suggested_lineups
+    return suggested_lineups, free_agent_pickups
 
 def get_rosters_for_user(username):
     # Get the current date and time
@@ -126,7 +126,7 @@ def prepare_boris_chen_tier_dict():
 
     return player_tiers
 
-def prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict):
+def prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict, nameToPidDict):
 
     league_position_groups = {}
 
@@ -141,12 +141,23 @@ def prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict):
             except:
                 logger.info("Error handling player with pid " + str(pid) + ", " + str(player))
             position_groups[position].append(name)
+        free_agents = [pid for name,pid in nameToPidDict.items() if pid not in roster["all_owned"]]
+        for pid in free_agents:
+            player = pidToPlayerDict[pid]
+            position = player["fantasy_positions"][0]
+            try:
+                name = Config.nfl_teams[pid] if pid in Config.nfl_teams else player["full_name"]
+            except:
+                logger.info("Error handling player with pid " + str(pid) + ", " + str(player))
+            position_groups["FA_"+position].append(name)
+        
         league_position_groups[league_name] = position_groups
     return league_position_groups
 
 def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_tiers, nameToPidDict):
 
     suggested_starts = {}
+    suggested_pickups_for_roster = {}
 
     #sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
     sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
@@ -157,8 +168,10 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
         position_groups = copy(league_position_groups[roster["league"]])
         normal_prefix, te_prefixes = get_tier_page_names_from_league_settings(roster["settings"])
         starting_positions = clean_up_pos_names(roster["positions"])
-        #free_agents = [name for name,pid in nameToPidDict.items() if pid not in roster["all_owned"]]
         settings = roster["settings"]
+        user_players, free_agents = get_all_players_from_position_groups(position_groups)
+        players_with_keys = {"User": user_players, "FA": free_agents}
+
 
         tiers_to_lookup = set()
         for pos_name, num_of_pos in starting_positions.items():
@@ -172,28 +185,36 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                 tiers_to_lookup.add(pos_name)
 
         team_rank_dict = {}
+        fa_rank_dict = {}
 
-        for player in get_all_players_from_position_groups(position_groups):
-            pos_rank_dict = {}
-            tiers_for_player = tiers_to_lookup.intersection(boris_chen_tiers[player])
-            if len(tiers_for_player) == 0:
-                pos_rank_dict["Position"] = "Unranked"
+        for key, player_list in players_with_keys.items():
+            for player in player_list:
+                pos_rank_dict = {}
+                if player in boris_chen_tiers:
+                    tiers_for_player = tiers_to_lookup.intersection(boris_chen_tiers[player])
+                    if len(tiers_for_player) == 0:
+                        pos_rank_dict["Position"] = "Unranked"
 
-            # We will manually add RB/WR with a tier of <= 3 for their position to be rank 1 flex if their flex ranking DNE
-            top_tier_player_flag = False
-            for tier in tiers_for_player:
-                tier_rank = boris_chen_tiers[player][tier]
-                cleaned_pos_name = tier
-                for prefix in [normal_prefix, te_prefixes]:
-                    cleaned_pos_name = cleaned_pos_name.replace(prefix, "")
-                pos_rank_dict[cleaned_pos_name] = tier_rank
-                if int(tier_rank) <= 3 and cleaned_pos_name != "TE":
-                    top_tier_player_flag = True
+                    # We will manually add RB/WR with a tier of <= 3 for their position to be rank 1 flex if their flex ranking DNE
+                    top_tier_player_flag = False
+                    for tier in tiers_for_player:
+                        tier_rank = boris_chen_tiers[player][tier]
+                        cleaned_pos_name = tier
+                        for prefix in [normal_prefix, te_prefixes]:
+                            cleaned_pos_name = cleaned_pos_name.replace(prefix, "")
+                        pos_rank_dict[cleaned_pos_name] = tier_rank
+                        if int(tier_rank) <= 3 and cleaned_pos_name != "TE":
+                            top_tier_player_flag = True
 
-            if top_tier_player_flag and "Flex" not in pos_rank_dict:
-                pos_rank_dict["Flex"] = "1"
-            
-            team_rank_dict[player] = pos_rank_dict
+                    if top_tier_player_flag and "Flex" not in pos_rank_dict:
+                        pos_rank_dict["Flex"] = "1"
+                else:
+                    pos_rank_dict["Position"] = "Unranked"
+                if key == "User":
+                    team_rank_dict[player] = pos_rank_dict
+                elif key == "FA":
+                    fa_rank_dict[player] = pos_rank_dict
+                
 
         logger.info("Building table for " + str(roster["league"]) + ".")
 
@@ -233,7 +254,49 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                 cleaned_name = next(iter(pos_groups_copy.keys()))
                 roster_table["BN"].append({"Name": player, "Tiers": {position: "Unranked"}})
 
-                    
+        # map free agent player names to their fantasy scoring potential:
+        free_agent_positions_and_points = {}
+
+        for player, pos_rank_dict in fa_rank_dict:
+            if "RB" in pos_rank_dict:
+                pos = "RB"
+            elif "WR" in pos_rank_dict:
+                pos = "WR"
+            elif "TE" in pos_rank_dict:
+                pos = "TE"
+            elif "QB" in pos_rank_dict:
+                pos = "QB"
+            else:
+                continue
+            temp_dict = {"POS": pos, "NAME": player}
+            if player in nameToPidDict:
+                temp_dict["PID"] = nameToPidDict[player]
+            else:
+                logger.info("Couldnt find the pid for player " + str(player))
+                continue
+            projected_scoring, old_projection = calculate_potential_fantasy_score(player, pos, sportsbook_projections, backup_projections, stat_point_multipliers)
+            
+            # Do the stuff for positional specific pickups
+
+            if pos in free_agent_positions_and_points:
+                _, max_score = free_agent_positions_and_points[pos]
+                if projected_scoring > max_score:
+                    free_agent_positions_and_points[pos] = (player, round(projected_scoring, 2))
+            else:
+                free_agent_positions_and_points[pos] = (player, round(projected_scoring, 2))
+
+            if pos != "QB":
+                if "Flex" in free_agent_positions_and_points:
+                    _, max_score = free_agent_positions_and_points["Flex"]
+                    if projected_scoring > max_score:
+                        free_agent_positions_and_points["Flex"] = (player, round(projected_scoring, 2))
+        free_agents_as_list = []
+        for position, player_and_score_tuple in free_agent_positions_and_points.items():
+            temp_dict = {"POS": position, "NAME": player_and_score_tuple[0], "VEGAS": str(player_and_score_tuple[1])}
+            free_agents_as_list.append(temp_dict)
+        suggested_pickups_for_roster[str(roster["league"])] = free_agents_as_list
+
+        logger.info("Best free agent pickups for each position are " + str(free_agent_positions_and_points))                    
         suggested_starts_for_roster = []
 
         stat_point_multipliers = Config.get_stat_point_multipliers(settings)
@@ -270,7 +333,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
         
         suggested_starts[str(roster["league"])] = suggested_starts_for_roster
 
-    return suggested_starts
+    return suggested_starts, suggested_pickups_for_roster
 
 
 # Will round non standard TE Premium settings to either 0.5 PPR or full PPR depending.
@@ -363,10 +426,9 @@ def get_highest_ranked_player_from_page(list_of_players, tier_lookup, team_rank_
         return high_name, "Unranked"
 
 def get_all_players_from_position_groups(position_groups):
-    players = []
-    for names in position_groups.values():
-        players.extend(names)
-    return players
+    user_players = [name for pos_group, name in position_groups.items() if "FA_" not in pos_group]
+    free_agents = [name for pos_group, name in position_groups.items() if "FA_" in pos_group]
+    return user_players, free_agents
 
 def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, backup_stat_projections, stat_point_multipliers):
 
