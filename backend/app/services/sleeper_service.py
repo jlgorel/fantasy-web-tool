@@ -188,6 +188,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
         fa_rank_dict = {}
 
         for key, player_list in players_with_keys.items():
+            logger.info("key is " + str(key) + ", playerlist is " + str(player_list))
             for player in player_list:
                 pos_rank_dict = {}
                 if player in boris_chen_tiers:
