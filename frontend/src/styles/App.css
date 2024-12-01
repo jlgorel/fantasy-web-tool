@@ -60,27 +60,6 @@ button:hover {
   padding: 8px 16px;
 }
 
-.free-agent-section {
-  margin-top: 20px;
-}
-
-.free-agent-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.free-agent-table th,
-.free-agent-table td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: left;
-}
-
-.free-agent-table th {
-  background-color: #f4f4f4;
-  font-weight: bold;
-}
-
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
