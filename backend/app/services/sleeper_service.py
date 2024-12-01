@@ -427,8 +427,13 @@ def get_highest_ranked_player_from_page(list_of_players, tier_lookup, team_rank_
         return high_name, "Unranked"
 
 def get_all_players_from_position_groups(position_groups):
-    user_players = [name for pos_group, name in position_groups.items() if "FA_" not in pos_group]
-    free_agents = [name for pos_group, name in position_groups.items() if "FA_" in pos_group]
+    user_players = []
+    free_agents = []
+    for pos_group, player_list in position_groups.items():
+        if "FA_" in pos_group:
+            user_players.extend(player_list)
+        else:
+            free_agents.extend(player_list)
     return user_players, free_agents
 
 def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, backup_stat_projections, stat_point_multipliers):
