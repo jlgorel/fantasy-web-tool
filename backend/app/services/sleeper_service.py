@@ -65,7 +65,7 @@ def get_rosters_for_user(username):
     url = "https://api.sleeper.app/v1/user/{}/leagues/nfl/{}".format(user_id, year_string)
     data = fetch_json(url)
 
-    curr_leagues = [{"name": league["name"], "id": league["league_id"]} for league in data if league["status"] == "in_season"]
+    curr_leagues = [{"name": league["name"], "id": league["league_id"]} for league in data if league["status"] in ["in_season", "post_season"]]
     curr_rosters = []
 
     for league in curr_leagues:
