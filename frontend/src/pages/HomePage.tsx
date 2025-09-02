@@ -2,6 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useUUID } from '../context/UUIDContext'; // Import the hook
 import DynamicTabs from '../components/LeagueTabs';
 
+if (!process.env.REACT_APP_API_BASE_URL) {
+  throw new Error("REACT_APP_API_BASE_URL is not set!");
+}
+export const API_BASE = process.env.REACT_APP_API_BASE_URL;
+
 const HomePage: React.FC = () => {
   const [name, setName] = useState<string>('');
   const [showTabs, setShowTabs] = useState<boolean>(false);
@@ -15,7 +20,7 @@ const HomePage: React.FC = () => {
     // Function to load the last run info from the API
     const loadLastRunInfo = async () => {
       try {
-        const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-last-run-info', {
+        const response = await fetch(API_BASE+'/load-last-run-info', {
           method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -44,7 +49,7 @@ const HomePage: React.FC = () => {
         // Set instructions visibility to false when button is clicked
         setShowInstructions(false); 
 
-        const response = await fetch('https://ff-ranking-visualizer.azurewebsites.net/load-sleeper-info', {
+        const response = await fetch(API_BASE+'/load-sleeper-info', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

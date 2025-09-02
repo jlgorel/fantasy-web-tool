@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PlayerTable from './PlayerTable';
 import { useUUID } from '../context/UUIDContext'; // Import the hook
 
+if (!process.env.REACT_APP_API_BASE_URL) {
+  throw new Error("REACT_APP_API_BASE_URL is not set!");
+}
+export const API_BASE = process.env.REACT_APP_API_BASE_URL;
+
 // Define the type for your data
 interface DataDictionary {
   [key: string]: any; // Replace `any` with a more specific type if known
@@ -30,7 +35,7 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({showTabs}) => {
   const fetchData = useCallback(() => {
     if(userUUID){
       // Fetch the league names from your API
-      fetch('https://ff-ranking-visualizer.azurewebsites.net/load-cached-starts', {
+      fetch(API_BASE+'/load-cached-starts', {
         headers: {
           'X-User-UUID': userUUID,
         },
@@ -69,7 +74,7 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({showTabs}) => {
     setSelectedTab(leagueName);
 
     // Fetch specific data for the selected league
-    fetch(`https://ff-ranking-visualizer.azurewebsites.net/load-league-data?league=${encodeURIComponent(leagueName)}`, {
+    fetch(API_BASE+`/load-league-data?league=${encodeURIComponent(leagueName)}`, {
       headers: {
         'X-User-UUID': userUUID,
       },

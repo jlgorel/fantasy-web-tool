@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 def load_json_from_azure_storage(blob_name, container_name, connection_string):
     # Initialize the BlobServiceClient with the provided connection string
+    print(blob_name)
+    print(container_name)
+    print(connection_string)
     blob_service_client = BlobServiceClient.from_connection_string(connection_string)
 
     # Get the blob client
@@ -200,8 +203,11 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
         roster_table = defaultdict(list)
 
         pos_groups_copy = deepcopy(position_groups)
+        full_roster_positions = deepcopy(roster["positions"])
+        if len(roster['pids']) > len(full_roster_positions):
+            full_roster_positions.extend(["BN"]*(1 + len(roster['pids']) - len(roster["positions"])))
 
-        for pos_name in roster["positions"]:
+        for pos_name in full_roster_positions:
             cleaned_name = clean_up_pos_names([pos_name])
             
             if cleaned_name == "WT":
