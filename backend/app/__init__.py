@@ -7,18 +7,19 @@ import redis
 
 def _load_local_settings():
     """Load local.settings.json if present (for local dev only)."""
-    print("Loading local settings")
-    settings_path = os.path.join(os.path.dirname(__file__), "..", "..", "azure-functions", "local.settings.json")
-    print(settings_path)
-    if os.path.exists(settings_path):
-        print("it exists")
-        with open(settings_path) as f:
-            settings = json.load(f)
-            print(settings)
-            for k, v in settings.get("Values", {}).items():
-                # Only set if not already defined (lets Azure override in prod)
-                print("Setting " + str(k) + " to " + str(v))
-                os.environ.setdefault(k, v)
+    if os.environ.get("AZURE_FUNCTIONS_ENVIRONMENT") != "Production":
+        print("Loading local settings")
+        settings_path = os.path.join(os.path.dirname(__file__), "..", "..", "azure-functions", "local.settings.json")
+        print(settings_path)
+        if os.path.exists(settings_path):
+            print("it exists")
+            with open(settings_path) as f:
+                settings = json.load(f)
+                print(settings)
+                for k, v in settings.get("Values", {}).items():
+                    # Only set if not already defined (lets Azure override in prod)
+                    print("Setting " + str(k) + " to " + str(v))
+                    os.environ.setdefault(k, v)
 
 def create_app():
     _load_local_settings()
