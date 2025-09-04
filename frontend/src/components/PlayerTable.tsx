@@ -1,141 +1,211 @@
 import React from 'react';
+import {
+  Box,
+  Text,
+  Image,
+  SimpleGrid,
+  Grid,
+  HStack,
+  VStack,
+  useBreakpointValue,
+} from '@chakra-ui/react';
 
-// Define the type for your player data
 interface Player {
   NAME: string;
-  POS: string;
-  POS_RANK: string;
-  FLEX?: string;
-  PID?: string; // Add this field for player headshot
-  TEAM?: string; // Add this field for team logo
-  VEGAS?: string; // Projected vegas score, might not be there for defenses and kickers
-  MATCHUP_RATING?: string;
-  TEAM_NAME?: string;
+  POS: string;              // e.g., QB/RB/WR/TE/BN/REC_FLEX
+  POS_RANK?: string;        // positional tier rank as string
+  FLEX?: string;            // flex tier rank as string
+  PID?: string;             // Sleeper player id (for headshot)
+  TEAM?: string;            // team code (lowercased for URL)
+  TEAM_NAME?: string;       // sometimes present instead of TEAM
+  VEGAS?: string;           // projected points (string)
+  MATCHUP_RATING?: string;  // star count as string
+  REALLIFE_POS?: string;    // Actual real life position
 }
 
 interface PlayerTableProps {
   data: Player[];
 }
 
-// Define tier colors with string keys
+// Tier colors
 const tierColors: { [key: string]: string } = {
-  '1': '#004d00', // Dark Green
-  '2': '#006400', // Medium Green
-  '3': '#4CAF50', // Light Green
-  '4': '#8BC34A', // Yellow-Green
-  '5': '#FFC107', // Yellow
-  '6': '#FFB74D', // Light Orange
-  '7': '#FF9800', // Orange
-  '8': '#FF5722', // Light Red
-  '9': '#F44336', // Red
-  '10': '#B71C1C', // Dark Red for Tier 10 and worse
+  '1': '#004d00',
+  '2': '#006400',
+  '3': '#4CAF50',
+  '4': '#8BC34A',
+  '5': '#FFC107',
+  '6': '#FFB74D',
+  '7': '#FF9800',
+  '8': '#FF5722',
+  '9': '#F44336',
+  '10': '#B71C1C',
 };
 
-const getColorForRank = (rank: string) => {
-  const rankValue = parseInt(rank, 10);
+const getColorForRank = (rank?: string) => {
+  if (!rank) return '#B71C1C';
+  const val = parseInt(rank, 10);
+  return tierColors[val?.toString()] ?? '#B71C1C';
+};
 
-  if (isNaN(rankValue) || rankValue > 10) {
-    return '#B71C1C'; // Dark Red for 'UNRANKED' or ranks beyond 10
-  }
+// Grid template
+const useTemplateColumns = () =>
+  useBreakpointValue({
+    base: '40px minmax(150px, 1.5fr) 0.5fr 0.5fr 0.5fr',
+    md: '40px minmax(220px, 2.5fr) 1fr 1fr 1fr',
+  });
 
-  return tierColors[rankValue.toString()] || '#B71C1C'; // Default to Dark Red if tier is undefined
+// Player row
+const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string }> = ({
+  p,
+  isStarter,
+  templateCols,
+}) => {
+  const displayPos = p.POS === 'REC_FLEX' ? 'W/T' : p.POS === 'SUPER_FLEX' ? 'SF' : p.POS === 'FLEX' ? 'W/R/T' : p.POS;
+  const showFlex = p.POS !== 'REC_FLEX' && p.REALLIFE_POS !== 'QB' && p.POS !=="K" && p.POS != "DEF" && p.FLEX;
+
+  const teamCode = (p.TEAM_NAME ?? p.TEAM)?.toLowerCase();
+  const teamLogo = teamCode ? `https://sleepercdn.com/images/team_logos/nfl/${teamCode}.png` : undefined;
+  const headshot = p.PID ? `https://sleepercdn.com/content/nfl/players/${p.PID}.jpg` : undefined;
+
+  const rowFont = useBreakpointValue({ base: 'xs', md: 'sm' });
+  const posFont = useBreakpointValue({ base: '2xs', md: 'xs' }); // smaller than rowFont
+
+  return (
+    <Box
+      borderWidth="1px"
+      borderRadius="md"
+      p={2}
+      bg={isStarter ? 'gray.50' : 'white'}
+      _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+    >
+      <Grid templateColumns={templateCols} alignItems="center" gap={2}>
+        {/* Position */}
+        <Text fontWeight="bold" fontSize={posFont}>
+          {displayPos}
+        </Text>
+
+        {/* Player image + name (fixed internal grid for consistent width) */}
+        <Box minW={0}>
+          <Grid templateColumns="50px 1fr" gap={2} alignItems="center">
+            <Box position="relative" boxSize="50px" flex="0 0 auto">
+              {p.POS === 'DEF' && teamLogo ? (
+                <Image
+                  src={teamLogo}
+                  alt={teamCode}
+                  w="100%"
+                  h="100%"
+                  objectFit="contain"
+                  borderRadius="md"
+                  fallbackSrc=""
+                />
+              ) : (
+                <>
+                  {headshot && (
+                    <Image
+                      src={headshot}
+                      alt={p.NAME}
+                      w="100%"
+                      h="100%"
+                      objectFit="cover"
+                      borderRadius="full"
+                      fallbackSrc=""
+                    />
+                  )}
+                  {teamLogo && (
+                    <Image
+                      src={teamLogo}
+                      alt={teamCode}
+                      boxSize="20px"
+                      position="absolute"
+                      bottom="0"
+                      right="0"
+                      fallbackSrc=""
+                    />
+                  )}
+                </>
+              )}
+            </Box>
+            <Text fontWeight="semibold" fontSize={rowFont} noOfLines={1} minW={0}>
+              {p.NAME}
+            </Text>
+          </Grid>
+        </Box>
+
+        {/* Tier info */}
+        <VStack gap={1} fontSize={rowFont} justify="flex-start" align="flex-start">
+          <HStack gap={1}>
+            <Box w="10px" h="10px" borderRadius="50%" bg={getColorForRank(p.POS_RANK)} />
+            <Text noOfLines={1}>{p.REALLIFE_POS || "DEF"} {p.POS_RANK}</Text>
+          </HStack>
+          {showFlex && (
+            <HStack gap={1}>
+              <Box w="10px" h="10px" borderRadius="50%" bg={getColorForRank(p.FLEX)} />
+              <Text noOfLines={1}>Flex {p.FLEX}</Text>
+            </HStack>
+          )}
+        </VStack>
+
+        {/* Vegas points */}
+        <HStack gap={1} justify="flex-start" fontSize={rowFont}>
+          <Text whiteSpace="nowrap">{(p.VEGAS ?? '0') + (p.VEGAS !== "N/A" ? ' pts' : '')}</Text>
+        </HStack>
+
+        {/* Matchup stars */}
+        <HStack gap={1} justify="flex-start" fontSize={rowFont}>
+          <Text>
+            {Array.from({ length: parseInt(p.MATCHUP_RATING ?? '0', 10) || 0 })
+              .map(() => '⭐')
+              .join('')}
+          </Text>
+        </HStack>
+      </Grid>
+    </Box>
+  );
 };
 
 const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
+  const starters = data.filter((p) => p.POS !== 'BN');
+  const bench = data.filter((p) => p.POS === 'BN');
+  const templateCols = useTemplateColumns();
+
   return (
-    <div style={{ overflowX: 'auto', margin: '20px' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
-        <thead style={{ backgroundColor: '#f4f4f4', textAlign: 'left' }}>
-          <tr>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '6%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Position</th>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '17%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Name</th>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '15%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Positional Ranking</th>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '15%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Flex Ranking</th>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '10%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Vegas Projected Points</th>
-            <th style={{ padding: '12px', borderBottom: '2px solid #ddd', width: '15%', textAlign: 'center', borderRight: '1px solid #ddd' }}>Matchup Rating</th>
-            
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((player, index) => (
-            <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-              <td style={{ padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>{player.POS}</td>
-              <td style={{ position: 'relative', padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', verticalAlign: 'middle', display: 'flex', alignItems: 'center' }}>
-              {player.PID && (
-                <div style={{ position: 'relative', width: '75px', height: '50px' }}> {/* Wrapper for the images */}
-                    <img
-                      src={"https://sleepercdn.com/content/nfl/players/" + player.PID + ".jpg"}
-                      alt={`${player.NAME} logo`}
-                      style={{ width: '75px', height: '50px', borderRadius: '50%', marginRight: '10px' }}
-                    />
-                  
-                  {player.TEAM_NAME && (
-                    <img
-                      src={"https://sleepercdn.com/images/team_logos/nfl/" + player.TEAM_NAME.toLowerCase() + ".png"}
-                      alt={`${player.TEAM_NAME} logo`}
-                      style={{
-                        position: 'absolute',
-                        width: '20px',
-                        height: '20px',
-                        borderRadius: '50%',
-                        bottom: '-3px',
-                        right: '10px', // Position in the bottom-right corner of the wrapper
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-                {player.TEAM && (
-                  <img
-                    src={"https://sleepercdn.com/images/team_logos/nfl/" + player.TEAM.toLowerCase() + ".png"}
-                    alt={`${player.NAME} logo`}
-                    style={{
-                      width: '50px',
-                      height: '50px',
-                      borderRadius: '60%',
-                      marginRight: '25px',
-                      marginLeft: '10px',
-                    }}
-                  />
-                )}
-                <span style={{ marginRight: '10px' }}>{player.NAME}</span>
-              </td>
-              <td style={{ padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>
-                <div style={{
-                  display: 'inline-block',
-                  width: '20px',
-                  height: '20px',
-                  backgroundColor: getColorForRank(player.POS_RANK),
-                  borderRadius: '50%',
-                  marginRight: '8px',
-                  verticalAlign: 'middle'
-                }} />
-                {player.POS_RANK !== "Unranked" ? "Tier " + player.POS_RANK : player.POS_RANK}
-              </td>
-              <td style={{ padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>
-                <div style={{
-                  display: 'inline-block',
-                  width: '20px',
-                  height: '20px',
-                  backgroundColor: player.FLEX ? getColorForRank(player.FLEX) : '#B71C1C', // Use dark red if FLEX is missing
-                  borderRadius: '50%',
-                  marginRight: '8px',
-                  verticalAlign: 'middle'
-                }} />
-                {player.FLEX ? "Tier " + player.FLEX : 'Unranked'}
-              </td>
-              <td style={{padding: '12px', borderBottom: '1px solid #ddd', borderRight: '1px solid #ddd', textAlign: 'left', verticalAlign: 'middle' }}>{player.VEGAS + " Points"}</td>
-              <td style={{padding: '12px', borderBottom: '1px solid #ddd', textAlign: 'center', verticalAlign: 'middle' }}>
-                {Array.from({ length: parseInt(player.MATCHUP_RATING ?? '0') }, (_, index) => (
-                  <span key={index}>⭐</span> // Display stars based on the MATCHUP_RATING
-                ))}
-                
-              </td>
-            </tr>
+    <Box w="100%" p={4}>
+      <SimpleGrid minChildWidth="460px" gap={6} alignItems="flex-start">
+        {/* Starters */}
+        <Box>
+          <Text fontSize="lg" fontWeight="bold" mb={2}>
+            Starters
+          </Text>
+          <Grid templateColumns={templateCols} gap={2} mb={1}>
+            <Text fontWeight="bold" fontSize="sm" ml = {1}>Pos</Text>
+            <Text fontWeight="bold" fontSize="sm" ml = {3}>Player</Text>
+            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
+            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
+            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
+          </Grid>
+          {starters.map((p, i) => (
+            <PlayerRow key={`${p.PID ?? p.NAME}-starter-${i}`} p={p} isStarter templateCols={templateCols!} />
           ))}
-        </tbody>
-      </table>
-    </div>
+        </Box>
+
+        {/* Bench */}
+        <Box>
+          <Text fontSize="lg" fontWeight="bold" mb={2}>
+            Bench
+          </Text>
+          <Grid templateColumns={templateCols} gap={2} mb={1}>
+            <Text fontWeight="bold" fontSize="sm" ml={1}>Pos</Text>
+            <Text fontWeight="bold" fontSize="sm" ml = {3}>Player</Text>
+            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
+            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
+            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
+          </Grid>
+          {bench.map((p, i) => (
+            <PlayerRow key={`${p.PID ?? p.NAME}-bench-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
+          ))}
+        </Box>
+      </SimpleGrid>
+    </Box>
   );
 };
 

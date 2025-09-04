@@ -23,8 +23,10 @@ def _load_local_settings():
 def create_app():
     _load_local_settings()
     app = Flask(__name__)
-    frontend_connection = os.environ.get('FRONTEND_URL')
-    CORS(app, resources={r"/*": {"origins": frontend_connection}})
+    frontend_connections = os.environ.get('FRONTEND_URL')
+    allowed_origins = [origin.strip() for origin in frontend_connections.split(',') if origin]
+
+    CORS(app, resources={r"/*": {"origins": allowed_origins}})
     
     # Load configurations
     app.config.from_object(Config)

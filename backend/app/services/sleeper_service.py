@@ -155,6 +155,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
     sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
     backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
     fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
+    player_data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
 
     for roster in user_rosters:
         position_groups = copy(league_position_groups[roster["league"]])
@@ -211,7 +212,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
             cleaned_name = clean_up_pos_names([pos_name])
             
             if cleaned_name == "WT":
-                cleaned_name = "Flex"
+                cleaned_name = "WR"
             elif cleaned_name == "SF":
                 cleaned_name = "QB"
             elif cleaned_name == "DST":
@@ -249,6 +250,11 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                 temp_dict = {"POS": pos, "NAME": player_dict["Name"]}
                 if player_dict["Name"] in nameToPidDict:
                     temp_dict["PID"] = nameToPidDict[player_dict["Name"]]
+                    try:
+                        temp_dict["REALLIFE_POS"] = player_data[temp_dict["PID"]]["fantasy_positions"][0]
+                    except:
+                        logger.info("Probably a defense" + str(player_dict["Name"]))
+                        temp_dict["REALLIFE_POS"] = "DEF"
                 else:
                     try:
                         temp_dict["TEAM"] = Config.nfl_teams_reverse_lookup[player_dict["Name"]]
@@ -271,7 +277,7 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                        temp_dict["MATCHUP_RATING"] = p_info_dict["Opponent Rating"] if "Opponent Rating" in p_info_dict else "UNKNOWN"
                        temp_dict["TEAM_NAME"] = p_info_dict["Team Name"] if "Team Name" in p_info_dict else "UNKNOWN"
                 else:
-                    temp_dict["VEGAS"] = "No vegas scores for DEF/K"
+                    temp_dict["VEGAS"] = "N/A"
                 suggested_starts_for_roster.append(temp_dict)
         
         suggested_starts[str(roster["league"])] = suggested_starts_for_roster
