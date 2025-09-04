@@ -61,7 +61,7 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
   templateCols,
 }) => {
   const displayPos = p.POS === 'REC_FLEX' ? 'W/T' : p.POS === 'SUPER_FLEX' ? 'SF' : p.POS === 'FLEX' ? 'W/R/T' : p.POS;
-  const showFlex = p.POS !== 'REC_FLEX' && p.REALLIFE_POS !== 'QB' && p.POS !=="K" && p.POS != "DEF" && p.FLEX;
+  const showFlex = p.POS !== 'REC_FLEX' && p.REALLIFE_POS !== 'QB' && p.POS !=="K" && p.POS !== "DEF" && p.FLEX;
 
   const teamCode = (p.TEAM_NAME ?? p.TEAM)?.toLowerCase();
   const teamLogo = teamCode ? `https://sleepercdn.com/images/team_logos/nfl/${teamCode}.png` : undefined;

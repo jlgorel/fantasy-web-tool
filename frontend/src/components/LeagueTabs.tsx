@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PlayerTable from './PlayerTable';
 import { useUUID } from '../context/UUIDContext';
-import { Box, VStack, HStack, Button, Text } from '@chakra-ui/react';
+import { VStack, HStack, Button, Text } from '@chakra-ui/react';
 
 if (!process.env.REACT_APP_API_BASE_URL) {
   throw new Error("REACT_APP_API_BASE_URL is not set!");
