@@ -59,7 +59,7 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          creds: '{"clientId":"${{ secrets.FRONTEND_AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.FRONTEND_AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.FRONTEND_AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.FRONTEND_AZURE_TENANT_ID }}"}'
+          creds: '{"clientId":"${{ secrets.FRONTEND_AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.FRONTEND_AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.FRONTEND_AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.FRONTEEND_AZURE_TENANT_ID }}"}'
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -69,6 +69,7 @@ jobs:
           slot-name: 'Production'
           package: './frontend/build'
           
+
 
 
 
