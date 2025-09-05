@@ -86,7 +86,9 @@ def get_rosters_for_user(username):
         data = fetch_json(url)
 
         your_roster = next((roster for roster in data if roster["owner_id"] == user_id), None)
-
+        if your_roster is None:
+            logging.info("User not found with a roster in league " + str(league["name"]))
+            continue
         all_owned_players = []
 
         for roster in data:
