@@ -276,8 +276,9 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                     else:
                         temp_dict["FLEX"] = str(ranking)
                 if pos != "DST" and pos != "DEF" and pos != "K":
-                    projected_scoring, old_projection = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
+                    projected_scoring, old_projection, statline = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
                     temp_dict["VEGAS"] = str(round(projected_scoring, 2))
+                    temp_dict["VEGAS_STATS"] = statline
                     if old_projection:
                         temp_dict["VEGAS"] += "\t Old projection, no lines available, confirm uninjured"
 
@@ -393,7 +394,7 @@ def get_highest_ranked_player_from_page(
         flex = int(team_rank_dict[player]["Flex"]) if (player in team_rank_dict and "Flex" in team_rank_dict[player]) else 999
 
         # Step 3: Vegas projection
-        projected_points, _ = calculate_potential_fantasy_score(
+        projected_points, _, _ = calculate_potential_fantasy_score(
             player, pos_name, sportsbook_projections, backup_projections, stat_point_multipliers
         )
 
@@ -431,9 +432,10 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
 
     p_projections = player_stat_projections[playerkey] if playerkey in player_stat_projections else {}
     backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
+    statline = ", ".join([str(key) + ": " + str(round(proj,2)) for key, proj in p_projections.items() if key not in ["Opponent Rating", "Team Name"]])
     if len(p_projections) == 0 and len(backup_projections) == 0:
         logger.info("Didnt find " + player + " in standard or backup projections")
-        return 0, False
+        return 0, False, "No stats projected for player."
         
     proj_points = 0
     for key, val in p_projections.items():
@@ -457,4 +459,4 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
     except Exception as e:
         logger.info("Exception was " + str(e))
 
-    return proj_points, False
+    return proj_points, False, statline

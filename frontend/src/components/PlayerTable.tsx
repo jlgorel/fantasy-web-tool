@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Text,
@@ -8,6 +8,7 @@ import {
   HStack,
   VStack,
   useBreakpointValue,
+  Collapse,
 } from '@chakra-ui/react';
 
 interface Player {
@@ -21,6 +22,7 @@ interface Player {
   VEGAS?: string;           // projected points (string)
   MATCHUP_RATING?: string;  // star count as string
   REALLIFE_POS?: string;    // Actual real life position
+  VEGAS_STATS?: string;     // Statline projections
 }
 
 interface PlayerTableProps {
@@ -54,18 +56,36 @@ const useTemplateColumns = () =>
     md: '40px minmax(220px, 2.5fr) 1fr 1fr 1fr',
   });
 
-// Player row
-const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string }> = ({
-  p,
-  isStarter,
-  templateCols,
-}) => {
-  const displayPos = p.POS === 'REC_FLEX' ? 'W/T' : p.POS === 'SUPER_FLEX' ? 'SF' : p.POS === 'FLEX' ? 'W/R/T' : p.POS;
-  const showFlex = p.POS !== 'REC_FLEX' && p.REALLIFE_POS !== 'QB' && p.POS !=="K" && p.POS !== "DEF" && p.FLEX;
+const PlayerRow: React.FC<{
+  p: Player;
+  isStarter: boolean;
+  templateCols: string;
+}> = ({ p, isStarter, templateCols }) => {
+  const [expanded, setExpanded] = useState(false);
+
+  const displayPos =
+    p.POS === 'REC_FLEX'
+      ? 'W/T'
+      : p.POS === 'SUPER_FLEX'
+      ? 'SF'
+      : p.POS === 'FLEX'
+      ? 'W/R/T'
+      : p.POS;
+
+  const showFlex =
+    p.POS !== 'REC_FLEX' &&
+    p.REALLIFE_POS !== 'QB' &&
+    p.POS !== 'K' &&
+    p.POS !== 'DEF' &&
+    p.FLEX;
 
   const teamCode = (p.TEAM_NAME ?? p.TEAM)?.toLowerCase();
-  const teamLogo = teamCode ? `https://sleepercdn.com/images/team_logos/nfl/${teamCode}.png` : undefined;
-  const headshot = p.PID ? `https://sleepercdn.com/content/nfl/players/${p.PID}.jpg` : undefined;
+  const teamLogo = teamCode
+    ? `https://sleepercdn.com/images/team_logos/nfl/${teamCode}.png`
+    : undefined;
+  const headshot = p.PID
+    ? `https://sleepercdn.com/content/nfl/players/${p.PID}.jpg`
+    : undefined;
 
   const rowFont = useBreakpointValue({ base: 'xs', md: 'sm' });
   const posFont = useBreakpointValue({ base: '2xs', md: 'xs' }); // smaller than rowFont
@@ -74,17 +94,20 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
     <Box
       borderWidth="1px"
       borderRadius="md"
-      p={2}
+      mb={2}
       bg={isStarter ? 'gray.50' : 'white'}
       _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+      transition="all 0.2s"
+      cursor="pointer"
+      onClick={() => setExpanded(!expanded)}
     >
-      <Grid templateColumns={templateCols} alignItems="center" gap={2}>
+      <Grid templateColumns={templateCols} alignItems="center" gap={2} p={2}>
         {/* Position */}
         <Text fontWeight="bold" fontSize={posFont}>
           {displayPos}
         </Text>
 
-        {/* Player image + name (fixed internal grid for consistent width) */}
+        {/* Player image + name */}
         <Box minW={0}>
           <Grid templateColumns="50px 1fr" gap={2} alignItems="center">
             <Box position="relative" boxSize="50px" flex="0 0 auto">
@@ -135,7 +158,9 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
         <VStack gap={1} fontSize={rowFont} justify="flex-start" align="flex-start">
           <HStack gap={1}>
             <Box w="10px" h="10px" borderRadius="50%" bg={getColorForRank(p.POS_RANK)} />
-            <Text noOfLines={1}>{p.REALLIFE_POS || "DEF"} {p.POS_RANK}</Text>
+            <Text noOfLines={1}>
+              {p.REALLIFE_POS || 'DEF'} {p.POS_RANK}
+            </Text>
           </HStack>
           {showFlex && (
             <HStack gap={1}>
@@ -147,7 +172,9 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
 
         {/* Vegas points */}
         <HStack gap={1} justify="flex-start" fontSize={rowFont}>
-          <Text whiteSpace="nowrap">{(p.VEGAS ?? '0') + (p.VEGAS !== "N/A" ? ' pts' : '')}</Text>
+          <Text whiteSpace="nowrap">
+            {(p.VEGAS ?? '0') + (p.VEGAS !== 'N/A' ? ' pts' : '')}
+          </Text>
         </HStack>
 
         {/* Matchup stars */}
@@ -159,6 +186,15 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
           </Text>
         </HStack>
       </Grid>
+
+      {/* Expanded section for stats */}
+      <Collapse in={expanded} animateOpacity>
+        {p.VEGAS_STATS && (
+          <Box p={3} bg="gray.100" borderTopWidth="1px" borderRadius="md">
+            <Text fontSize="sm">{p.VEGAS_STATS}</Text>
+          </Box>
+        )}
+      </Collapse>
     </Box>
   );
 };
@@ -177,14 +213,29 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
             Starters
           </Text>
           <Grid templateColumns={templateCols} gap={2} mb={1}>
-            <Text fontWeight="bold" fontSize="sm" ml = {1}>Pos</Text>
-            <Text fontWeight="bold" fontSize="sm" ml = {3}>Player</Text>
-            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
-            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
-            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
+            <Text fontWeight="bold" fontSize="sm" ml={1}>
+              Pos
+            </Text>
+            <Text fontWeight="bold" fontSize="sm" ml={3}>
+              Player
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Boris Tiers
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Vegas Points
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Matchup
+            </Text>
           </Grid>
           {starters.map((p, i) => (
-            <PlayerRow key={`${p.PID ?? p.NAME}-starter-${i}`} p={p} isStarter templateCols={templateCols!} />
+            <PlayerRow
+              key={`${p.PID ?? p.NAME}-starter-${i}`}
+              p={p}
+              isStarter
+              templateCols={templateCols!}
+            />
           ))}
         </Box>
 
@@ -194,14 +245,29 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
             Bench
           </Text>
           <Grid templateColumns={templateCols} gap={2} mb={1}>
-            <Text fontWeight="bold" fontSize="sm" ml={1}>Pos</Text>
-            <Text fontWeight="bold" fontSize="sm" ml = {3}>Player</Text>
-            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
-            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
-            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
+            <Text fontWeight="bold" fontSize="sm" ml={1}>
+              Pos
+            </Text>
+            <Text fontWeight="bold" fontSize="sm" ml={3}>
+              Player
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Boris Tiers
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Vegas Points
+            </Text>
+            <Text fontWeight="bold" fontSize="sm">
+              Matchup
+            </Text>
           </Grid>
           {bench.map((p, i) => (
-            <PlayerRow key={`${p.PID ?? p.NAME}-bench-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
+            <PlayerRow
+              key={`${p.PID ?? p.NAME}-bench-${i}`}
+              p={p}
+              isStarter={false}
+              templateCols={templateCols!}
+            />
           ))}
         </Box>
       </SimpleGrid>
