@@ -210,6 +210,8 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
         if len(roster['pids']) > len(full_roster_positions):
             full_roster_positions.extend(["BN"]*(1 + len(roster['pids']) - len(roster["positions"])))
 
+        stat_point_multipliers = Config.get_stat_point_multipliers(settings)
+
         for pos_name in full_roster_positions:
             cleaned_name = clean_up_pos_names([pos_name])
             
@@ -227,7 +229,15 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
             players, pos_added = list_players_for_pos_name(pos_groups_copy, cleaned_name)
 
-            high_name, high_rank = get_highest_ranked_player_from_page(players, cleaned_name, team_rank_dict)
+            high_name, high_rank = get_highest_ranked_player_from_page(
+                players,
+                cleaned_name,
+                team_rank_dict,
+                sportsbook_projections,
+                backup_projections,
+                stat_point_multipliers
+            )
+
             roster_table[pos_name].append({"Name": high_name, "Tiers": team_rank_dict[high_name] if high_name in team_rank_dict else {cleaned_name: "Unranked"}})
             for pos in pos_added:
                 if high_name in pos_groups_copy[pos]:
@@ -244,8 +254,6 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
                     
         suggested_starts_for_roster = []
-
-        stat_point_multipliers = Config.get_stat_point_multipliers(settings)
 
         for pos, player_dict_list in roster_table.items():
             for player_dict in player_dict_list:
@@ -355,26 +363,56 @@ def list_players_for_pos_name(pos_groups, pos_name):
 
     return players, pos_to_add
 
-def get_highest_ranked_player_from_page(list_of_players, tier_lookup, team_rank_dict):
-
+def get_highest_ranked_player_from_page(
+    list_of_players,
+    pos_name,
+    team_rank_dict,
+    sportsbook_projections,
+    backup_projections,
+    stat_point_multipliers
+):
+    """
+    Pick the best player by:
+      1. Lowest Boris Chen tier at the given position
+      2. If tied, lowest Flex tier (if available)
+      3. If still tied, highest Vegas projection
+    """
     if len(list_of_players) == 0:
         return "None Owned", "N/A"
 
-    high_rank = 20
-    high_name = list_of_players[0]
+    best_player = None
+    best_tier = float("inf")
+    best_flex = float("inf")
+    best_proj = -float("inf")
 
     for player in list_of_players:
-        if player in team_rank_dict and tier_lookup in team_rank_dict[player]:
-            rank = team_rank_dict[player][tier_lookup]
-        else:
-            rank = 20
-        if int(rank) < int(high_rank):
-            high_rank = rank
-            high_name = player
-    if high_rank != 20:
-        return high_name, high_rank  
+        # Step 1: Tier rank
+        tier = int(team_rank_dict[player][pos_name]) if (player in team_rank_dict and pos_name in team_rank_dict[player]) else 999
+
+        # Step 2: Flex rank (optional injection)
+        flex = int(team_rank_dict[player]["Flex"]) if (player in team_rank_dict and "Flex" in team_rank_dict[player]) else 999
+
+        # Step 3: Vegas projection
+        projected_points, _ = calculate_potential_fantasy_score(
+            player, pos_name, sportsbook_projections, backup_projections, stat_point_multipliers
+        )
+
+        # Compare: first by tier, then flex, then Vegas
+        if (
+            tier < best_tier
+            or (tier == best_tier and flex < best_flex)
+            or (tier == best_tier and flex == best_flex and projected_points > best_proj)
+        ):
+            best_player = player
+            best_tier = tier
+            best_flex = flex
+            best_proj = projected_points
+
+    if best_player:
+        return best_player, best_tier
     else:
-        return high_name, "Unranked"
+        return list_of_players[0], "Unranked"
+
 
 def get_all_players_from_position_groups(position_groups):
     players = []
