@@ -23,6 +23,8 @@ interface Player {
   MATCHUP_RATING?: string;  // star count as string
   REALLIFE_POS?: string;    // Actual real life position
   VEGAS_STATS?: string;     // Statline projections
+  BOOM?: string; // Boom probability
+  BUST?: string; // Bust probability
 }
 
 interface PlayerTableProps {
@@ -191,7 +193,7 @@ const PlayerRow: React.FC<{
       <Collapse in={expanded} animateOpacity>
         {p.VEGAS_STATS && (
           <Box p={3} bg="gray.100" borderTopWidth="1px" borderRadius="md">
-            <Text fontSize="sm">{p.VEGAS_STATS}</Text>
+            <Text fontSize="sm">{p.VEGAS_STATS}.  Boom probability: {p.BOOM}%. Bust probability: {p.BUST}%</Text>
           </Box>
         )}
       </Collapse>

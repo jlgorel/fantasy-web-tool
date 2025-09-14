@@ -276,9 +276,15 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                     else:
                         temp_dict["FLEX"] = str(ranking)
                 if pos != "DST" and pos != "DEF" and pos != "K":
-                    projected_scoring, old_projection, statline = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
+                    projected_scoring, old_projection, statline, boom_bust = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
                     temp_dict["VEGAS"] = str(round(projected_scoring, 2))
                     temp_dict["VEGAS_STATS"] = statline
+                    if boom_bust is not None:
+                        temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
+                        temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
+                    else:
+                        temp_dict["BOOM"] = "N/A. Not enough vegas props"
+                        temp_dict["BUST"] = "N/A"
                     if old_projection:
                         temp_dict["VEGAS"] += "\t Old projection, no lines available, confirm uninjured"
 
@@ -394,7 +400,7 @@ def get_highest_ranked_player_from_page(
         flex = int(team_rank_dict[player]["Flex"]) if (player in team_rank_dict and "Flex" in team_rank_dict[player]) else 999
 
         # Step 3: Vegas projection
-        projected_points, _, _ = calculate_potential_fantasy_score(
+        projected_points, _, _, _ = calculate_potential_fantasy_score(
             player, pos_name, sportsbook_projections, backup_projections, stat_point_multipliers
         )
 
@@ -432,14 +438,38 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
 
     p_projections = player_stat_projections[playerkey] if playerkey in player_stat_projections else {}
     backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
-    statline = ", ".join([str(key) + ": " + str(round(proj,2)) for key, proj in p_projections.items() if key not in ["Opponent Rating", "Team Name"]])
+    statline = ", ".join([str(key) + ": " + str(round(proj,2)) for key, proj in p_projections.items() if key not in ["Opponent Rating", "Team Name", "Simulations"]])
     if len(p_projections) == 0 and len(backup_projections) == 0:
         logger.info("Didnt find " + player + " in standard or backup projections")
-        return 0, False, "No stats projected for player."
-        
+        return 0, False, "No stats projected for player.", None
+    
+
+    if stat_point_multipliers["Passing Touchdowns"] > 4:
+        six_point_td = True
+    else:
+        six_point_td = False
+
     proj_points = 0
+    boom_bust_probabilities = None
     for key, val in p_projections.items():
         if key == "Opponent Rating" or key == "Team Name":
+            continue
+        if key == "Simulations":
+            boom_bust = val
+            if "error" in boom_bust:
+                boom_bust_probabilities = None
+            elif "QB_6PT" in boom_bust or "QB_STD" in boom_bust:
+                if six_point_td:
+                    boom_bust_probabilities = boom_bust["QB_6PT"]
+                else:
+                    boom_bust_probabilities = boom_bust["QB_STD"]
+            else:
+                if rec_points < 0.3:
+                    boom_bust_probabilities = boom_bust["STD"]
+                elif rec_points >= 0.3 and rec_points < 0.75:
+                    boom_bust_probabilities = boom_bust["HalfPPR"]
+                else:
+                    boom_bust_probabilities = boom_bust["PPR"]
             continue
         if key == "Receptions":
             proj_points += float(val) * rec_points
@@ -459,4 +489,4 @@ def calculate_potential_fantasy_score(player, pos_group, player_stat_projections
     except Exception as e:
         logger.info("Exception was " + str(e))
 
-    return proj_points, False, statline
+    return proj_points, False, statline, boom_bust_probabilities
