@@ -16,20 +16,23 @@ def load_sleeper_info():
         if not name:
             return jsonify({'error': 'Username is required'}), 400
         
-        suggested_lineups = cache_sleeper_user_info(name, user_uuid)
+        suggested_lineups, free_agent_recs = cache_sleeper_user_info(name, user_uuid)
 
         cache_key = f"boris_data_{user_uuid}"
+
+        fa_cache_key = f"free_agents_{user_uuid}"
 
         redis_client = current_app.redis_client
 
         try:
             redis_client.set(cache_key, json.dumps(suggested_lineups), ex=900)  # Timeout set to 300 seconds
+            redis_client.set(fa_cache_key, json.dumps(free_agent_recs), ex=900)
         except Exception as e:
             print("Ran into exception setting cache. Exception is " + str(e))
             tb_str = traceback.format_exc()
             return jsonify({'message': 'Error, ' + tb_str}), 500
 
-        return jsonify({'message': 'Data cached successfully', 'cache_key': cache_key, 'league_names': suggested_lineups}), 200
+        return jsonify({'message': 'Data cached successfully', 'cache_key': cache_key, 'league_names': suggested_lineups, "free_agents": free_agent_recs}), 200
     except Exception as e:
         print("Exception was " + str(e))
         traceback.print_exc()
@@ -61,9 +64,12 @@ def load_league_data():
         return jsonify({'error': 'League parameter is required'}), 400
 
     cache_key = f"boris_data_{user_uuid}"
+    fa_cache_key = f"free_agents_{user_uuid}"
+
     redis_client = current_app.redis_client
 
     user_data = redis_client.get(cache_key)
+    free_agent_data = redis_client.get(fa_cache_key)
 
     if not user_data:
         return jsonify({'error': 'No data found for the specified user',
@@ -71,14 +77,21 @@ def load_league_data():
     else:
         jsonified_data = json.loads(user_data)
 
+    if not user_data:
+        return jsonify({'error': 'No free agent data found for the specified user',
+                        'cache_key': cache_key}), 404
+    else:
+        jsonified_fa_data = json.loads(free_agent_data)
+
     league_data = jsonified_data.get(league)
+    free_agent_recs = jsonified_fa_data.get(league)
 
     if not league_data:
         return jsonify({'error': 'No data found for the specified league',
                         'cache_key': cache_key,
                         'jsonified_data': jsonified_data}), 404
 
-    return jsonify(league_data), 200
+    return jsonify({"suggested_starts": league_data, "free_agent_recs": free_agent_recs}), 200
 
 @main.route('/load-last-run-info', methods=['GET'])
 def load_last_run_info():

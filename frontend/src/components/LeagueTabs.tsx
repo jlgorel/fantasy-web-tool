@@ -26,7 +26,8 @@ interface DynamicTabsProps {
 const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
   const [data, setData] = useState<DataDictionary>({});
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
-  const [leagueData, setLeagueData] = useState<Player[] | null>(null);
+  const [suggestedStarts, setSuggestedStarts] = useState<Player[] | null>(null);
+  const [freeAgentRecs, setFreeAgentRecs] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
   const userUUID = useUUID();
@@ -36,7 +37,8 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
     (leagueName: string) => {
       if (!userUUID) return;
 
-      setLeagueData(null);
+      setSuggestedStarts(null);
+      setFreeAgentRecs(null);
       setError(null);
 
       fetch(`${API_BASE}/load-league-data?league=${encodeURIComponent(leagueName)}`, {
@@ -46,8 +48,11 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
           if (!res.ok) throw new Error('Network response not ok');
           return res.json();
         })
-        .then((data: Player[]) => {
-          setLeagueData(data);
+        .then((data) => {
+          // Now we set both parts of the response
+          setSuggestedStarts(data.suggested_starts);
+          setFreeAgentRecs(data.free_agent_recs);
+          console.log(data.free_agent_recs)
         })
         .catch(err => {
           console.error(err);
@@ -106,7 +111,12 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
         </Text>
       )}
 
-      {selectedTab && leagueData && <PlayerTable data={leagueData} />}
+      {selectedTab && suggestedStarts && (
+        <PlayerTable
+          data={suggestedStarts}
+          freeAgentRecs={freeAgentRecs} // <-- pass free agents too
+        />
+      )}
     </VStack>
   );
 };

@@ -7,6 +7,8 @@ from datetime import datetime
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient
 from copy import copy, deepcopy
+import heapq
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
 # Configure logging
@@ -27,6 +29,13 @@ def load_json_from_azure_storage(blob_name, container_name, connection_string):
     blob_data = blob_client.download_blob()
     data = json.loads(blob_data.readall())
 
+     # If this is the players blob, normalize special cases once centrally
+    if blob_name.lower() == "players.json":
+        try:
+            normalize_players_positions(data)
+        except Exception as e:
+            logger.warning(f"normalize_players_positions failed: {e}")
+
     return data
 
 def fetch_json(url):
@@ -44,8 +53,35 @@ def cache_sleeper_user_info(username, user_uuid):
     boris_chen_dict = prepare_boris_chen_tier_dict()
     league_position_groups = prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict)
     suggested_lineups = form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_dict, nameToPidDict)
+    free_agents = form_top_free_agents_parallel(user_rosters, nameToPidDict)
+    return suggested_lineups, free_agents
 
-    return suggested_lineups
+def normalize_players_positions(players_dict):
+    """
+    Mutate players_dict in-place so Travis Hunter (and other overrides)
+    are treated as WR first. players_dict is expected to be the players.json
+    structure: { pid: {"full_name": "...", "fantasy_positions": [...]} }.
+    """
+    # Simple mapping you can extend later if you want other overrides
+    # key: normalized full name (lower, stripped), value: position to force first
+    overrides = {
+        "travis hunter": "WR",
+    }
+
+    for pid, pdata in players_dict.items():
+        full_name = (pdata.get("full_name") or "").strip()
+        if not full_name:
+            continue
+        key = full_name.lower()
+        if key in overrides:
+            forced_pos = overrides[key]
+            # Ensure fantasy_positions exists and is a list
+            positions = pdata.get("fantasy_positions") or []
+            # Remove any existing occurrences of forced_pos then insert at front
+            positions = [p for p in positions if p != forced_pos]
+            positions.insert(0, forced_pos)
+            pdata["fantasy_positions"] = positions
+    return players_dict
 
 def get_rosters_for_user(username):
     # Get the current date and time
@@ -301,6 +337,99 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
 
     return suggested_starts
 
+def form_top_free_agents_parallel(user_rosters, nameToPidDict, max_workers=8):
+    """
+    Returns the top 3 free agents per position (QB, RB, WR, TE) for each league,
+    formatted exactly like form_suggested_starts_based_on_boris.
+    Parallelized to speed up large free agent pools.
+    """
+    free_agents_by_league = {}
+
+    # Load all data once
+    sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
+    backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
+    fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
+    player_data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
+    owned_data = load_json_from_azure_storage("owned.json", Config.containername, Config.azure_storage_connection_string)
+
+    for roster in user_rosters:
+        league_name = roster["league"]
+        all_owned = set(roster["all_owned"])
+        stat_point_multipliers = Config.get_stat_point_multipliers(roster["settings"])
+
+        # Filter unowned free agents for relevant positions
+        free_agents = []
+        for pid, pdata in player_data.items():
+            if pid in all_owned or "full_name" not in pdata or pid not in owned_data:
+                continue
+            # Skip DB/IDP, DST, K, etc.
+            positions = pdata.get("fantasy_positions", [])
+            if not positions:
+                continue
+
+            # Special case: Travis Hunter
+            if pdata["full_name"] == "Travis Hunter":
+                pos = "WR"
+            else:
+                pos = positions[0]
+
+            if pos not in ["QB", "RB", "WR", "TE"]:
+                continue
+
+            free_agents.append((pid, pdata["full_name"], pos))
+
+        # Prepare dicts per position
+        fa_by_pos = defaultdict(list)
+        for pid, name, pos in free_agents:
+            fa_by_pos[pos].append((pid, name, pos))
+
+        top_free_agents = defaultdict(list)
+
+        def score_player(pid_name_pos):
+            pid, name, pos = pid_name_pos
+            proj_points, old_proj, statline, boom_bust = calculate_potential_fantasy_score(
+                name, pos, sportsbook_projections, backup_projections, stat_point_multipliers
+            )
+            return (proj_points, pid, name, pos, statline, boom_bust, old_proj)
+
+        # Parallelize scoring per position
+        for pos in ["QB", "RB", "WR", "TE"]:
+            scored_fas = []
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(score_player, pid_name_pos): pid_name_pos for pid_name_pos in fa_by_pos[pos]}
+                for future in as_completed(futures):
+                    scored_fas.append(future.result())
+
+            # Get top 3 using heapq.nlargest
+            top3 = heapq.nlargest(3, scored_fas, key=lambda x: x[0])
+
+            for proj, pid, name, pos, statline, boom_bust, old_proj in top3:
+                temp_dict = {
+                    "POS": pos,
+                    "NAME": name,
+                    "PID": pid,
+                    "REALLIFE_POS": pos,
+                    "VEGAS": str(round(proj, 2)) + ("\t Old projection" if old_proj else ""),
+                    "VEGAS_STATS": statline,
+                }
+
+                if boom_bust:
+                    temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
+                    temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
+                else:
+                    temp_dict["BOOM"] = "N/A"
+                    temp_dict["BUST"] = "N/A"
+
+                p_info_dict = fantasypros_data.get(name, None)
+                if p_info_dict:
+                    temp_dict["MATCHUP_RATING"] = p_info_dict.get("Opponent Rating", "UNKNOWN")
+                    temp_dict["TEAM_NAME"] = p_info_dict.get("Team Name", "UNKNOWN")
+
+                top_free_agents[pos].append(temp_dict)
+
+        free_agents_by_league[league_name] = top_free_agents
+
+    return free_agents_by_league
 
 # Will round non standard TE Premium settings to either 0.5 PPR or full PPR depending.
 def get_tier_page_names_from_league_settings(settings):

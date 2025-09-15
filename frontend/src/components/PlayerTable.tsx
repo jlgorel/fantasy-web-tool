@@ -13,22 +13,23 @@ import {
 
 interface Player {
   NAME: string;
-  POS: string;              // e.g., QB/RB/WR/TE/BN/REC_FLEX
-  POS_RANK?: string;        // positional tier rank as string
-  FLEX?: string;            // flex tier rank as string
-  PID?: string;             // Sleeper player id (for headshot)
-  TEAM?: string;            // team code (lowercased for URL)
-  TEAM_NAME?: string;       // sometimes present instead of TEAM
-  VEGAS?: string;           // projected points (string)
-  MATCHUP_RATING?: string;  // star count as string
-  REALLIFE_POS?: string;    // Actual real life position
-  VEGAS_STATS?: string;     // Statline projections
-  BOOM?: string; // Boom probability
-  BUST?: string; // Bust probability
+  POS: string;              
+  POS_RANK?: string;        
+  FLEX?: string;            
+  PID?: string;             
+  TEAM?: string;            
+  TEAM_NAME?: string;       
+  VEGAS?: string;           
+  MATCHUP_RATING?: string;  
+  REALLIFE_POS?: string;    
+  VEGAS_STATS?: string;     
+  BOOM?: string;            
+  BUST?: string;            
 }
 
 interface PlayerTableProps {
   data: Player[];
+  freeAgentRecs?: { [position: string]: Player[] }; 
 }
 
 // Tier colors
@@ -58,11 +59,11 @@ const useTemplateColumns = () =>
     md: '40px minmax(220px, 2.5fr) 1fr 1fr 1fr',
   });
 
-const PlayerRow: React.FC<{
-  p: Player;
-  isStarter: boolean;
-  templateCols: string;
-}> = ({ p, isStarter, templateCols }) => {
+const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string }> = ({
+  p,
+  isStarter,
+  templateCols,
+}) => {
   const [expanded, setExpanded] = useState(false);
 
   const displayPos =
@@ -90,7 +91,7 @@ const PlayerRow: React.FC<{
     : undefined;
 
   const rowFont = useBreakpointValue({ base: 'xs', md: 'sm' });
-  const posFont = useBreakpointValue({ base: '2xs', md: 'xs' }); // smaller than rowFont
+  const posFont = useBreakpointValue({ base: '2xs', md: 'xs' });
 
   return (
     <Box
@@ -192,16 +193,63 @@ const PlayerRow: React.FC<{
       {/* Expanded section for stats */}
       <Collapse in={expanded} animateOpacity>
         {p.VEGAS_STATS && (
-          <Box p={3} bg="gray.100" borderTopWidth="1px" borderRadius="md">
-            <Text fontSize="sm">{p.VEGAS_STATS}.  Boom probability: {p.BOOM}%. Bust probability: {p.BUST}%</Text>
+          <Box
+            p={3}
+            bg="gray.50"
+            borderTopWidth="1px"
+            borderRadius="md"
+            mt={2}
+          >
+            <Text fontSize="sm" fontWeight="semibold" mb={2}>
+              Stats: {p.VEGAS_STATS}
+            </Text>
+
+            <HStack spacing={4} fontSize="sm">
+              {/* Boom */}
+              <VStack align="start" spacing={0}>
+                <Text fontSize="xs" fontWeight="bold" color="green.700">
+                  Boom
+                </Text>
+                <Box w="100px" bg="green.100" borderRadius="md" h="10px">
+                  <Box
+                    bg="green.500"
+                    h="100%"
+                    borderRadius="md"
+                    width={`${p.BOOM ?? 0}%`}
+                  />
+                </Box>
+                <Text fontSize="xs" color="green.700">
+                  {p.BOOM ?? 0}%
+                </Text>
+              </VStack>
+
+              {/* Bust */}
+              <VStack align="start" spacing={0}>
+                <Text fontSize="xs" fontWeight="bold" color="red.700">
+                  Bust
+                </Text>
+                <Box w="100px" bg="red.100" borderRadius="md" h="10px">
+                  <Box
+                    bg="red.500"
+                    h="100%"
+                    borderRadius="md"
+                    width={`${p.BUST ?? 0}%`}
+                  />
+                </Box>
+                <Text fontSize="xs" color="red.700">
+                  {p.BUST ?? 0}%
+                </Text>
+              </VStack>
+            </HStack>
           </Box>
         )}
       </Collapse>
+
     </Box>
   );
 };
 
-const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
+const PlayerTable: React.FC<PlayerTableProps> = ({ data, freeAgentRecs }) => {
   const starters = data.filter((p) => p.POS !== 'BN');
   const bench = data.filter((p) => p.POS === 'BN');
   const templateCols = useTemplateColumns();
@@ -209,69 +257,63 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data }) => {
   return (
     <Box w="100%" p={4}>
       <SimpleGrid minChildWidth="460px" gap={6} alignItems="flex-start">
-        {/* Starters */}
+        {/* Starters Section */}
         <Box>
           <Text fontSize="lg" fontWeight="bold" mb={2}>
             Starters
           </Text>
           <Grid templateColumns={templateCols} gap={2} mb={1}>
-            <Text fontWeight="bold" fontSize="sm" ml={1}>
-              Pos
-            </Text>
-            <Text fontWeight="bold" fontSize="sm" ml={3}>
-              Player
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Boris Tiers
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Vegas Points
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Matchup
-            </Text>
+            <Text fontWeight="bold" fontSize="sm" ml={1}>Pos</Text>
+            <Text fontWeight="bold" fontSize="sm" ml={3}>Player</Text>
+            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
+            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
+            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
           </Grid>
           {starters.map((p, i) => (
-            <PlayerRow
-              key={`${p.PID ?? p.NAME}-starter-${i}`}
-              p={p}
-              isStarter
-              templateCols={templateCols!}
-            />
+            <PlayerRow key={`${p.PID ?? p.NAME}-starter-${i}`} p={p} isStarter templateCols={templateCols!} />
           ))}
         </Box>
 
-        {/* Bench */}
+        {/* Bench Section */}
         <Box>
           <Text fontSize="lg" fontWeight="bold" mb={2}>
             Bench
           </Text>
           <Grid templateColumns={templateCols} gap={2} mb={1}>
-            <Text fontWeight="bold" fontSize="sm" ml={1}>
-              Pos
-            </Text>
-            <Text fontWeight="bold" fontSize="sm" ml={3}>
-              Player
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Boris Tiers
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Vegas Points
-            </Text>
-            <Text fontWeight="bold" fontSize="sm">
-              Matchup
-            </Text>
+            <Text fontWeight="bold" fontSize="sm" ml={1}>Pos</Text>
+            <Text fontWeight="bold" fontSize="sm" ml={3}>Player</Text>
+            <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
+            <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
+            <Text fontWeight="bold" fontSize="sm">Matchup</Text>
           </Grid>
           {bench.map((p, i) => (
-            <PlayerRow
-              key={`${p.PID ?? p.NAME}-bench-${i}`}
-              p={p}
-              isStarter={false}
-              templateCols={templateCols!}
-            />
+            <PlayerRow key={`${p.PID ?? p.NAME}-bench-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
           ))}
         </Box>
+
+        {/* Free Agent Section */}
+        {freeAgentRecs && (
+        <Box>
+          <Text fontSize="lg" fontWeight="bold" mb={2}>
+            Top Free Agents
+          </Text>
+          {Object.keys(freeAgentRecs).map((pos) => (
+            <Box key={`fa-${pos}`} mb={4}>
+              <Text fontSize="md" fontWeight="semibold" mb={1}>{pos}</Text>
+              <Grid templateColumns={templateCols} gap={2} mb={1}>
+                <Text fontWeight="bold" fontSize="sm" ml={1}>Pos</Text>
+                <Text fontWeight="bold" fontSize="sm" ml={3}>Player</Text>
+                <Text fontWeight="bold" fontSize="sm">Boris Tiers</Text>
+                <Text fontWeight="bold" fontSize="sm">Vegas Points</Text>
+                <Text fontWeight="bold" fontSize="sm">Matchup</Text>
+              </Grid>
+              {freeAgentRecs[pos] && Array.isArray(freeAgentRecs[pos]) && freeAgentRecs[pos].map((p, i) => (
+                <PlayerRow key={`${p.PID ?? p.NAME}-fa-${pos}-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
+              ))}
+            </Box>
+          ))}
+        </Box>
+      )}
       </SimpleGrid>
     </Box>
   );

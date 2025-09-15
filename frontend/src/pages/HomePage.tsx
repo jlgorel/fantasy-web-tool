@@ -92,10 +92,13 @@ const HomePage: React.FC = () => {
             <Text fontSize="xl" fontWeight="bold" textAlign="center">
               Enter your Sleeper username to load your fantasy football teams!
             </Text>
-            <Text fontSize="sm">
-              The app loads all rosters with projections. IDP not supported. Boris Chen tiers
-              build the ideal lineup. Vegas-projected points are shown for each player. Matchup
-              rating 5 stars = great matchup, 1 star = tough matchup. Enjoy!
+            <Text fontSize="sm" color="gray.700" textAlign="center">
+              This tool automatically suggests starters based on <b>Boris Chen tiers</b>, 
+              shows <b>Vegas-projected points</b> for each player, and includes <b>Fantasy Pros matchup ratings</b>.
+            </Text>
+            <Text fontSize="sm" color="gray.700" textAlign="center" whiteSpace="pre-line">
+              Click on a player card to expand exact vegas projections for each stat and see <b>boom/bust probabilities</b> based on your leagues settings.<br></br>
+              <b>Spot start top free agents</b> based on vegas-projections are displayed below your starters for quick reference.
             </Text>
             <HStack gap={2} justify="center">
               <Input
@@ -110,6 +113,7 @@ const HomePage: React.FC = () => {
             </HStack>
           </VStack>
         )}
+
 
         {/* Tabs & Player Table */}
         {!showInstructions && (
