@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useUUID } from '../context/UUIDContext';
 import DynamicTabs from '../components/LeagueTabs';
-import { Box, VStack, HStack, Image, Input, Button, Text, Spinner } from '@chakra-ui/react';
+import { Box, VStack, HStack, Image, Input, Button, Text, Spinner, } from '@chakra-ui/react';
+import {
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+} from "@chakra-ui/react";
+import { ChevronDownIcon } from "@chakra-ui/icons";
 
 if (!process.env.REACT_APP_API_BASE_URL) {
   throw new Error("REACT_APP_API_BASE_URL is not set!");
@@ -14,6 +21,8 @@ const HomePage: React.FC = () => {
   const [showInstructions, setShowInstructions] = useState<boolean>(true);
   const [runtime, setRuntime] = useState('');
   const [loading, setLoading] = useState(false); // lift loading here
+  const [website, setWebsite] = useState<'Sleeper' | 'Fleaflicker'>('Sleeper');
+
 
   const userUUID = useUUID();
 
@@ -44,7 +53,7 @@ const HomePage: React.FC = () => {
           'Content-Type': 'application/json',
           'X-User-UUID': userUUID,
         },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, website }),
       });
 
       if (response.ok) {
@@ -90,7 +99,7 @@ const HomePage: React.FC = () => {
         {showInstructions && (
           <VStack align="stretch" gap={4}>
             <Text fontSize="xl" fontWeight="bold" textAlign="center">
-              Enter your Sleeper username to load your fantasy football teams!
+              Choose your league type and enter your username to load your fantasy football teams!
             </Text>
             <Text fontSize="sm" color="gray.700" textAlign="center">
               This tool automatically suggests starters based on <b>Boris Chen tiers</b>, 
@@ -101,8 +110,62 @@ const HomePage: React.FC = () => {
               <b>Spot start top free agents</b> based on vegas-projections are displayed below your starters for quick reference.
             </Text>
             <HStack gap={2} justify="center">
+            <Menu>
+              <MenuButton
+                as={Button}
+                rightIcon={<ChevronDownIcon />}
+                bg={website === "Sleeper" ? "#0f2030" : "#ffffff"}         // dynamic background
+                color={website === "Sleeper" ? "white" : "black"}         // dynamic text color
+                _hover={{ bg: website === "Sleeper" ? "#1a3550" : "#f0f4f8" }}
+                _active={{ bg: website === "Sleeper" ? "#1a3550" : "#f0f4f8" }}
+                _focus={{ boxShadow: "none" }}                             // remove focus border
+                border="none"
+                px={3}
+                py={1}
+                borderRadius="md"
+              >
+                <HStack spacing={2}>
+                  <Image
+                    src={
+                      website === "Sleeper"
+                        ? `${process.env.PUBLIC_URL}/SleeperLogo.png`
+                        : `${process.env.PUBLIC_URL}/FleaFlickerLogo.jpg`
+                    }
+                    boxSize="20px"
+                  />
+                  <Text>{website}</Text>
+                </HStack>
+              </MenuButton>
+
+              <MenuList minW="unset" w="auto" bg="transparent" boxShadow="none" p={0}>
+                <MenuItem
+                  onClick={() => setWebsite("Sleeper")}
+                  bg="#0f2030"
+                  _hover={{ bg: "#1a3550" }}
+                  borderRadius="md"
+                >
+                  <HStack spacing={2}>
+                    <Image src={`${process.env.PUBLIC_URL}/SleeperLogo.png`} boxSize="20px" />
+                    <Text color="white">Sleeper</Text>
+                  </HStack>
+                </MenuItem>
+
+                <MenuItem
+                  onClick={() => setWebsite("Fleaflicker")}
+                  bg="#ffffff"
+                  _hover={{ bg: "#f0f4f8" }}
+                  borderRadius="md"
+                >
+                  <HStack spacing={2}>
+                    <Image src={`${process.env.PUBLIC_URL}/FleaFlickerLogo.jpg`} boxSize="20px" />
+                    <Text color="black">Fleaflicker</Text>
+                  </HStack>
+                </MenuItem>
+              </MenuList>
+            </Menu>
+
               <Input
-                placeholder="Enter Sleeper username"
+                placeholder={website === 'Sleeper' ? "Enter Sleeper username" : "Enter your Fleaflicker email"}
                 value={name}
                 onChange={e => setName(e.target.value)}
                 maxW="300px"
@@ -119,6 +182,59 @@ const HomePage: React.FC = () => {
         {!showInstructions && (
           <VStack align="stretch" gap={4}>
             <HStack gap={2} justify="center">
+            <Menu>
+              <MenuButton
+                as={Button}
+                rightIcon={<ChevronDownIcon />}
+                bg={website === "Sleeper" ? "#0f2030" : "#ffffff"}         // dynamic background
+                color={website === "Sleeper" ? "white" : "black"}         // dynamic text color
+                _hover={{ bg: website === "Sleeper" ? "#1a3550" : "#f0f4f8" }}
+                _active={{ bg: website === "Sleeper" ? "#1a3550" : "#f0f4f8" }}
+                _focus={{ boxShadow: "none" }}                             // remove focus border
+                px={3}
+                py={1}
+                borderRadius="md"
+              >
+                <HStack spacing={2}>
+                  <Image
+                    src={
+                      website === "Sleeper"
+                        ? `${process.env.PUBLIC_URL}/SleeperLogo.png`
+                        : `${process.env.PUBLIC_URL}/FleaFlickerLogo.jpg`
+                    }
+                    boxSize="20px"
+                  />
+                  <Text>{website}</Text>
+                </HStack>
+              </MenuButton>
+
+              <MenuList minW="unset" w="auto" bg="transparent" boxShadow="none" p={0}>
+                <MenuItem
+                  onClick={() => setWebsite("Sleeper")}
+                  bg="#0f2030"
+                  _hover={{ bg: "#1a3550" }}
+                  borderRadius="md"
+                >
+                  <HStack spacing={2}>
+                    <Image src={`${process.env.PUBLIC_URL}/SleeperLogo.png`} boxSize="20px" />
+                    <Text color="white">Sleeper</Text>
+                  </HStack>
+                </MenuItem>
+
+                <MenuItem
+                  onClick={() => setWebsite("Fleaflicker")}
+                  bg="#ffffff"
+                  _hover={{ bg: "#f0f4f8" }}
+                  borderRadius="md"
+                >
+                  <HStack spacing={2}>
+                    <Image src={`${process.env.PUBLIC_URL}/FleaFlickerLogo.jpg`} boxSize="20px" />
+                    <Text color="black">Fleaflicker</Text>
+                  </HStack>
+                </MenuItem>
+              </MenuList>
+            </Menu>
+
               <Input
                 placeholder="Enter Sleeper username"
                 value={name}

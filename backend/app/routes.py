@@ -11,12 +11,16 @@ def load_sleeper_info():
     try:
         data = request.get_json()
         name = data.get('name')
+        try:
+            website = data.get('website')
+        except:
+            website = "Sleeper"
         user_uuid = request.headers.get('X-User-UUID', 'TESTUSER')
         
         if not name:
             return jsonify({'error': 'Username is required'}), 400
         
-        suggested_lineups, free_agent_recs = cache_sleeper_user_info(name, user_uuid)
+        suggested_lineups, free_agent_recs = cache_sleeper_user_info(name, user_uuid, website)
 
         cache_key = f"boris_data_{user_uuid}"
 

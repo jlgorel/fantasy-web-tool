@@ -46,10 +46,15 @@ def fetch_json(url):
         logger.error(f"Error fetching {url}: {resp.status_code}")
         return None
 
-def cache_sleeper_user_info(username, user_uuid):
+def cache_sleeper_user_info(username, user_uuid, website_name = "Sleeper"):
 
-    user_rosters = get_rosters_for_user(username)
-    pidToPlayerDict, nameToPidDict = prepare_pid_to_name_dict(user_rosters)
+    pidToPlayerDict, nameToPidDict = prepare_pid_to_name_dict()
+
+    if website_name == "Sleeper":
+        user_rosters = get_sleeper_rosters_for_user(username)
+    elif website_name == "Fleaflicker":
+        user_rosters = get_fleaflicker_rosters_and_convert_to_sleeper(username, nameToPidDict)
+
     boris_chen_dict = prepare_boris_chen_tier_dict()
     league_position_groups = prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict)
     suggested_lineups = form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_dict, nameToPidDict)
@@ -83,7 +88,7 @@ def normalize_players_positions(players_dict):
             pdata["fantasy_positions"] = positions
     return players_dict
 
-def get_rosters_for_user(username):
+def get_current_fantasy_year():
     # Get the current date and time
     now = datetime.now()
 
@@ -95,6 +100,11 @@ def get_rosters_for_user(username):
     #deal with early 2025 years
     if int(current_month) <=7:
         year_string = str(int(year_string) - 1)
+
+    return year_string
+
+def get_sleeper_rosters_for_user(username):
+    year_string = get_current_fantasy_year()
 
     url = "https://api.sleeper.app/v1/user/{}".format(username)
 
@@ -133,19 +143,132 @@ def get_rosters_for_user(username):
         curr_rosters.append({"league": league["name"], "pids": your_roster["players"], "settings": scoring_settings, "positions": starting_pos, "all_owned": all_owned_players})
     
     return curr_rosters
-    
-def prepare_pid_to_name_dict(user_rosters):
-    pids = set()
 
-    for roster in user_rosters:
-        pids = pids.union(set(roster["pids"]))
+def convert_ff_roster_settings(ff_roster_json):
 
+    roster_settings = []
+    valid_positions = ["QB", "RB", "WR", "TE", "WR/TE", "RB/WR/TE", "QB/RB/WR/TE", "K", "D/ST", "BN", "IR"]
+    position_list = ff_roster_json["positions"]
+    for position_info in position_list:
+        pos_name = position_info["label"]
+        if pos_name not in valid_positions:
+            continue
+        if pos_name == "IR":
+            pos_name = "BN"
+        elif pos_name == "QB/RB/WR/TE":
+            pos_name = "SUPER_FLEX"
+        elif pos_name == "RB/WR/TE":
+            pos_name = "FLEX"
+        elif pos_name == "WR/TE":
+            pos_name = "WT"
+        elif pos_name == "D/ST":
+            pos_name = "DEF"
+        num_started = int(position_info["start"]) if "start" in position_info else int(position_info["max"])
+        roster_settings.extend([pos_name] * num_started)
+    return roster_settings
+
+def get_fleaflicker_rosters_and_convert_to_sleeper(email, nameToPidDict):
+    year_string = get_current_fantasy_year()
+
+    user_url = f"https://www.fleaflicker.com/api/FetchUserLeagues?sport=NFL&season={year_string}&email={email}"
+
+    user_data = fetch_json(user_url)
+
+    league_settings = [
+        {
+            "league_id": league["id"],
+            "league_name": league["name"],
+            "team_id": league["ownedTeam"]["id"],
+            "starting_pos": convert_ff_roster_settings(league["rosterRequirements"]),
+        }
+        for league in user_data["leagues"]
+    ]
+
+    for index, league in enumerate(league_settings):
+        if league["league_name"] == "test":
+            continue
+        league_id = league["league_id"]
+        team_id = league["team_id"]
+        roster_url = f"https://www.fleaflicker.com/api/FetchRoster?sport=NFL&league_id={league_id}&team_id={team_id}&season={year_string}"
+        data = fetch_json(roster_url)
+        rostered_names = []
+        for group in data["groups"]:
+            for player in group["slots"]:
+                try:
+                    player_fullname = player["leaguePlayer"]["proPlayer"]["nameFull"]
+                    rostered_names.append(nameToPidDict[player_fullname])
+                except Exception:
+                    try:
+                        rostered_names.append(Config.nfl_teams_reverse_lookup[player_fullname])
+                    except:
+                        print(player_fullname + " not in sleeper dict.")
+
+        league_settings[index]["pids"] = rostered_names
+
+        # get all owned players
+
+        all_rosters_url = f"https://www.fleaflicker.com/api/FetchLeagueRosters?sport=NFL&league_id={league_id}"
+        data = fetch_json(all_rosters_url)
+        all_owned = []
+        for roster in data["rosters"]:
+            for player in roster["players"]:
+                try:
+                    player_name = player["proPlayer"]["nameFull"]
+                    all_owned.append(nameToPidDict[player_name])
+                except:
+                    try:
+                        all_owned.append(Config.nfl_teams_reverse_lookup[player_name])
+                    except:
+                        print("No sleeper entry found for " + str(player_name))
+
+        league_settings[index]["all_owned"] = all_owned
+
+        league_settings_url = f"https://www.fleaflicker.com/api/FetchLeagueRules?sport=NFL&league_id={league_id}"
+        data = fetch_json(league_settings_url)
+        label_to_type = {
+            "Passing": "pass",
+            "Rushing": "rush",
+            "Receiving": "rec"
+        }
+        league_scoring = {}
+        valid_abbreviations = ["int", "td", "yd", "rec"]
+        for group in data["groups"]:
+            try:
+                prefix = label_to_type[group["label"]]
+            except:
+                continue
+            scoring_rules = group["scoringRules"]
+            for rule in scoring_rules:
+                abbrev = rule["category"]["abbreviation"].lower()
+                if abbrev not in valid_abbreviations:
+                    continue
+                
+                points = rule["points"]["value"] / rule["forEvery"]
+                key = "_".join([prefix, abbrev]) if abbrev != "rec" else "rec"
+                league_scoring[key] = float(points)
+
+        league_settings[index]["settings"] = league_scoring
+
+    curr_rosters = [
+        {
+            "league": temp_league["league_name"], 
+            "pids": temp_league["pids"], 
+            "settings": temp_league["settings"], 
+            "positions": temp_league["starting_pos"], 
+            "all_owned": temp_league["all_owned"]
+        }
+        for temp_league in league_settings
+    ]
+
+    return curr_rosters
+
+def prepare_pid_to_name_dict():
     pidToPlayerDict = {}
     nameToPidDict = {}
 
     data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
         
-    for pid in pids:
+    for pid in data:
         pidToPlayerDict[pid] = data[pid]
         if "full_name" in data[pid]:
             nameToPidDict[data[pid]["full_name"]] = pid
