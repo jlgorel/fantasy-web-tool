@@ -9,6 +9,11 @@ import {
   VStack,
   useBreakpointValue,
   Collapse,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
+  Tooltip
 } from '@chakra-ui/react';
 
 interface Player {
@@ -24,7 +29,8 @@ interface Player {
   REALLIFE_POS?: string;    
   VEGAS_STATS?: string;     
   BOOM?: string;            
-  BUST?: string;            
+  BUST?: string;
+  PERCENTILES?: string;   
 }
 
 interface PlayerTableProps {
@@ -59,12 +65,42 @@ const useTemplateColumns = () =>
     md: '40px minmax(220px, 2.5fr) 1fr 1fr 1fr',
   });
 
-const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string }> = ({
+interface PlayerRowProps {
+  p: Player;
+  isStarter: boolean;
+  templateCols: string;
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+const PlayerRow: React.FC<PlayerRowProps> = ({
   p,
   isStarter,
   templateCols,
+  expanded,
+  onToggle,
 }) => {
-  const [expanded, setExpanded] = useState(false);
+  const [threshold, setThreshold] = useState(10);
+
+  // Use percentiles directly, keys might be strings, convert to numbers safely
+  const percentiles: Record<number, number> | null =
+    p.PERCENTILES && p.PERCENTILES !== 'N/A'
+      ? Object.fromEntries(
+          Object.entries(p.PERCENTILES).map(([k, v]) => [Number(k), Number(v)])
+        )
+      : null;
+
+  // Compute probability of scoring at least threshold
+  let probAtLeast = 0;
+  if (percentiles) {
+    const sortedValues = Object.entries(percentiles)
+      .map(([k, v]) => [Number(k), Number(v)] as [number, number])
+      .sort((a, b) => a[1] - b[1]);
+
+    const below = sortedValues.filter(([, val]) => val < threshold);
+    const percentileBelow = below.length > 0 ? below[below.length - 1][0] : 0;
+    probAtLeast = (100 - percentileBelow) / 100;
+  }
 
   const displayPos =
     p.POS === 'REC_FLEX'
@@ -102,7 +138,7 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
       _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
       transition="all 0.2s"
       cursor="pointer"
-      onClick={() => setExpanded(!expanded)}
+      onClick={onToggle} // controlled from parent
     >
       <Grid templateColumns={templateCols} alignItems="center" gap={2} p={2}>
         {/* Position */}
@@ -194,28 +230,27 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
       <Collapse in={expanded} animateOpacity>
         {p.VEGAS_STATS && (
           <Box
-            p={3}
+            p={4}
             bg="gray.50"
             borderTopWidth="1px"
             borderRadius="md"
             mt={2}
           >
-            <Text fontSize="sm" fontWeight="semibold" mb={2}>
-              Stats: {p.VEGAS_STATS}
-            </Text>
-
-            <HStack spacing={4} fontSize="sm">
+            <Text fontSize={rowFont}>Predicted statline: {p.VEGAS_STATS}</Text>
+            {/* Boom/Bust bars */}
+            <HStack spacing={6} fontSize="sm" mb={4}>
               {/* Boom */}
-              <VStack align="start" spacing={0}>
+              <VStack align="start" spacing={1} w="100px">
                 <Text fontSize="xs" fontWeight="bold" color="green.700">
                   Boom
                 </Text>
-                <Box w="100px" bg="green.100" borderRadius="md" h="10px">
+                <Box w="100%" bg="green.100" borderRadius="md" h="12px">
                   <Box
                     bg="green.500"
                     h="100%"
                     borderRadius="md"
                     width={`${p.BOOM ?? 0}%`}
+                    transition="width 0.2s ease"
                   />
                 </Box>
                 <Text fontSize="xs" color="green.700">
@@ -224,16 +259,17 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
               </VStack>
 
               {/* Bust */}
-              <VStack align="start" spacing={0}>
+              <VStack align="start" spacing={1} w="100px">
                 <Text fontSize="xs" fontWeight="bold" color="red.700">
                   Bust
                 </Text>
-                <Box w="100px" bg="red.100" borderRadius="md" h="10px">
+                <Box w="100%" bg="red.100" borderRadius="md" h="12px">
                   <Box
                     bg="red.500"
                     h="100%"
                     borderRadius="md"
                     width={`${p.BUST ?? 0}%`}
+                    transition="width 0.2s ease"
                   />
                 </Box>
                 <Text fontSize="xs" color="red.700">
@@ -241,18 +277,71 @@ const PlayerRow: React.FC<{ p: Player; isStarter: boolean; templateCols: string 
                 </Text>
               </VStack>
             </HStack>
+
+            {percentiles ? (
+              <Box>
+                {/* Slider with Tooltip */}
+                <Tooltip
+                  label={`${Math.round(probAtLeast * 100)}% ≥ ${threshold} pts`}
+                  placement="top"
+                  hasArrow
+                >
+                  <Box>
+                    <Text fontSize="xs" fontWeight="semibold" mb={2}>
+                      Minimum Point Threshold: {threshold} pts
+                    </Text>
+                    <Slider
+                      aria-label="threshold-slider"
+                      min={0}
+                      max={Math.ceil(percentiles[100] ?? 50)}
+                      value={threshold}
+                      onChange={setThreshold}
+                      mb={4}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <SliderTrack bg="gray.300" borderRadius="md">
+                        <SliderFilledTrack bg="blue.400" />
+                      </SliderTrack>
+                      <SliderThumb boxSize={4} />
+                    </Slider>
+                  </Box>
+                </Tooltip>
+
+                {/* Threshold bar */}
+                <Text fontSize="sm" mb={1}>
+                  {Math.round(probAtLeast * 100)}% of simulations ≥ {threshold} pts
+                </Text>
+                <Box w="100%" bg="red.100" borderRadius="md" h="12px">
+                  <Box
+                    bg="green.400"
+                    h="100%"
+                    borderRadius="md"
+                    width={`${probAtLeast * 100}%`}
+                    transition="width 0.2s ease"
+                  />
+                </Box>
+              </Box>
+            ) : (
+              <Text fontSize="sm" color="gray.500" mt={2}>
+                Percentiles unavailable
+              </Text>
+            )}
           </Box>
         )}
       </Collapse>
-
     </Box>
   );
 };
 
 const PlayerTable: React.FC<PlayerTableProps> = ({ data, freeAgentRecs }) => {
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const starters = data.filter((p) => p.POS !== 'BN');
   const bench = data.filter((p) => p.POS === 'BN');
   const templateCols = useTemplateColumns();
+
+  const handleToggle = (id: string) => {
+    setExpandedRow(expandedRow === id ? null : id);
+  };
 
   return (
     <Box w="100%" p={4}>
@@ -270,7 +359,14 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data, freeAgentRecs }) => {
             <Text fontWeight="bold" fontSize="sm">Matchup</Text>
           </Grid>
           {starters.map((p, i) => (
-            <PlayerRow key={`${p.PID ?? p.NAME}-starter-${i}`} p={p} isStarter templateCols={templateCols!} />
+            <PlayerRow
+              key={`${p.PID ?? p.NAME}-starter-${i}`}
+              p={p}
+              isStarter
+              templateCols={templateCols!}
+              expanded={expandedRow === (p.PID ?? p.NAME)}
+              onToggle={() => handleToggle(p.PID ?? p.NAME)}
+            />
           ))}
         </Box>
 
@@ -287,7 +383,14 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data, freeAgentRecs }) => {
             <Text fontWeight="bold" fontSize="sm">Matchup</Text>
           </Grid>
           {bench.map((p, i) => (
-            <PlayerRow key={`${p.PID ?? p.NAME}-bench-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
+            <PlayerRow
+              key={`${p.PID ?? p.NAME}-bench-${i}`}
+              p={p}
+              isStarter={false}
+              templateCols={templateCols!}
+              expanded={expandedRow === (p.PID ?? p.NAME)}
+              onToggle={() => handleToggle(p.PID ?? p.NAME)}
+            />
           ))}
         </Box>
 
@@ -308,7 +411,14 @@ const PlayerTable: React.FC<PlayerTableProps> = ({ data, freeAgentRecs }) => {
                 <Text fontWeight="bold" fontSize="sm">Matchup</Text>
               </Grid>
               {freeAgentRecs[pos] && Array.isArray(freeAgentRecs[pos]) && freeAgentRecs[pos].map((p, i) => (
-                <PlayerRow key={`${p.PID ?? p.NAME}-fa-${pos}-${i}`} p={p} isStarter={false} templateCols={templateCols!} />
+                <PlayerRow
+                  key={`${p.PID ?? p.NAME}-fa-${pos}-${i}`}
+                  p={p}
+                  isStarter={false}
+                  templateCols={templateCols!}
+                  expanded={expandedRow === (p.PID ?? p.NAME)}
+                  onToggle={() => handleToggle(p.PID ?? p.NAME)}
+                />
               ))}
             </Box>
           ))}

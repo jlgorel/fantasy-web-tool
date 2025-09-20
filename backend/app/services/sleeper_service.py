@@ -441,9 +441,11 @@ def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, b
                     if boom_bust is not None:
                         temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
                         temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
+                        temp_dict["PERCENTILES"] = boom_bust["percentiles"]
                     else:
                         temp_dict["BOOM"] = "N/A. Not enough vegas props"
                         temp_dict["BUST"] = "N/A"
+                        temp_dict["PERCENTILES"] = "N/A"
                     if old_projection:
                         temp_dict["VEGAS"] += "\t Old projection, no lines available, confirm uninjured"
 
@@ -539,9 +541,11 @@ def form_top_free_agents_parallel(user_rosters, nameToPidDict, max_workers=8):
                 if boom_bust:
                     temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
                     temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
+                    temp_dict["PERCENTILES"] = boom_bust["percentiles"]
                 else:
                     temp_dict["BOOM"] = "N/A"
                     temp_dict["BUST"] = "N/A"
+                    temp_dict["PERCENTILES"] = "N/A"
 
                 p_info_dict = fantasypros_data.get(name, None)
                 if p_info_dict:

@@ -170,8 +170,10 @@ const HomePage: React.FC = () => {
                 onChange={e => setName(e.target.value)}
                 maxW="300px"
               />
-              <Button onClick={handleSaveClick} colorScheme="blue">
-                Load Teams
+            </HStack>
+            <HStack justify="center">
+              <Button onClick={handleSaveClick} colorScheme="blue" maxWidth="100px">
+                  Load Teams
               </Button>
             </HStack>
           </VStack>
@@ -241,8 +243,10 @@ const HomePage: React.FC = () => {
                 onChange={e => setName(e.target.value)}
                 maxW="300px"
               />
-              <Button onClick={handleSaveClick} colorScheme="blue">
-                Load Teams
+            </HStack>
+            <HStack justify="center">
+              <Button onClick={handleSaveClick} colorScheme="blue" maxWidth="100px">
+                  Load Teams
               </Button>
             </HStack>
 
