@@ -138,7 +138,10 @@ def get_sleeper_rosters_for_user(username):
         all_owned_players = []
 
         for roster in data:
-            all_owned_players.extend([player for player in roster["players"]])
+            if "players" in roster and roster["players"] is not None:
+                all_owned_players.extend([player for player in roster["players"]])
+            else:
+                continue
 
         curr_rosters.append({"league": league["name"], "pids": your_roster["players"], "settings": scoring_settings, "positions": starting_pos, "all_owned": all_owned_players})
     

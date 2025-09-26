@@ -6,3 +6,4 @@ redis==5.0.8
 Requests==2.32.3
 selenium==4.25.0
 azure-storage-blob==12.23.0
+yahoo_fantasy_api
