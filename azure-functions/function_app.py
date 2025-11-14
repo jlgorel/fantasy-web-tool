@@ -11,9 +11,14 @@ import time
 from datetime import datetime
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from draftkings_help import form_player_projections_dict, normalize_name_to_sleeper
 import pytz
 
 app = func.FunctionApp()
+
+def load_json_from_url(url):
+    response = requests.get(url=url)
+    return response.json()
 
 def upload_to_azure_blob(data_dict, blob_name, filename="file"):
     connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
@@ -31,6 +36,32 @@ def upload_to_azure_blob(data_dict, blob_name, filename="file"):
 
     logging.info(f"Uploaded {filename} to Azure Blob Storage as {blob_name}.")
 
+def get_current_nfl_week(season_start_year=2025):
+    # Approximate NFL season start (Thursday of Week 1)
+    season_start = datetime(season_start_year, 9, 4)  # Change year as needed
+    
+    today = datetime.now()
+    week = ((today - season_start).days // 7) + 1
+    
+    # Cap at 18 (regular + playoffs)
+    week = max(1, min(week, 18))
+    
+    return week
+
+def get_sleeper_owned_for_week():
+    current_date = datetime.now()
+
+    # Extract year and month
+    year = current_date.year
+    week = get_current_nfl_week(year)
+    url = "https://api.sleeper.com/players/nfl/research/regular/" + str(year) + "/" + str(week)
+    resp = requests.get(url=url)
+    data = resp.json()
+
+    upload_to_azure_blob(data, "owned.json")
+
+    return True
+
 def get_sleeper_player_data():
     url = "https://api.sleeper.app/v1/players/nfl"
     resp = requests.get(url=url)
@@ -45,7 +76,88 @@ def get_sleeper_player_data():
             if key not in Config.relevant_sleeper_keys:
                 del data[pid][key]
 
-    upload_to_azure_blob(data, "players.json")
+    # update with positional rankings, scoring data, etc
+
+    players_dict = data
+
+    positions = {
+        "QB": (50,32),
+        "WR": (150,70),
+        "TE": (50, 50),
+        "RB": (150,70),
+        "DEF": (32, 32),
+        "K": (50,32)
+    }
+    playoff_start_week = 14
+    current_date = datetime.now()
+
+    # Extract year and month
+    year = current_date.year
+
+    season_scoring = defaultdict(dict)
+    weekly_scoring = defaultdict(lambda: defaultdict(dict))
+
+    for position, num_desired in positions.items():
+        temp_position_season_scoring = load_json_from_url(f"https://api.sleeper.com/stats/nfl/{str(year)}?season_type=regular&position={position}&order_by=pts_half_ppr")
+        season_scoring.update({
+            temp_dict["player_id"]: temp_dict["stats"]
+            for temp_dict in temp_position_season_scoring[:num_desired[0]]
+        })
+
+    for week in range(1, playoff_start_week):
+        for position, num_desired in positions.items():
+            temp_week_position_scoring = load_json_from_url(f"https://api.sleeper.com/stats/nfl/{str(year)}/{str(week)}?season_type=regular&position={position}&order_by=pts_half_ppr")
+            for stats in temp_week_position_scoring[:num_desired[1]]:
+                player_id = stats["player_id"]
+                weekly_scoring[player_id][week] = stats["stats"]
+
+    for player, player_data in players_dict.items():
+        if player not in weekly_scoring and player not in season_scoring:
+            continue
+        player_weekly_scoring = weekly_scoring[player]
+        player_season_scoring = season_scoring[player]
+        temp_scoring_dict = {}
+        for week, scoring_data in player_weekly_scoring.items():
+            temp_scoring_dict[week] = {
+                "half_ppr": scoring_data["pts_half_ppr"] if "pts_half_ppr" in scoring_data else 0,
+                "ppr": scoring_data["pts_ppr"] if "pts_ppr" in scoring_data else 0,
+                "std": scoring_data["pts_std"] if "pts_std" in scoring_data else 0,
+                "receptions": scoring_data["rec"] if "rec" in scoring_data else 0,
+                "pass_td": scoring_data["pass_td"] if "pass_td" in scoring_data else 0
+            }
+        temp_season_scoring_dict = {
+            "half_ppr_rank": player_season_scoring["pos_rank_half_ppr"] if "pos_rank_half_ppr" in player_season_scoring else 999,
+            "ppr_rank": player_season_scoring["pos_rank_ppr"] if "pos_rank_ppr" in player_season_scoring else 999,
+            "std_rank": player_season_scoring["pos_rank_std"] if "pos_rank_std" in player_season_scoring else 999,
+            "half_ppr_points": player_season_scoring["pts_half_ppr"] if "pts_half_ppr" in player_season_scoring else 0,
+            "ppr_points": player_season_scoring["pts_ppr"] if "pts_ppr" in player_season_scoring else 0,
+            "std_points": player_season_scoring["pts_std"] if "pts_std" in player_season_scoring else 0,
+            "receptions": player_season_scoring["rec"] if "rec" in player_season_scoring else 0
+        }
+        if player_data["fantasy_positions"] != None and "QB" in player_data["fantasy_positions"]:
+            passing_td_bonus = player_season_scoring["pass_td"] * 2 if "pass_td" in player_season_scoring else 0
+            temp_season_scoring_dict["6pt_pass_td_points"] = temp_season_scoring_dict["std_points"] + passing_td_bonus
+
+        players_dict[player]["scoring_data_weekly"] = temp_scoring_dict
+        players_dict[player]["scoring_data_season"] = temp_season_scoring_dict
+
+    # go through and get ranks for 6 pt passing td
+
+    qb_list_6_pt = []
+    for player, info in players_dict.items():
+        if info["fantasy_positions"] is None or "QB" not in info["fantasy_positions"] or "scoring_data_season" not in info:
+            continue
+        qb_list_6_pt.append((player, info["scoring_data_season"]["6pt_pass_td_points"]))
+
+    qb_list_6_pt.sort(key= lambda x: x[1], reverse=True)
+    print(qb_list_6_pt)
+    for num, qb in enumerate(qb_list_6_pt):
+        players_dict[qb[0]]["scoring_data_season"].update({
+            "6pt_pass_td_rank": num,
+            "6pt_pass_td_points": qb[1]
+        })
+
+    upload_to_azure_blob(players_dict, "players.json")
 
     return True
 
@@ -113,8 +225,12 @@ def get_boris_chen_tiers():
                 text_tier = retrieve_tiers_from_soup(soup)
                 tier_lines = split_text_into_tier_dict(text_tier)
                 tier_dict = {}
+                def fix_hollywood_brown(p_name):
+                    if p_name == "Marquise Brown":
+                        return "Hollywood Brown"
+                    return p_name
                 for num, tier in enumerate(tier_lines):
-                    tier_dict[num + 1] = [player.strip() for player in tier]
+                    tier_dict[num + 1] = [fix_hollywood_brown(player.strip()) for player in tier]
                 tiers[name] = tier_dict
 
             browser.close()
@@ -132,10 +248,138 @@ def get_fantasypros_top_players():
     logging.info("Starting fantasypros scrape!")
 
     url = "https://www.fantasypros.com/nfl/rankings/half-point-ppr-superflex.php"
-    
+
+    flex_stats_url = "https://www.fantasypros.com/nfl/projections/flex.php?scoring=HALF"
+    qb_stats_url = "https://www.fantasypros.com/nfl/projections/qb.php" 
+    #TODO - pull down this data to use as backup when calculating scores
+    #TODO - list top free agent pickups for each position based on vegas scores
+
+    columnToStatNameDict = {}
+    fantasy_pros_projections = {}
+
+    # Get flex rankings
+    response = requests.get(flex_stats_url)
+    html_content = response.text
+
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Retrieve the page content and parse it with BeautifulSoup
+    receiving_flag = False
+
+    # Scrape column headers for the table
+    headers = soup.select('thead tr:nth-of-type(2) th') 
+    for idx, header in enumerate(headers):
+        stat_name = header.find('small').text if header.find('small') else ""
+        
+        # Skip "POS" column
+        if stat_name == "POS":
+            continue
+        elif stat_name == "ATT":
+            receiving_flag = False
+        elif stat_name == "REC":
+            receiving_flag = True
+
+        # Handle shared stat names
+        if stat_name in ["YDS", "TDS"]:
+            if receiving_flag:
+                stat_name = "REC_" + stat_name
+            else:
+                stat_name = "RUSH_" + stat_name
+
+        columnToStatNameDict[idx] = stat_name
+
+        # Stop processing at "FPTS"
+        if stat_name == "FPTS":
+            break
+
+    # Process each player in the table
+    player_rows = soup.select('tbody tr[class^="mpb-player-"]')
+    for player_row in player_rows:
+        # Get player's name
+        player_name = normalize_name_to_sleeper(player_row.select_one('.player-name').text.strip())
+
+        # Initialize a temporary dictionary to hold the player's stats
+        temp_stat_dict = {}
+        stat_elements = player_row.select('td.center')
+
+        # Iterate over each <td> element, adding its text to the temp_stat_dict
+        for index, stat_element in enumerate(stat_elements):
+            stat_name = columnToStatNameDict.get(index + 2)  # Use the dictionary for stat names
+            if stat_name:
+                stat_value = stat_element.text.strip()
+                temp_stat_dict[stat_name] = stat_value
+
+        # Add the player's stats to the main projections dictionary
+        fantasy_pros_projections[player_name] = temp_stat_dict
+
+    #get qb stats
+    columnToStatNameDict = {}
+    response = requests.get(qb_stats_url)
+    html_content = response.text
+
+    soup = BeautifulSoup(html_content, 'html.parser')
+
+    # Retrieve the page content and parse it with BeautifulSoup
+    # Scrape column headers for the table
+    headers = soup.select('thead tr:nth-of-type(2) th') 
+    rushing_flag = False
+
+    for idx, header in enumerate(headers):
+        data_column = idx
+        stat_name = header.find('small').text if header.find('small') else ""
+        
+        if stat_name == "YDS" or stat_name == "TDS":
+            if rushing_flag:
+                stat_name = "RUSH_" + stat_name
+            else:
+                stat_name = "PASS_" + stat_name
+
+        columnToStatNameDict[int(data_column)-1] = stat_name
+        if stat_name == "INTS":
+            rushing_flag = True
+        if stat_name == "FPTS":
+            break
+
+    # Process each player in the table
+    player_rows = soup.select('tbody tr[class^="mpb-player-"]')
+    for player_row in player_rows:
+        # Get player's name
+        player_name = normalize_name_to_sleeper(player_row.select_one('.player-name').text.strip())
+
+        # Initialize a temporary dictionary to hold the player's stats
+        temp_stat_dict = {}
+        stat_elements = player_row.select('td.center')
+
+        # Iterate over each <td> element, adding its text to the temp_stat_dict
+        for index, stat_element in enumerate(stat_elements):
+            stat_name = columnToStatNameDict.get(index)  # Use the dictionary for stat names
+            if stat_name:
+                stat_value = stat_element.text.strip()
+                temp_stat_dict[stat_name] = stat_value
+
+        # Add the player's stats to the main projections dictionary
+        fantasy_pros_projections[player_name] = temp_stat_dict
+
+    #Transform the fantasypros data into the way we expect the data from sportsbook since it is our backup
+    backup_fantasypros_data = {}
+    for player, stat_projections in fantasy_pros_projections.items():
+        lowercase_name = ''.join(char for char in player if char.isalnum()).lower()
+        temp_dict = {}
+        for stat_name, projection in stat_projections.items():
+            if stat_name in Config.fantasy_pros_to_stat_name_map:
+                temp_dict[Config.fantasy_pros_to_stat_name_map[stat_name]] = float(projection)
+            elif stat_name == "RUSH_TDS" or stat_name == "REC_TDS":
+                temp_dict["Anytime Touchdown"] = temp_dict["Anytime Touchdown"] + float(projection) if "Anytime Touchdown" in temp_dict else float(projection)
+
+        backup_fantasypros_data[lowercase_name] = temp_dict
+
+    upload_to_azure_blob(backup_fantasypros_data, "backup_fantasypros_projections.json")
+
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        # Get overall ranking data etc
         page.goto(url)
 
         # Scroll the page down multiple times to fully load all players
@@ -166,6 +410,9 @@ def get_fantasypros_top_players():
                     if player_name_tag:
                         abbreviated_name = player_name_tag.text.strip()
                         full_name = player_name_tag['fp-player-name']
+                        if "Sr." in full_name or "Jr." in full_name or "III" in full_name or "II" in full_name:
+                            full_name = " ".join(full_name.split()[:2])
+                        full_name = normalize_name_to_sleeper(full_name)
                     team_tag = player_cell.find('span', class_='player-cell-team')
                     team_name = team_tag.text.strip('()') if team_tag else None
                     star_rating = None
@@ -188,6 +435,7 @@ def get_fantasypros_top_players():
                 }
 
                 player_info_list[full_name] = player_info
+    
 
     logging.info("Finished getting fantasypros data!")
 
@@ -215,6 +463,10 @@ def getProjectionsFromAllVegas():
     upload_to_azure_blob(sportsbook_proj, "sportsbook_proj.json")
 
     return sportsbook_proj
+
+def getDraftkingsProjections():
+    player_projections = form_player_projections_dict()
+    upload_to_azure_blob(player_projections, "hand_calculated_projections.json")
     
 def download_necessary_fantasy_data():
 
@@ -225,12 +477,15 @@ def download_necessary_fantasy_data():
             logging.info("Not in football season. Skipping data download.")
             return
         
+        print("Getting draftkings projections")
+        getDraftkingsProjections()
+
         boris_chen_result = get_boris_chen_tiers()
         try:
             player_info_list = get_fantasypros_top_players()
-        except:
+        except Exception as e:
             logging.info("Couldn't get updated fantasypros players, matchup data might be slightly out of date")
-        sleeper_result = get_sleeper_player_data()
+            logging.info("Exception is " + str(e))
         sportsbook_player_ranking = getProjectionsFromAllVegas()
 
         logging.info("Web scraping completed!")
@@ -257,32 +512,39 @@ def download_necessary_fantasy_data():
 def test_http_trigger(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
     download_necessary_fantasy_data()
+    get_sleeper_owned_for_week()
 
     logging.info("Completed test!")
     return ["Success!"]
 
-# Non-game day schedule
+#Non-game day schedule
 @app.function_name(name="non_game_day_schedule")
-@app.timer_trigger(schedule="0 0 9-23/3 * * Tue,Wed,Fri,Sat", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0 13-23/3 * * Tue,Wed,Fri,Sat", arg_name="mytimer")
 def non_game_day_schedule(mytimer: func.TimerRequest) -> None:
     logging.info('Executing non-game day schedule...')
     download_necessary_fantasy_data()
 
 # Monday and Thursday schedule
 @app.function_name(name="monday_thursday_hourly_schedule")
-@app.timer_trigger(schedule="0 0 12,14,16,18,20 * * Mon,Thu", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0 16,18,20,22 * * Mon,Thu", arg_name="mytimer")
 def monday_thursday_schedule(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Monday and Thursday schedule every other hour...')
     download_necessary_fantasy_data()
 
+@app.function_name(name="monday_thursday_final_pregame_schedule")
+@app.timer_trigger(schedule="0 0 0 * * Tue,Fri", arg_name="mytimer")
+def monday_thursday_schedule_final_pregame(mytimer: func.TimerRequest) -> None:
+    logging.info('Executing Monday and Thursday schedule every other hour...')
+    download_necessary_fantasy_data()
+
 @app.function_name(name="monday_thursday_six_to_seven_schedule")
-@app.timer_trigger(schedule="0 30 18 * * Mon,Thu", arg_name="mytimer")
+@app.timer_trigger(schedule="0 30 22 * * Mon,Thu", arg_name="mytimer")
 def monday_thursday_six_to_seven_schedule(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Monday and Thursday schedule from 6 to 7...')
     download_necessary_fantasy_data()
 
 @app.function_name(name="monday_thursday_schedule_pregame")
-@app.timer_trigger(schedule="0 15,30,45 19 * * Mon,Thu", arg_name="mytimer")
+@app.timer_trigger(schedule="0 15,30,45 23 * * Mon,Thu", arg_name="mytimer")
 def monday_thursday_schedule_pregame(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Monday and Thursday pregame schedule...')
     download_necessary_fantasy_data()
@@ -290,42 +552,43 @@ def monday_thursday_schedule_pregame(mytimer: func.TimerRequest) -> None:
 # Sunday schedule
 
 @app.function_name(name="sunday_schedule_hourly")
-@app.timer_trigger(schedule="0 0 7-11,13-14,16 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0 11-15,17-18,20 * * Sun", arg_name="mytimer")
 def sunday_schedule_hourly(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday hourly schedule...')
     download_necessary_fantasy_data()
 
 @app.function_name(name="sunday_schedule_eleven")
-@app.timer_trigger(schedule="0 30 11 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 30 15 * * Sun", arg_name="mytimer")
 def sunday_schedule_eleven(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule 11:30...')
     download_necessary_fantasy_data()
 
 
 @app.function_name(name="sunday_schedule_all_pregame")
-@app.timer_trigger(schedule="0 0/15 12,15,19 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0/15 16,19,23 * * Sun", arg_name="mytimer")
 def sunday_schedule_all_pregame(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule leading up to 1/4/8 oclock games games...')
     download_necessary_fantasy_data()
 
 
 @app.function_name(name="sunday_schedule_evening")
-@app.timer_trigger(schedule="0 0 17-18 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0 21-22 * * Sun", arg_name="mytimer")
 def sunday_schedule_evening(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule evening...')
     download_necessary_fantasy_data()
 
 
 @app.function_name(name="sunday_schedule_snf_pregame")
-@app.timer_trigger(schedule="0 10 20 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 05 0 * * Mon", arg_name="mytimer")
 def sunday_schedule_snf_pregame(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule pregame SNF...')
     download_necessary_fantasy_data()
 
 @app.function_name(name="weekly_sleeper_update")
-@app.timer_trigger(schedule="0 0 0 * * Sun", arg_name="mytimer")
+@app.timer_trigger(schedule="0 0 5 * * Sun", arg_name="mytimer")
 def sleeper_player_update(mytimer: func.TimerRequest) -> None:
     logging.info('Executing sleeper player update')
     get_sleeper_player_data()
+    get_sleeper_owned_for_week()
 
 
