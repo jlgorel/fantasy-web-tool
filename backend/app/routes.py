@@ -1,5 +1,5 @@
 from flask import request, Blueprint, jsonify, current_app
-from app.services.sleeper_service import cache_sleeper_user_info, load_json_from_azure_storage
+from app.services.sleeper_service import cache_sleeper_user_info, load_json_from_azure_storage, get_overall_rankings
 import traceback
 from app.config import Config
 import json
@@ -58,6 +58,14 @@ def load_cached_starts():
         cached_start_recommendations = json.loads(cached_data)
 
     return jsonify({'league_names': list(cached_start_recommendations.keys())}), 200
+
+@main.route('/overall-ranks', methods=['GET'])
+def overall_rankings():
+    user_uuid = request.headers.get('X-User-UUID', 'TESTUSER')
+
+    overall_ranking_data = get_overall_rankings()
+    return jsonify({"overall_rankings": overall_ranking_data}), 200
+
 
 @main.route('/load-league-data', methods=['GET'])
 def load_league_data():
