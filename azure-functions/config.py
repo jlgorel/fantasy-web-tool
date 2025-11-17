@@ -1,3 +1,5 @@
+import os
+
 class Config:
 
     data_dir = "data"
@@ -7,18 +9,43 @@ class Config:
     draftkings_dir = "draftkings_odds"
     container_name = "fantasyjsons"
 
+    azure_storage_connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    containername = "fantasyjsons"
+
     boris_chen_fantasy_relevant_pos = ["K", "DEF", "DST", "QB", "TE", "WR", "RB", "Flex"]
     relevant_sleeper_keys = ["fantasy_positions", "full_name"]
 
     prop_name_to_ids_map = {
         "Receptions Over Under": (1342, 14115),
-        "Receiving Yards Over Under": (1342, 14114),
-        "Passing Yards Over Under": (1000, 9524),
-        "Passing TDs Over Under": (1000, 9525),
+        "Passing TDs Alt Lines": (1000, 16568),
+        "Passing Yards Alt Lines": (1000, 16569),
         "Interceptions Over Under": (1000, 15937),
-        "Rushing Yards Over Under": (1001, 9514),
-        "Anytime Scorer": (1003, 12438), 
+        "Anytime Scorer": (1003, 12438),
+        "Receiving Yards Alt Lines": (1342),
+        "Rushing Yards Alt Lines": (1001)
+        }
+
+    prop_name_to_stat_name_map = {
+        "Receptions Over Under": "Receptions",
+        "Passing TDs Alt Lines": "Passing Touchdowns",
+        "Passing Yards Alt Lines": "Passing Yards",
+        "Interceptions Over Under": "Interceptions",
+        "Anytime Scorer": "Anytime Touchdown",
+        "Receiving Yards Alt Lines": "Receiving Yards",
+        "Rushing Yards Alt Lines": "Rushing Yards"
     }
+
+    fantasy_pros_to_stat_name_map = {
+        "PASS_YDS" : "Passing Yards",
+        "PASS_TDS": "Passing Touchdowns",
+        "INTS": "Interceptions",
+        "REC": "Receptions",
+        "RUSH_YDS": "Rushing Yards",
+        "REC_YDS": "Receiving Yards"
+    }
+
+    alt_line_names = ["Passing Touchdowns", "Passing Yards", "Receiving Yards", "Rushing Yards"]
+    
     relevant_td_outcomes = ["To Score 2 Or More", "Anytime Scorer"]
 
     ppr_stat_scoring = {
