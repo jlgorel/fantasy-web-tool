@@ -61,8 +61,6 @@ def load_cached_starts():
 
 @main.route('/overall-ranks', methods=['GET'])
 def overall_rankings():
-    user_uuid = request.headers.get('X-User-UUID', 'TESTUSER')
-
     overall_ranking_data = get_overall_rankings()
     return jsonify({"overall_rankings": overall_ranking_data}), 200
 

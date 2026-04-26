@@ -15,27 +15,11 @@ import {
   SliderThumb,
   Tooltip
 } from '@chakra-ui/react';
-
-interface Player {
-  NAME: string;
-  POS: string;              
-  POS_RANK?: string;        
-  FLEX?: string;            
-  PID?: string;             
-  TEAM?: string;            
-  TEAM_NAME?: string;       
-  VEGAS?: string;           
-  MATCHUP_RATING?: string;  
-  REALLIFE_POS?: string;    
-  VEGAS_STATS?: string;     
-  BOOM?: string;            
-  BUST?: string;
-  PERCENTILES?: string;   
-}
+import { Player } from '../types/player';
 
 interface PlayerTableProps {
   data: Player[];
-  freeAgentRecs?: { [position: string]: Player[] }; 
+  freeAgentRecs?: { [position: string]: Player[] };
 }
 
 // Tier colors

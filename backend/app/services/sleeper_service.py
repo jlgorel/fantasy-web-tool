@@ -1,751 +1,97 @@
-import requests
-import os
-import json
-from flask import jsonify
-from app.config import Config
-from datetime import datetime
-from collections import defaultdict
-from azure.storage.blob import BlobServiceClient
-from copy import copy, deepcopy
-import heapq
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
+﻿"""Backwards-compatible facade for the legacy sleeper_service module.
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+The original monolithic file has been split into focused modules under
+app.services (blob_store, scoring, lineup_optimizer, free_agents, etc.).
+This module re-exports the public symbols still imported by app.routes so
+the refactor is a no-op at the call site. Prefer importing from the new
+modules directly in any new code.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List, Tuple
+
+from app.services.blob_store import (
+    load_blob,
+    load_json_from_azure_storage,
+    normalize_players_positions,
+)
+from app.services.boris_chen import (
+    get_tier_page_names_from_league_settings,
+    prepare_boris_chen_tier_dict,
+)
+from app.services.fleaflicker_client import (
+    convert_ff_roster_settings,
+    get_fleaflicker_rosters_and_convert_to_sleeper,
+)
+from app.services.free_agents import form_top_free_agents_parallel
+from app.services.http_utils import fetch_json
+from app.services.lineup_optimizer import (
+    clean_up_pos_names,
+    form_suggested_starts_based_on_boris,
+    get_all_players_from_position_groups,
+    get_highest_ranked_player_from_page,
+    list_players_for_pos_name,
+)
+from app.services.player_data import (
+    prepare_pid_to_name_dict,
+    prepare_position_groups_for_leagues,
+)
+from app.services.rankings import get_overall_rankings
+from app.services.scoring import calculate_potential_fantasy_score
+from app.services.season import get_current_fantasy_year
+from app.services.sleeper_client import get_sleeper_rosters_for_user
+
 logger = logging.getLogger(__name__)
 
-def load_json_from_azure_storage(blob_name, container_name, connection_string):
-    # Initialize the BlobServiceClient with the provided connection string
-    print(blob_name)
-    print(container_name)
-    print(connection_string)
-    blob_service_client = BlobServiceClient.from_connection_string(connection_string)
 
-    # Get the blob client
-    blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+def cache_sleeper_user_info(
+    username: str, user_uuid: str, website_name: str = "Sleeper"
+) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, Dict[str, List[Dict[str, Any]]]]]:
+    """Build suggested lineups + free agent recs for a user.
 
-    # Download the blob content
-    blob_data = blob_client.download_blob()
-    data = json.loads(blob_data.readall())
-
-     # If this is the players blob, normalize special cases once centrally
-    if blob_name.lower() == "players.json":
-        try:
-            normalize_players_positions(data)
-        except Exception as e:
-            logger.warning(f"normalize_players_positions failed: {e}")
-
-    return data
-
-def fetch_json(url):
-    resp = requests.get(url)
-    if resp.status_code == 200:
-        return resp.json()
-    else:
-        logger.error(f"Error fetching {url}: {resp.status_code}")
-        return None
-
-def cache_sleeper_user_info(username, user_uuid, website_name = "Sleeper"):
-
-    pidToPlayerDict, nameToPidDict = prepare_pid_to_name_dict()
+    Single entry point used by /load-sleeper-info. Pulls the user's rosters
+    from the requested website (Sleeper or Fleaflicker), then runs the full
+    Boris Chen + Vegas projection pipeline.
+    """
+    pid_to_player, name_to_pid = prepare_pid_to_name_dict()
 
     if website_name == "Sleeper":
         user_rosters = get_sleeper_rosters_for_user(username)
     elif website_name == "Fleaflicker":
-        user_rosters = get_fleaflicker_rosters_and_convert_to_sleeper(username, nameToPidDict)
+        user_rosters = get_fleaflicker_rosters_and_convert_to_sleeper(username, name_to_pid)
+    else:
+        raise ValueError("Unsupported website " + repr(website_name))
 
     boris_chen_dict = prepare_boris_chen_tier_dict()
-    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict)
-    suggested_lineups = form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_dict, nameToPidDict)
-    free_agents = form_top_free_agents_parallel(user_rosters, nameToPidDict)
+    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pid_to_player)
+    suggested_lineups = form_suggested_starts_based_on_boris(
+        user_rosters, league_position_groups, boris_chen_dict, name_to_pid
+    )
+    free_agents = form_top_free_agents_parallel(user_rosters, name_to_pid)
     return suggested_lineups, free_agents
 
-def normalize_players_positions(players_dict):
-    """
-    Mutate players_dict in-place so Travis Hunter (and other overrides)
-    are treated as WR first. players_dict is expected to be the players.json
-    structure: { pid: {"full_name": "...", "fantasy_positions": [...]} }.
-    """
-    # Simple mapping you can extend later if you want other overrides
-    # key: normalized full name (lower, stripped), value: position to force first
-    overrides = {
-        "travis hunter": "WR",
-    }
 
-    for pid, pdata in players_dict.items():
-        full_name = (pdata.get("full_name") or "").strip()
-        if not full_name:
-            continue
-        key = full_name.lower()
-        if key in overrides:
-            forced_pos = overrides[key]
-            # Ensure fantasy_positions exists and is a list
-            positions = pdata.get("fantasy_positions") or []
-            # Remove any existing occurrences of forced_pos then insert at front
-            positions = [p for p in positions if p != forced_pos]
-            positions.insert(0, forced_pos)
-            pdata["fantasy_positions"] = positions
-    return players_dict
-
-def get_current_fantasy_year():
-    # Get the current date and time
-    now = datetime.now()
-
-    # Extract the year as a string
-    year_string = now.strftime("%Y")
-
-    current_month = now.month
-
-    #deal with early 2025 years
-    if int(current_month) <=7:
-        year_string = str(int(year_string) - 1)
-
-    return year_string
-
-def get_sleeper_rosters_for_user(username):
-    year_string = get_current_fantasy_year()
-
-    url = "https://api.sleeper.app/v1/user/{}".format(username)
-
-    data = fetch_json(url)
-    user_id = data["user_id"]
-
-    url = "https://api.sleeper.app/v1/user/{}/leagues/nfl/{}".format(user_id, year_string)
-    data = fetch_json(url)
-
-    curr_leagues = [{"name": league["name"], "id": league["league_id"]} for league in data if league["status"] in ["in_season", "post_season"]]
-    curr_rosters = []
-
-    for league in curr_leagues:
-        url = "https://api.sleeper.app/v1/league/{}".format(league["id"])
-        league_settings = fetch_json(url)
-
-        scoring_settings = league_settings["scoring_settings"]
-        starting_pos = league_settings["roster_positions"]
-
-        if "IDP_FLEX" in starting_pos or "DB" in starting_pos or "LB" in starting_pos or "DL" in starting_pos:
-            logger.info("Skipping IDP league as we don't store that data and it will cause errors")
-            continue
-
-        url = "https://api.sleeper.app/v1/league/{}/rosters".format(league["id"])
-        data = fetch_json(url)
-
-        your_roster = next((roster for roster in data if roster["owner_id"] == user_id), None)
-        if your_roster is None:
-            logging.info("User not found with a roster in league " + str(league["name"]))
-            continue
-        all_owned_players = []
-
-        for roster in data:
-            if "players" in roster and roster["players"] is not None:
-                all_owned_players.extend([player for player in roster["players"]])
-            else:
-                continue
-
-        curr_rosters.append({"league": league["name"], "pids": your_roster["players"], "settings": scoring_settings, "positions": starting_pos, "all_owned": all_owned_players})
-    
-    return curr_rosters
-
-def convert_ff_roster_settings(ff_roster_json):
-
-    roster_settings = []
-    valid_positions = ["QB", "RB", "WR", "TE", "WR/TE", "RB/WR/TE", "QB/RB/WR/TE", "K", "D/ST", "BN", "IR"]
-    position_list = ff_roster_json["positions"]
-    for position_info in position_list:
-        pos_name = position_info["label"]
-        if pos_name not in valid_positions:
-            continue
-        if pos_name == "IR":
-            pos_name = "BN"
-        elif pos_name == "QB/RB/WR/TE":
-            pos_name = "SUPER_FLEX"
-        elif pos_name == "RB/WR/TE":
-            pos_name = "FLEX"
-        elif pos_name == "WR/TE":
-            pos_name = "WT"
-        elif pos_name == "D/ST":
-            pos_name = "DEF"
-        num_started = int(position_info["start"]) if "start" in position_info else int(position_info["max"])
-        roster_settings.extend([pos_name] * num_started)
-    return roster_settings
-
-def get_fleaflicker_rosters_and_convert_to_sleeper(email, nameToPidDict):
-    year_string = get_current_fantasy_year()
-
-    user_url = f"https://www.fleaflicker.com/api/FetchUserLeagues?sport=NFL&season={year_string}&email={email}"
-
-    user_data = fetch_json(user_url)
-
-    league_settings = [
-        {
-            "league_id": league["id"],
-            "league_name": league["name"],
-            "team_id": league["ownedTeam"]["id"],
-            "starting_pos": convert_ff_roster_settings(league["rosterRequirements"]),
-        }
-        for league in user_data["leagues"]
-    ]
-
-    for index, league in enumerate(league_settings):
-        if league["league_name"] == "test":
-            continue
-        league_id = league["league_id"]
-        team_id = league["team_id"]
-        roster_url = f"https://www.fleaflicker.com/api/FetchRoster?sport=NFL&league_id={league_id}&team_id={team_id}&season={year_string}"
-        data = fetch_json(roster_url)
-        rostered_names = []
-        for group in data["groups"]:
-            for player in group["slots"]:
-                try:
-                    player_fullname = player["leaguePlayer"]["proPlayer"]["nameFull"]
-                    rostered_names.append(nameToPidDict[player_fullname])
-                except Exception:
-                    try:
-                        rostered_names.append(Config.nfl_teams_reverse_lookup[player_fullname])
-                    except:
-                        print(player_fullname + " not in sleeper dict.")
-
-        league_settings[index]["pids"] = rostered_names
-
-        # get all owned players
-
-        all_rosters_url = f"https://www.fleaflicker.com/api/FetchLeagueRosters?sport=NFL&league_id={league_id}"
-        data = fetch_json(all_rosters_url)
-        all_owned = []
-        for roster in data["rosters"]:
-            for player in roster["players"]:
-                try:
-                    player_name = player["proPlayer"]["nameFull"]
-                    all_owned.append(nameToPidDict[player_name])
-                except:
-                    try:
-                        all_owned.append(Config.nfl_teams_reverse_lookup[player_name])
-                    except:
-                        print("No sleeper entry found for " + str(player_name))
-
-        league_settings[index]["all_owned"] = all_owned
-
-        league_settings_url = f"https://www.fleaflicker.com/api/FetchLeagueRules?sport=NFL&league_id={league_id}"
-        data = fetch_json(league_settings_url)
-        label_to_type = {
-            "Passing": "pass",
-            "Rushing": "rush",
-            "Receiving": "rec"
-        }
-        league_scoring = {}
-        valid_abbreviations = ["int", "td", "yd", "rec"]
-        for group in data["groups"]:
-            try:
-                prefix = label_to_type[group["label"]]
-            except:
-                continue
-            scoring_rules = group["scoringRules"]
-            for rule in scoring_rules:
-                abbrev = rule["category"]["abbreviation"].lower()
-                if abbrev not in valid_abbreviations:
-                    continue
-                
-                points = rule["points"]["value"] / rule["forEvery"]
-                key = "_".join([prefix, abbrev]) if abbrev != "rec" else "rec"
-                league_scoring[key] = float(points)
-
-        league_settings[index]["settings"] = league_scoring
-
-    curr_rosters = [
-        {
-            "league": temp_league["league_name"], 
-            "pids": temp_league["pids"], 
-            "settings": temp_league["settings"], 
-            "positions": temp_league["starting_pos"], 
-            "all_owned": temp_league["all_owned"]
-        }
-        for temp_league in league_settings
-    ]
-
-    return curr_rosters
-
-def prepare_pid_to_name_dict():
-    pidToPlayerDict = {}
-    nameToPidDict = {}
-
-    data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
-        
-    for pid in data:
-        pidToPlayerDict[pid] = data[pid]
-        if "full_name" in data[pid]:
-            nameToPidDict[data[pid]["full_name"]] = pid
-
-    return pidToPlayerDict, nameToPidDict
-
-def prepare_boris_chen_tier_dict():
-
-    data = load_json_from_azure_storage("borischen_tiers.json", Config.containername, Config.azure_storage_connection_string)
-    player_tiers = defaultdict(dict)
-    for pos_ranking in data:
-        for tier_num in data[pos_ranking]:
-            for name in data[pos_ranking][tier_num]:
-                if len(name.split()) >= 3:
-                    if "Sr." in name or "Jr." in name or "III" in name or "II" in name:
-                        shortened_name = " ".join(name.split()[:2])
-                        player_tiers[shortened_name][pos_ranking] = tier_num
-                player_tiers[name][pos_ranking] = tier_num
-
-    return player_tiers
-
-def prepare_position_groups_for_leagues(user_rosters, pidToPlayerDict):
-
-    league_position_groups = {}
-
-    for roster in user_rosters:
-        league_name = roster["league"]
-        position_groups = defaultdict(list)
-        for pid in roster["pids"]:
-            player = pidToPlayerDict[pid]
-            position = player["fantasy_positions"][0]
-            try:
-                name = Config.nfl_teams[pid] if pid in Config.nfl_teams else player["full_name"]
-            except:
-                logger.info("Error handling player with pid " + str(pid) + ", " + str(player))
-            position_groups[position].append(name)
-        league_position_groups[league_name] = position_groups
-    return league_position_groups
-
-def form_suggested_starts_based_on_boris(user_rosters, league_position_groups, boris_chen_tiers, nameToPidDict):
-
-    suggested_starts = {}
-
-    #sportsbook_projections = load_json_from_azure_storage("sportsbook_proj.json", Config.containername, Config.azure_storage_connection_string)
-    sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
-    backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
-    fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
-    player_data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
-
-    for roster in user_rosters:
-        position_groups = copy(league_position_groups[roster["league"]])
-        normal_prefix, te_prefixes = get_tier_page_names_from_league_settings(roster["settings"])
-        starting_positions = clean_up_pos_names(roster["positions"])
-        #free_agents = [name for name,pid in nameToPidDict.items() if pid not in roster["all_owned"]]
-        settings = roster["settings"]
-
-        tiers_to_lookup = set()
-        for pos_name, num_of_pos in starting_positions.items():
-            if pos_name in ["RB", "WR", "Flex"]:
-                tiers_to_lookup.add(normal_prefix + pos_name)
-            elif pos_name == "TE":
-                tiers_to_lookup.add(te_prefixes + pos_name)
-            elif pos_name == "WT":
-                tiers_to_lookup.add(normal_prefix + "Flex")
-            else:
-                tiers_to_lookup.add(pos_name)
-
-        team_rank_dict = {}
-
-        for player in get_all_players_from_position_groups(position_groups):
-            pos_rank_dict = {}
-            tiers_for_player = tiers_to_lookup.intersection(boris_chen_tiers[player])
-            if len(tiers_for_player) == 0:
-                pos_rank_dict["Position"] = "Unranked"
-
-            # We will manually add RB/WR with a tier of <= 3 for their position to be rank 1 flex if their flex ranking DNE
-            top_tier_player_flag = False
-            for tier in tiers_for_player:
-                tier_rank = boris_chen_tiers[player][tier]
-                cleaned_pos_name = tier
-                for prefix in [normal_prefix, te_prefixes]:
-                    cleaned_pos_name = cleaned_pos_name.replace(prefix, "")
-                pos_rank_dict[cleaned_pos_name] = tier_rank
-                if int(tier_rank) <= 4 and cleaned_pos_name != "TE":
-                    top_tier_player_flag = True
-
-            if top_tier_player_flag and "Flex" not in pos_rank_dict:
-                pos_rank_dict["Flex"] = "1"
-            
-            team_rank_dict[player] = pos_rank_dict
-
-        logger.info("Building table for " + str(roster["league"]) + ".")
-
-        roster_table = defaultdict(list)
-
-        pos_groups_copy = deepcopy(position_groups)
-        full_roster_positions = deepcopy(roster["positions"])
-        if len(roster['pids']) > len(full_roster_positions):
-            full_roster_positions.extend(["BN"]*(1 + len(roster['pids']) - len(roster["positions"])))
-
-        stat_point_multipliers = Config.get_stat_point_multipliers(settings)
-
-        for pos_name in full_roster_positions:
-            cleaned_name = clean_up_pos_names([pos_name])
-            
-            if cleaned_name == "WT":
-                cleaned_name = "WR"
-            elif cleaned_name == "SF":
-                cleaned_name = "QB"
-            elif cleaned_name == "DST":
-                cleaned_name = "DEF"
-            elif cleaned_name == "BN":
-                try:
-                    cleaned_name = next(iter(pos_groups_copy.keys()))
-                except:
-                    logger.info("I believe pos groups copy is probably empty.  Lemme check " + str(pos_groups_copy))
-
-            players, pos_added = list_players_for_pos_name(pos_groups_copy, cleaned_name)
-
-            high_name, high_rank = get_highest_ranked_player_from_page(
-                players,
-                cleaned_name,
-                team_rank_dict,
-                sportsbook_projections,
-                backup_projections,
-                stat_point_multipliers
-            )
-
-            roster_table[pos_name].append({"Name": high_name, "Tiers": team_rank_dict[high_name] if high_name in team_rank_dict else {cleaned_name: "Unranked"}})
-            for pos in pos_added:
-                if high_name in pos_groups_copy[pos]:
-                    if len(pos_groups_copy[pos]) == 1:
-                        del pos_groups_copy[pos]
-                    else:
-                        pos_groups_copy[pos].remove(high_name)
-
-        # deal with leagues with players on IR or taxi squad etc.
-        for position, player_list in pos_groups_copy.items():
-            for player in player_list:
-                cleaned_name = next(iter(pos_groups_copy.keys()))
-                roster_table["BN"].append({"Name": player, "Tiers": {position: "Unranked"}})
-
-                    
-        suggested_starts_for_roster = []
-
-        for pos, player_dict_list in roster_table.items():
-            for player_dict in player_dict_list:
-                temp_dict = {"POS": pos, "NAME": player_dict["Name"]}
-                if player_dict["Name"] in nameToPidDict:
-                    temp_dict["PID"] = nameToPidDict[player_dict["Name"]]
-                    try:
-                        temp_dict["REALLIFE_POS"] = player_data[temp_dict["PID"]]["fantasy_positions"][0]
-                    except:
-                        logger.info("Probably a defense" + str(player_dict["Name"]))
-                        temp_dict["REALLIFE_POS"] = "DEF"
-                else:
-                    try:
-                        temp_dict["TEAM"] = Config.nfl_teams_reverse_lookup[player_dict["Name"]]
-                    except:
-                        logger.info("I'm guessing that this is cause you don't have a defense or kicker.  Checking : " + str(pos))
-                for tier, ranking in player_dict["Tiers"].items():
-                    if "Flex" not in tier:
-                        temp_dict["POS_RANK"] = str(ranking)
-                    else:
-                        temp_dict["FLEX"] = str(ranking)
-                if pos != "DST" and pos != "DEF" and pos != "K":
-                    projected_scoring, old_projection, statline, boom_bust = calculate_potential_fantasy_score(player_dict["Name"], pos, sportsbook_projections, backup_projections, stat_point_multipliers)
-                    temp_dict["VEGAS"] = str(round(projected_scoring, 2))
-                    temp_dict["VEGAS_STATS"] = statline
-                    if boom_bust is not None:
-                        temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
-                        temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
-                        temp_dict["PERCENTILES"] = boom_bust["percentiles"]
-                    else:
-                        temp_dict["BOOM"] = "N/A. Not enough vegas props"
-                        temp_dict["BUST"] = "N/A"
-                        temp_dict["PERCENTILES"] = "N/A"
-                    if old_projection:
-                        temp_dict["VEGAS"] += "\t Old projection, no lines available, confirm uninjured"
-
-                    p_info_dict = fantasypros_data[player_dict["Name"]] if player_dict["Name"] in fantasypros_data else None
-                    logger.info("Getting info dict for " + player_dict["Name"])
-                    if p_info_dict:
-                       temp_dict["MATCHUP_RATING"] = p_info_dict["Opponent Rating"] if "Opponent Rating" in p_info_dict else "UNKNOWN"
-                       temp_dict["TEAM_NAME"] = p_info_dict["Team Name"] if "Team Name" in p_info_dict else "UNKNOWN"
-                else:
-                    temp_dict["VEGAS"] = "N/A"
-                suggested_starts_for_roster.append(temp_dict)
-        
-        suggested_starts[str(roster["league"])] = suggested_starts_for_roster
-
-    return suggested_starts
-
-def form_top_free_agents_parallel(user_rosters, nameToPidDict, max_workers=8):
-    """
-    Returns the top 3 free agents per position (QB, RB, WR, TE) for each league,
-    formatted exactly like form_suggested_starts_based_on_boris.
-    Parallelized to speed up large free agent pools.
-    """
-    free_agents_by_league = {}
-
-    # Load all data once
-    sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
-    backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
-    fantasypros_data = load_json_from_azure_storage("fantasypros_data.json", Config.containername, Config.azure_storage_connection_string)
-    player_data = load_json_from_azure_storage("players.json", Config.containername, Config.azure_storage_connection_string)
-    owned_data = load_json_from_azure_storage("owned.json", Config.containername, Config.azure_storage_connection_string)
-
-    for roster in user_rosters:
-        league_name = roster["league"]
-        all_owned = set(roster["all_owned"])
-        stat_point_multipliers = Config.get_stat_point_multipliers(roster["settings"])
-
-        # Filter unowned free agents for relevant positions
-        free_agents = []
-        for pid, pdata in player_data.items():
-            if pid in all_owned or "full_name" not in pdata or pid not in owned_data:
-                continue
-            # Skip DB/IDP, DST, K, etc.
-            positions = pdata.get("fantasy_positions", [])
-            if not positions:
-                continue
-
-            # Special case: Travis Hunter
-            if pdata["full_name"] == "Travis Hunter":
-                pos = "WR"
-            else:
-                pos = positions[0]
-
-            if pos not in ["QB", "RB", "WR", "TE"]:
-                continue
-
-            free_agents.append((pid, pdata["full_name"], pos))
-
-        # Prepare dicts per position
-        fa_by_pos = defaultdict(list)
-        for pid, name, pos in free_agents:
-            fa_by_pos[pos].append((pid, name, pos))
-
-        top_free_agents = defaultdict(list)
-
-        def score_player(pid_name_pos):
-            pid, name, pos = pid_name_pos
-            proj_points, old_proj, statline, boom_bust = calculate_potential_fantasy_score(
-                name, pos, sportsbook_projections, backup_projections, stat_point_multipliers
-            )
-            return (proj_points, pid, name, pos, statline, boom_bust, old_proj)
-
-        # Parallelize scoring per position
-        for pos in ["QB", "RB", "WR", "TE"]:
-            scored_fas = []
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(score_player, pid_name_pos): pid_name_pos for pid_name_pos in fa_by_pos[pos]}
-                for future in as_completed(futures):
-                    scored_fas.append(future.result())
-
-            # Get top 3 using heapq.nlargest
-            top3 = heapq.nlargest(3, scored_fas, key=lambda x: x[0])
-
-            for proj, pid, name, pos, statline, boom_bust, old_proj in top3:
-                temp_dict = {
-                    "POS": pos,
-                    "NAME": name,
-                    "PID": pid,
-                    "REALLIFE_POS": pos,
-                    "VEGAS": str(round(proj, 2)) + ("\t Old projection" if old_proj else ""),
-                    "VEGAS_STATS": statline,
-                }
-
-                if boom_bust:
-                    temp_dict["BOOM"] = round(boom_bust["boom"] * 100, 2)
-                    temp_dict["BUST"] = round(boom_bust["bust"] * 100, 2)
-                    temp_dict["PERCENTILES"] = boom_bust["percentiles"]
-                else:
-                    temp_dict["BOOM"] = "N/A"
-                    temp_dict["BUST"] = "N/A"
-                    temp_dict["PERCENTILES"] = "N/A"
-
-                p_info_dict = fantasypros_data.get(name, None)
-                if p_info_dict:
-                    temp_dict["MATCHUP_RATING"] = p_info_dict.get("Opponent Rating", "UNKNOWN")
-                    temp_dict["TEAM_NAME"] = p_info_dict.get("Team Name", "UNKNOWN")
-
-                top_free_agents[pos].append(temp_dict)
-
-        free_agents_by_league[league_name] = top_free_agents
-
-    return free_agents_by_league
-
-# Will round non standard TE Premium settings to either 0.5 PPR or full PPR depending.
-def get_tier_page_names_from_league_settings(settings):
-    ppr = settings["rec"]
-    if "bonus_rec_te" in settings:
-        te_ppr = ppr + settings["bonus_rec_te"] 
-    else:
-        te_ppr = ppr
-
-    if ppr == 0:
-        rb_wr_flex_prefix = ""
-    elif ppr == 0.5:
-        rb_wr_flex_prefix = "0.5 PPR "
-    elif ppr >= 1:
-        rb_wr_flex_prefix = "PPR "
-
-    if te_ppr == 0:
-        te_prefix = ""
-    elif te_ppr < 0.25:
-        te_prefix = ""
-    elif te_ppr <= 0.5:
-        te_prefix = "0.5 PPR "
-    elif te_ppr < 0.75:
-        te_prefix = "0.5 PPR "
-    else:
-        te_prefix = "PPR "
-
-    return rb_wr_flex_prefix, te_prefix
-
-# Returns a list of position names if given a list, and a single name otherwise
-def clean_up_pos_names(pos_names):
-    cleaned_pos = defaultdict(int)
-    for pos in pos_names:
-        if pos == "BN":
-            continue
-        elif pos == "FLEX":
-            cleaned_pos["Flex"]+=1
-        elif pos == "SUPER_FLEX":
-            cleaned_pos["SF"]+=1
-        elif pos == "REC_FLEX":
-            cleaned_pos["WT"]+=1
-        elif pos == "DEF":
-            cleaned_pos["DST"]+=1
-        else:
-            cleaned_pos[pos]+=1
-    
-    if len(cleaned_pos) == 0:
-        return "BN"
-    elif len(cleaned_pos) == 1:
-        return next(iter(cleaned_pos))
-    return cleaned_pos
-
-def list_players_for_pos_name(pos_groups, pos_name):
-    if pos_name == "Flex":
-        pos_to_add = ["WR", "TE", "RB"]
-    elif pos_name == "WT":
-        pos_to_add = ["WR", "TE"]
-    elif pos_name == "SF":
-        pos_to_add = ["QB"]
-    else:
-        pos_to_add = [pos_name]
-
-    players = []
-
-    for pos in pos_to_add:
-        players.extend(pos_groups[pos])
-
-    return players, pos_to_add
-
-def get_highest_ranked_player_from_page(
-    list_of_players,
-    pos_name,
-    team_rank_dict,
-    sportsbook_projections,
-    backup_projections,
-    stat_point_multipliers
-):
-    """
-    Pick the best player by:
-      1. Lowest Boris Chen tier at the given position
-      2. If tied, lowest Flex tier (if available)
-      3. If still tied, highest Vegas projection
-    """
-    if len(list_of_players) == 0:
-        return "None Owned", "N/A"
-
-    best_player = None
-    best_tier = float("inf")
-    best_flex = float("inf")
-    best_proj = -float("inf")
-
-    for player in list_of_players:
-        # Step 1: Tier rank
-        tier = int(team_rank_dict[player][pos_name]) if (player in team_rank_dict and pos_name in team_rank_dict[player]) else 999
-
-        # Step 2: Flex rank (optional injection)
-        flex = int(team_rank_dict[player]["Flex"]) if (player in team_rank_dict and "Flex" in team_rank_dict[player]) else 999
-
-        # Step 3: Vegas projection
-        projected_points, _, _, _ = calculate_potential_fantasy_score(
-            player, pos_name, sportsbook_projections, backup_projections, stat_point_multipliers
-        )
-
-        # Compare: first by tier, then flex, then Vegas
-        if (
-            tier < best_tier
-            or (tier == best_tier and flex < best_flex)
-            or (tier == best_tier and flex == best_flex and projected_points > best_proj)
-        ):
-            best_player = player
-            best_tier = tier
-            best_flex = flex
-            best_proj = projected_points
-
-    if best_player:
-        return best_player, best_tier
-    else:
-        return list_of_players[0], "Unranked"
-
-
-def get_all_players_from_position_groups(position_groups):
-    players = []
-    for names in position_groups.values():
-        players.extend(names)
-    return players
-
-def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, backup_stat_projections, stat_point_multipliers):
-
-    if pos_group == "TE":
-        rec_points = stat_point_multipliers["TE Receptions"]
-    else:
-        rec_points = stat_point_multipliers["Receptions"]
-
-    playerkey = ''.join(char for char in player if char.isalnum()).lower()
-
-    p_projections = player_stat_projections[playerkey] if playerkey in player_stat_projections else {}
-    backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
-    statline = ", ".join([str(key) + ": " + str(round(proj,2)) for key, proj in p_projections.items() if key not in ["Opponent Rating", "Team Name", "Simulations"]])
-    if len(p_projections) == 0 and len(backup_projections) == 0:
-        logger.info("Didnt find " + player + " in standard or backup projections")
-        return 0, False, "No stats projected for player.", None
-    
-
-    if stat_point_multipliers["Passing Touchdowns"] > 4:
-        six_point_td = True
-    else:
-        six_point_td = False
-
-    proj_points = 0
-    boom_bust_probabilities = None
-    for key, val in p_projections.items():
-        if key == "Opponent Rating" or key == "Team Name":
-            continue
-        if key == "Simulations":
-            boom_bust = val
-            if "error" in boom_bust:
-                boom_bust_probabilities = None
-            elif "QB_6PT" in boom_bust or "QB_STD" in boom_bust:
-                if six_point_td:
-                    boom_bust_probabilities = boom_bust["QB_6PT"]
-                else:
-                    boom_bust_probabilities = boom_bust["QB_STD"]
-            else:
-                if rec_points < 0.3:
-                    boom_bust_probabilities = boom_bust["STD"]
-                elif rec_points >= 0.3 and rec_points < 0.75:
-                    boom_bust_probabilities = boom_bust["HalfPPR"]
-                else:
-                    boom_bust_probabilities = boom_bust["PPR"]
-            continue
-        if key == "Receptions":
-            proj_points += float(val) * rec_points
-        else:
-            proj_points += float(val) * stat_point_multipliers[key]
-    
-    try:
-        missing_projections = [key for key in backup_projections if key not in p_projections]
-        logger.info("Backup projections loaded.  The projections missing from that were " + ", ".join([key for key in missing_projections]))
-        for key in missing_projections:
-            if key == "Opponent Rating" or key == "Team Name":
-                continue
-            if key == "Receptions":
-                proj_points += float(backup_projections[key]) * rec_points
-            else:
-                proj_points += float(backup_projections[key]) * stat_point_multipliers[key]
-    except Exception as e:
-        logger.info("Exception was " + str(e))
-
-    return proj_points, False, statline, boom_bust_probabilities
+__all__ = [
+    "cache_sleeper_user_info",
+    "load_blob",
+    "load_json_from_azure_storage",
+    "normalize_players_positions",
+    "fetch_json",
+    "get_current_fantasy_year",
+    "get_sleeper_rosters_for_user",
+    "convert_ff_roster_settings",
+    "get_fleaflicker_rosters_and_convert_to_sleeper",
+    "prepare_pid_to_name_dict",
+    "prepare_position_groups_for_leagues",
+    "prepare_boris_chen_tier_dict",
+    "get_tier_page_names_from_league_settings",
+    "calculate_potential_fantasy_score",
+    "form_suggested_starts_based_on_boris",
+    "get_highest_ranked_player_from_page",
+    "list_players_for_pos_name",
+    "clean_up_pos_names",
+    "get_all_players_from_position_groups",
+    "form_top_free_agents_parallel",
+    "get_overall_rankings",
+]

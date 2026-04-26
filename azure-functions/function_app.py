@@ -8,13 +8,73 @@ from bs4 import BeautifulSoup
 from config import Config
 import logging
 import time
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-from draftkings_help import form_player_projections_dict, normalize_name_to_sleeper
+from draftkings_help import form_player_projections_dict, normalize_name_to_sleeper, form_all_projections_and_points_dict
 import pytz
 
 app = func.FunctionApp()
+
+# ---------------------------------------------------------------------------
+# Date / season helpers
+# ---------------------------------------------------------------------------
+# Approximate NFL season kicks off the first Thursday of September. Hardcoding
+# the day to Sept 4 is good enough for week math (off by at most a few days).
+NFL_SEASON_START_MONTH = 9
+NFL_SEASON_START_DAY = 4
+# Months that count as "in fantasy season" for scrape gating. Sept-Dec is
+# regular + fantasy playoffs; Jan covers wild card / divisional / conf
+# championships; early Feb covers the Super Bowl. Aug is preseason which we
+# intentionally skip since DK/Vegas lines are unreliable.
+_IN_SEASON_MONTHS = {1, 2, 9, 10, 11, 12}
+
+
+def get_current_fantasy_year() -> int:
+    """Return the fantasy season year as an int.
+
+    Anything Jan-Jul belongs to the previous year's season (post-season /
+    offseason for the season that already kicked off).
+    Mirror of backend's app.services.season.get_current_fantasy_year.
+    """
+    now = datetime.now()
+    return now.year - 1 if now.month <= 7 else now.year
+
+
+def is_in_fantasy_season(now: datetime | None = None) -> bool:
+    now = now or datetime.now()
+    return now.month in _IN_SEASON_MONTHS
+
+
+def format_eastern_runtime(now: datetime | None = None) -> str:
+    """Render an Eastern-Time runtime stamp in a Windows + Linux portable way.
+
+    Note: %-m / %-d are non-portable (work on Linux/macOS, crash on Windows).
+    Build month/day manually to avoid the platform difference.
+    """
+    eastern = pytz.timezone("America/New_York")
+    et = (now.astimezone(eastern) if now else datetime.now(eastern))
+    return f"{et.month}/{et.day} {et.strftime('%I:%M:%S %p %Z')}"
+
+
+def get_current_nfl_week() -> int:
+    """Return the current NFL week (1-18), capped at 18 for playoffs."""
+    season_year = get_current_fantasy_year()
+    season_start = datetime(season_year, NFL_SEASON_START_MONTH, NFL_SEASON_START_DAY)
+    today = datetime.now()
+    week = ((today - season_start).days // 7) + 1
+    return max(1, min(week, 18))
+
+
+# ---------------------------------------------------------------------------
+# Idempotency guard
+# ---------------------------------------------------------------------------
+# Skip a scrape run if the previous successful run finished within this many
+# minutes. Keeps overlapping triggers / retries from re-doing 5+ minutes of
+# Playwright + Sleeper fan-out work.
+SUCCESSFUL_RUN_DEDUP_MINUTES = 8
+
 
 def load_json_from_url(url):
     response = requests.get(url=url)
@@ -36,24 +96,24 @@ def upload_to_azure_blob(data_dict, blob_name, filename="file"):
 
     logging.info(f"Uploaded {filename} to Azure Blob Storage as {blob_name}.")
 
-def get_current_nfl_week(season_start_year=2025):
-    # Approximate NFL season start (Thursday of Week 1)
-    season_start = datetime(season_start_year, 9, 4)  # Change year as needed
-    
-    today = datetime.now()
-    week = ((today - season_start).days // 7) + 1
-    
-    # Cap at 18 (regular + playoffs)
-    week = max(1, min(week, 18))
-    
-    return week
+def try_download_blob_json(blob_name):
+    """Returns parsed JSON from a blob, or None if the blob is missing/unreadable."""
+    try:
+        connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+        if not connect_str:
+            return None
+        blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+        blob_client = blob_service_client.get_blob_client(
+            container=Config.container_name, blob=blob_name
+        )
+        return json.loads(blob_client.download_blob().readall())
+    except Exception as e:
+        logging.info(f"Could not load {blob_name} from blob storage: {e}")
+        return None
 
 def get_sleeper_owned_for_week():
-    current_date = datetime.now()
-
-    # Extract year and month
-    year = current_date.year
-    week = get_current_nfl_week(year)
+    year = get_current_fantasy_year()
+    week = get_current_nfl_week()
     url = "https://api.sleeper.com/players/nfl/research/regular/" + str(year) + "/" + str(week)
     resp = requests.get(url=url)
     data = resp.json()
@@ -89,27 +149,41 @@ def get_sleeper_player_data():
         "K": (50,32)
     }
     playoff_start_week = 14
-    current_date = datetime.now()
-
-    # Extract year and month
-    year = current_date.year
+    year = get_current_fantasy_year()
 
     season_scoring = defaultdict(dict)
     weekly_scoring = defaultdict(lambda: defaultdict(dict))
 
-    for position, num_desired in positions.items():
-        temp_position_season_scoring = load_json_from_url(f"https://api.sleeper.com/stats/nfl/{str(year)}?season_type=regular&position={position}&order_by=pts_half_ppr")
-        season_scoring.update({
-            temp_dict["player_id"]: temp_dict["stats"]
-            for temp_dict in temp_position_season_scoring[:num_desired[0]]
-        })
+    # Parallelize season-level fetches (one per position).
+    def _fetch_season(position: str):
+        url = f"https://api.sleeper.com/stats/nfl/{year}?season_type=regular&position={position}&order_by=pts_half_ppr"
+        return position, load_json_from_url(url)
 
-    for week in range(1, playoff_start_week):
-        for position, num_desired in positions.items():
-            temp_week_position_scoring = load_json_from_url(f"https://api.sleeper.com/stats/nfl/{str(year)}/{str(week)}?season_type=regular&position={position}&order_by=pts_half_ppr")
-            for stats in temp_week_position_scoring[:num_desired[1]]:
-                player_id = stats["player_id"]
-                weekly_scoring[player_id][week] = stats["stats"]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        for position, payload in pool.map(_fetch_season, positions.keys()):
+            num_desired_season = positions[position][0]
+            season_scoring.update({
+                temp_dict["player_id"]: temp_dict["stats"]
+                for temp_dict in payload[:num_desired_season]
+            })
+
+    # Parallelize weekly fetches (78 calls = 13 weeks * 6 positions).
+    week_position_pairs = [
+        (week, position)
+        for week in range(1, playoff_start_week)
+        for position in positions.keys()
+    ]
+
+    def _fetch_week(args):
+        week, position = args
+        url = f"https://api.sleeper.com/stats/nfl/{year}/{week}?season_type=regular&position={position}&order_by=pts_half_ppr"
+        return week, position, load_json_from_url(url)
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for week, position, payload in pool.map(_fetch_week, week_position_pairs):
+            num_desired_week = positions[position][1]
+            for stats in payload[:num_desired_week]:
+                weekly_scoring[stats["player_id"]][week] = stats["stats"]
 
     for player, player_data in players_dict.items():
         if player not in weekly_scoring and player not in season_scoring:
@@ -467,55 +541,88 @@ def getProjectionsFromAllVegas():
 def getDraftkingsProjections():
     player_projections = form_player_projections_dict()
     upload_to_azure_blob(player_projections, "hand_calculated_projections.json")
+
+def form_standard_player_rankings():
+    standard_league_projections = form_all_projections_and_points_dict()
+    upload_to_azure_blob(standard_league_projections, "standard_player_rankings.json")
     
-def download_necessary_fantasy_data():
+def download_necessary_fantasy_data(force: bool = False):
+
+    now = datetime.now()
+    if not force and not is_in_fantasy_season(now):
+        logging.info("Not in football season. Skipping data download.")
+        return
+
+    # Idempotency guard: skip if a successful run completed within the dedup window.
+    if not force:
+        existing = try_download_blob_json("runinfo.json")
+        if existing and existing.get("Successful"):
+            last_iso = existing.get("RuntimeUtc")
+            if last_iso:
+                try:
+                    last_run = datetime.fromisoformat(last_iso)
+                    if last_run.tzinfo is None:
+                        last_run = last_run.replace(tzinfo=timezone.utc)
+                    delta = datetime.now(timezone.utc) - last_run
+                    if delta < timedelta(minutes=SUCCESSFUL_RUN_DEDUP_MINUTES):
+                        logging.info(
+                            f"Skipping refresh: last successful run was {delta.total_seconds():.0f}s ago "
+                            f"(< {SUCCESSFUL_RUN_DEDUP_MINUTES}m dedup window)."
+                        )
+                        return
+                except Exception as e:
+                    logging.info(f"Could not parse RuntimeUtc, proceeding with refresh: {e}")
 
     success = False
     try:
-        now = datetime.now()
-        if not (now.month >= 9 or (now.month == 1 and now.day <= 31)):
-            logging.info("Not in football season. Skipping data download.")
-            return
-        
         print("Getting draftkings projections")
         getDraftkingsProjections()
 
-        boris_chen_result = get_boris_chen_tiers()
+        get_boris_chen_tiers()
         try:
-            player_info_list = get_fantasypros_top_players()
+            get_fantasypros_top_players()
         except Exception as e:
             logging.info("Couldn't get updated fantasypros players, matchup data might be slightly out of date")
             logging.info("Exception is " + str(e))
-        sportsbook_player_ranking = getProjectionsFromAllVegas()
+        getProjectionsFromAllVegas()
+        form_standard_player_rankings()
 
         logging.info("Web scraping completed!")
         success = True
     except Exception as e:
         logging.error("Ran into error while testing, exception is " + str(e))
     finally:
-        eastern = pytz.timezone('America/New_York')
-
-        # Get the current time in UTC and convert to Eastern Time
-        eastern_time = datetime.now(eastern)
-
-        # Format the date and time
-        formatted_time = eastern_time.strftime("%-m/%-d %I:%M:%S %p %Z")
-
         run_info = {
             "Successful": success,
-            "Runtime": formatted_time
+            "Runtime": format_eastern_runtime(),
+            "RuntimeUtc": datetime.now(timezone.utc).isoformat(),
         }
         upload_to_azure_blob(run_info, "runinfo.json")
 
 @app.function_name(name="test_http_trigger")
-@app.route(route="hello", auth_level=func.AuthLevel.ANONYMOUS)
+@app.route(route="hello", auth_level=func.AuthLevel.FUNCTION)
 def test_http_trigger(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
-    download_necessary_fantasy_data()
-    get_sleeper_owned_for_week()
+    force = (req.params.get("force") or "").lower() in ("1", "true", "yes")
+    skip_sleeper = (req.params.get("skip_sleeper") or "").lower() in ("1", "true", "yes")
 
-    logging.info("Completed test!")
-    return ["Success!"]
+    try:
+        download_necessary_fantasy_data(force=force)
+        if not skip_sleeper:
+            get_sleeper_owned_for_week()
+    except Exception as e:
+        logging.exception("test_http_trigger failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500,
+            mimetype="application/json",
+        )
+
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "force": force, "skip_sleeper": skip_sleeper}),
+        status_code=200,
+        mimetype="application/json",
+    )
 
 #Non-game day schedule
 @app.function_name(name="non_game_day_schedule")
@@ -534,7 +641,7 @@ def monday_thursday_schedule(mytimer: func.TimerRequest) -> None:
 @app.function_name(name="monday_thursday_final_pregame_schedule")
 @app.timer_trigger(schedule="0 0 0 * * Tue,Fri", arg_name="mytimer")
 def monday_thursday_schedule_final_pregame(mytimer: func.TimerRequest) -> None:
-    logging.info('Executing Monday and Thursday schedule every other hour...')
+    logging.info('Executing Monday and Thursday final pregame schedule...')
     download_necessary_fantasy_data()
 
 @app.function_name(name="monday_thursday_six_to_seven_schedule")
@@ -550,7 +657,6 @@ def monday_thursday_schedule_pregame(mytimer: func.TimerRequest) -> None:
     download_necessary_fantasy_data()
 
 # Sunday schedule
-
 @app.function_name(name="sunday_schedule_hourly")
 @app.timer_trigger(schedule="0 0 11-15,17-18,20 * * Sun", arg_name="mytimer")
 def sunday_schedule_hourly(mytimer: func.TimerRequest) -> None:
@@ -563,20 +669,17 @@ def sunday_schedule_eleven(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule 11:30...')
     download_necessary_fantasy_data()
 
-
 @app.function_name(name="sunday_schedule_all_pregame")
 @app.timer_trigger(schedule="0 0/15 16,19,23 * * Sun", arg_name="mytimer")
 def sunday_schedule_all_pregame(mytimer: func.TimerRequest) -> None:
-    logging.info('Executing Sunday schedule leading up to 1/4/8 oclock games games...')
+    logging.info('Executing Sunday schedule leading up to 1/4/8 oclock games...')
     download_necessary_fantasy_data()
-
 
 @app.function_name(name="sunday_schedule_evening")
 @app.timer_trigger(schedule="0 0 21-22 * * Sun", arg_name="mytimer")
 def sunday_schedule_evening(mytimer: func.TimerRequest) -> None:
     logging.info('Executing Sunday schedule evening...')
     download_necessary_fantasy_data()
-
 
 @app.function_name(name="sunday_schedule_snf_pregame")
 @app.timer_trigger(schedule="0 05 0 * * Mon", arg_name="mytimer")

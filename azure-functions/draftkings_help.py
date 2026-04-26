@@ -485,5 +485,119 @@ def form_player_projections_dict():
             expected_stats[player]["Simulations"] = {"error": str(e)}
     return expected_stats
 
+def form_all_projections_and_points_dict():
+    sportsbook_projections = load_json_from_azure_storage("hand_calculated_projections.json", Config.containername, Config.azure_storage_connection_string)
+    backup_projections = load_json_from_azure_storage("backup_fantasypros_projections.json", Config.containername, Config.azure_storage_connection_string)
+    
+    # Load players dict for name -> PID mapping
+    player_data = load_json_from_azure_storage(
+        "players.json", Config.containername, Config.azure_storage_connection_string
+    )
+
+    # Define the scoring variants
+    variants = [
+        ("std", 4),
+        ("halfppr", 4),
+        ("fullppr", 4),
+        ("std", 6),
+        ("halfppr", 6),
+        ("fullppr", 6),
+    ]
+
+    results = {}
+
+    for ppr_label, pass_td_points in variants:
+        # Build fake league settings for this variant to get multipliers like normal
+        settings = {
+            'pass_int': -2.0,
+            'pass_2pt': 2.0, 
+            'rec_td': 6.0, 
+            'rush_td': 6.0,
+            'rec_2pt': 2.0,
+            'rec': 1 if ppr_label == "fullppr" else 0.5 if ppr_label == "halfppr" else 0,
+            'int': 2.0,
+            'fum_lost': -2.0, 
+            'rush_2pt': 2.0,
+            'pass_yd': 0.04,
+            'pass_td': pass_td_points, 
+            'rush_yd': 0.1,
+            'rec_yd': 0.1
+            }
+
+        stat_multipliers = Config.get_stat_point_multipliers(settings)
+
+        player_ranks = []
+
+        for pid, pdata in player_data.items():
+            player_name = pdata.get("full_name", pid)
+            pos_list = pdata.get("fantasy_positions", ["UNK"])
+            pos = pos_list[0] if pos_list else "UNK"
+
+            projected_points, stat_dict = calculate_potential_fantasy_score(
+                player_name,
+                pos,
+                sportsbook_projections,
+                backup_projections,
+                stat_multipliers
+            )
+
+            player_ranks.append({
+                "PID": pid,
+                "NAME": player_name,
+                "POS": pos,
+                "VEGAS": round(projected_points, 2),
+                "PROJ": stat_dict
+            })
+
+        # Sort descending by projected points
+        player_ranks_sorted = sorted(player_ranks, key=lambda x: x["VEGAS"], reverse=True)
+
+        key = f"{ppr_label}_{pass_td_points}ptpass"
+        results[key] = player_ranks_sorted
+
+    return results
+
+def calculate_potential_fantasy_score(player, pos_group, player_stat_projections, backup_stat_projections, stat_point_multipliers):
+
+    if pos_group == "TE":
+        rec_points = stat_point_multipliers["TE Receptions"]
+    else:
+        rec_points = stat_point_multipliers["Receptions"]
+
+    playerkey = ''.join(char for char in player if char.isalnum()).lower()
+    stat_dict = {}
+
+    p_projections = player_stat_projections[playerkey] if playerkey in player_stat_projections else {}
+    backup_projections = backup_stat_projections[playerkey] if playerkey in backup_stat_projections else {}
+    if len(p_projections) == 0 and len(backup_projections) == 0:
+        return 0, stat_dict
+
+    proj_points = 0
+    for key, val in p_projections.items():
+        if key == "Opponent Rating" or key == "Team Name":
+            continue
+        if key == "Simulations":
+            continue
+        if key == "Receptions":
+            proj_points += float(val) * rec_points
+            stat_dict[key] = float(val)
+        else:
+            proj_points += float(val) * stat_point_multipliers[key]
+            stat_dict[key] = float(val)
+    try:
+        missing_projections = [key for key in backup_projections if key not in p_projections]
+        for key in missing_projections:
+            if key == "Opponent Rating" or key == "Team Name":
+                continue
+            if key == "Receptions":
+                proj_points += float(backup_projections[key]) * rec_points
+                stat_dict[key] = "BACKUP_" + str(backup_projections[key])
+            else:
+                proj_points += float(backup_projections[key]) * stat_point_multipliers[key]
+                stat_dict[key] = "BACKUP_" + str(backup_projections[key])
+    except Exception as e:
+        print("Exception " + str(e))
+
+    return proj_points, stat_dict
                     
 
