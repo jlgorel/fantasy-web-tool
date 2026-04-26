@@ -504,6 +504,15 @@ def form_all_projections_and_points_dict():
         ("fullppr", 6),
     ]
 
+    # Map (ppr_label, pass_td_points, is_qb) -> sim result key emitted by
+    # run_player_sim. QB sims aren't sensitive to PPR (QBs don't get PPR),
+    # but they are sensitive to pass-TD value. Skill-position sims aren't
+    # sensitive to pass-TD value, but they are sensitive to PPR.
+    def _sim_key(ppr_label: str, pass_td_pts: int, is_qb: bool) -> str:
+        if is_qb:
+            return "QB_6PT" if pass_td_pts == 6 else "QB_STD"
+        return {"std": "STD", "halfppr": "HalfPPR", "fullppr": "PPR"}[ppr_label]
+
     results = {}
 
     for ppr_label, pass_td_points in variants:
@@ -541,12 +550,32 @@ def form_all_projections_and_points_dict():
                 stat_multipliers
             )
 
+            # Pull boom/bust + mean from the precomputed Monte Carlo sim that
+            # lives in hand_calculated_projections.json under "Simulations".
+            boom = None
+            bust = None
+            sim_mean = None
+            playerkey = ''.join(c for c in player_name if c.isalnum()).lower()
+            sim_block = sportsbook_projections.get(playerkey, {}).get("Simulations") or {}
+            if sim_block and "error" not in sim_block:
+                key = _sim_key(ppr_label, pass_td_points, is_qb=(pos == "QB"))
+                stat_block = sim_block.get(key)
+                if isinstance(stat_block, dict):
+                    boom = stat_block.get("boom")
+                    bust = stat_block.get("bust")
+                    sim_mean = stat_block.get("mean")
+
             player_ranks.append({
                 "PID": pid,
                 "NAME": player_name,
                 "POS": pos,
                 "VEGAS": round(projected_points, 2),
-                "PROJ": stat_dict
+                "PROJ": stat_dict,
+                # Round percentages to 3 decimals (i.e. 0.1% precision) for
+                # smaller blob payloads; UI formats as a percent anyway.
+                "BOOM": round(boom, 3) if boom is not None else None,
+                "BUST": round(bust, 3) if bust is not None else None,
+                "SIM_MEAN": round(sim_mean, 2) if sim_mean is not None else None,
             })
 
         # Sort descending by projected points

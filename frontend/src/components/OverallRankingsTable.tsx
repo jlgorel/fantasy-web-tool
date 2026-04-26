@@ -99,6 +99,18 @@ const COL_VEGAS: Column = {
   numeric: true,
   value: (r) => r.VEGAS ?? null,
 };
+const COL_BOOM: Column = {
+  key: "BOOM",
+  label: "Boom %",
+  numeric: true,
+  value: (r) => (typeof r.BOOM === "number" ? r.BOOM : null),
+};
+const COL_BUST: Column = {
+  key: "BUST",
+  label: "Bust %",
+  numeric: true,
+  value: (r) => (typeof r.BUST === "number" ? r.BUST : null),
+};
 
 const STAT_COLS: Record<string, Column> = {
   PASS_YDS: { key: "PASS_YDS", label: "Pass Yds", numeric: true, statKey: "Passing Yards" },
@@ -124,6 +136,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_BOOM,
+    COL_BUST,
   ],
   QB: [
     COL_RANK,
@@ -134,6 +148,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.RUSH_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_BOOM,
+    COL_BUST,
   ],
   RB: [
     COL_RANK,
@@ -143,6 +159,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_BOOM,
+    COL_BUST,
   ],
   WR: [
     COL_RANK,
@@ -152,6 +170,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.RUSH_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_BOOM,
+    COL_BUST,
   ],
   TE: [
     COL_RANK,
@@ -160,6 +180,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_BOOM,
+    COL_BUST,
   ],
 };
 
@@ -445,6 +467,31 @@ export default function OverallRankingsTable({
                         return (
                           <Td key={c.key} isNumeric fontWeight="semibold">
                             {typeof v === "number" ? v.toFixed(2) : v ?? ""}
+                          </Td>
+                        );
+                      }
+                      if (c.key === "BOOM" || c.key === "BUST") {
+                        const raw = c.key === "BOOM" ? p.BOOM : p.BUST;
+                        if (typeof raw !== "number") {
+                          return (
+                            <Td key={c.key} isNumeric color="gray.400">
+                              –
+                            </Td>
+                          );
+                        }
+                        // Boom is good (green when high), bust is bad (red when high).
+                        const isBoom = c.key === "BOOM";
+                        const intensity = Math.min(1, Math.max(0, raw));
+                        // Faint background tint that scales with probability.
+                        const bg =
+                          intensity < 0.05
+                            ? undefined
+                            : isBoom
+                            ? `rgba(72, 187, 120, ${0.12 + intensity * 0.35})` // green.400
+                            : `rgba(245, 101, 101, ${0.12 + intensity * 0.35})`; // red.400
+                        return (
+                          <Td key={c.key} isNumeric bg={bg} fontWeight="medium">
+                            {(raw * 100).toFixed(1)}%
                           </Td>
                         );
                       }

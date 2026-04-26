@@ -20,31 +20,26 @@ app = func.FunctionApp()
 # ---------------------------------------------------------------------------
 # Date / season helpers
 # ---------------------------------------------------------------------------
-# Approximate NFL season kicks off the first Thursday of September. Hardcoding
-# the day to Sept 4 is good enough for week math (off by at most a few days).
-NFL_SEASON_START_MONTH = 9
-NFL_SEASON_START_DAY = 4
-# Months that count as "in fantasy season" for scrape gating. Sept-Dec is
-# regular + fantasy playoffs; Jan covers wild card / divisional / conf
-# championships; early Feb covers the Super Bowl. Aug is preseason which we
-# intentionally skip since DK/Vegas lines are unreliable.
-_IN_SEASON_MONTHS = {1, 2, 9, 10, 11, 12}
+# These delegate to the shared module so the Flask backend and this scraper
+# agree on what "this week" / "this season" mean. Edit
+# shared/fantasy_common.py and run tools/sync_shared.py to change behavior.
+from _fantasy_common import (  # noqa: E402  (after app = ... by design)
+    get_current_fantasy_year as _shared_get_current_fantasy_year,
+    get_current_nfl_week as _shared_get_current_nfl_week,
+    is_in_fantasy_season as _shared_is_in_fantasy_season,
+)
 
 
 def get_current_fantasy_year() -> int:
-    """Return the fantasy season year as an int.
-
-    Anything Jan-Jul belongs to the previous year's season (post-season /
-    offseason for the season that already kicked off).
-    Mirror of backend's app.services.season.get_current_fantasy_year.
-    """
-    now = datetime.now()
-    return now.year - 1 if now.month <= 7 else now.year
+    return _shared_get_current_fantasy_year()
 
 
 def is_in_fantasy_season(now: datetime | None = None) -> bool:
-    now = now or datetime.now()
-    return now.month in _IN_SEASON_MONTHS
+    return _shared_is_in_fantasy_season(now)
+
+
+def get_current_nfl_week() -> int:
+    return _shared_get_current_nfl_week()
 
 
 def format_eastern_runtime(now: datetime | None = None) -> str:
@@ -58,15 +53,6 @@ def format_eastern_runtime(now: datetime | None = None) -> str:
     return f"{et.month}/{et.day} {et.strftime('%I:%M:%S %p %Z')}"
 
 
-def get_current_nfl_week() -> int:
-    """Return the current NFL week (1-18), capped at 18 for playoffs."""
-    season_year = get_current_fantasy_year()
-    season_start = datetime(season_year, NFL_SEASON_START_MONTH, NFL_SEASON_START_DAY)
-    today = datetime.now()
-    week = ((today - season_start).days // 7) + 1
-    return max(1, min(week, 18))
-
-
 # ---------------------------------------------------------------------------
 # Idempotency guard
 # ---------------------------------------------------------------------------
@@ -75,9 +61,41 @@ def get_current_nfl_week() -> int:
 # Playwright + Sleeper fan-out work.
 SUCCESSFUL_RUN_DEDUP_MINUTES = 8
 
+# ---------------------------------------------------------------------------
+# HTTP defaults
+# ---------------------------------------------------------------------------
+HTTP_TIMEOUT_SECONDS = 15
+HTTP_MAX_RETRIES = 2  # 3 total attempts
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+def _http_get(url, *, timeout=HTTP_TIMEOUT_SECONDS, max_retries=HTTP_MAX_RETRIES):
+    """GET with a sane timeout and exponential-backoff retries on transient
+    errors. Raises on the final failure so callers can decide whether to
+    surface it or swallow it."""
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url=url, timeout=timeout)
+        except requests.RequestException as e:
+            last_exc = e
+            if attempt < max_retries:
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            raise
+
+        if resp.status_code in _RETRYABLE_STATUS and attempt < max_retries:
+            time.sleep(0.5 * (2 ** attempt))
+            continue
+        return resp
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Unreachable retry loop for {url}")
+
 
 def load_json_from_url(url):
-    response = requests.get(url=url)
+    response = _http_get(url)
     return response.json()
 
 def upload_to_azure_blob(data_dict, blob_name, filename="file"):
@@ -115,7 +133,7 @@ def get_sleeper_owned_for_week():
     year = get_current_fantasy_year()
     week = get_current_nfl_week()
     url = "https://api.sleeper.com/players/nfl/research/regular/" + str(year) + "/" + str(week)
-    resp = requests.get(url=url)
+    resp = _http_get(url)
     data = resp.json()
 
     upload_to_azure_blob(data, "owned.json")
@@ -124,7 +142,7 @@ def get_sleeper_owned_for_week():
 
 def get_sleeper_player_data():
     url = "https://api.sleeper.app/v1/players/nfl"
-    resp = requests.get(url=url)
+    resp = _http_get(url, timeout=60)  # ~5MB payload, allow extra time
     data = resp.json()
 
     for pid in dict(data):
@@ -240,7 +258,7 @@ def retrieve_tiers_from_soup(soup):
     if object_tag:
         data_value = object_tag.get('data')
         if data_value:
-            data_response = requests.get(data_value)
+            data_response = _http_get(data_value)
             data_response.raise_for_status()
             return data_response.text
     else:
@@ -257,7 +275,7 @@ def split_text_into_tier_dict(text):
 def get_boris_chen_tiers():
     logging.info("Starting borischen scrape method")
     url = 'http://borischen.co'
-    response = requests.get(url)
+    response = _http_get(url)
     html_content = response.text
 
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -332,7 +350,7 @@ def get_fantasypros_top_players():
     fantasy_pros_projections = {}
 
     # Get flex rankings
-    response = requests.get(flex_stats_url)
+    response = _http_get(flex_stats_url)
     html_content = response.text
 
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -388,7 +406,7 @@ def get_fantasypros_top_players():
 
     #get qb stats
     columnToStatNameDict = {}
-    response = requests.get(qb_stats_url)
+    response = _http_get(qb_stats_url)
     html_content = response.text
 
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -519,7 +537,7 @@ def get_fantasypros_top_players():
 
 def getProjectionsFromAllVegas():
     link = "https://vegasranks.pythonanywhere.com/getVegasRanks?prop=all&format=ppr"
-    resp = requests.get(link)
+    resp = _http_get(link, timeout=30)
     data = resp.json()
 
     sportsbook_proj = {}

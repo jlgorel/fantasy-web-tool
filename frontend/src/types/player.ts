@@ -35,6 +35,10 @@ export interface PlayerRow {
   POS?: string;
   PROJ?: PlayerProjDict;
   VEGAS?: number;
+  // Monte-Carlo derived. Probabilities in [0, 1]; null when sim was missing.
+  BOOM?: number | null;
+  BUST?: number | null;
+  SIM_MEAN?: number | null;
 }
 
 export interface OverallRankingsPayload {

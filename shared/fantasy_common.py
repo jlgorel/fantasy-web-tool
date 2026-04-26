@@ -10,7 +10,8 @@ in either runtime.
 """
 from __future__ import annotations
 
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -99,4 +100,47 @@ __all__ = [
     "nfl_teams",
     "nfl_teams_reverse_lookup",
     "get_stat_point_multipliers",
+    "get_current_fantasy_year",
+    "is_in_fantasy_season",
+    "get_current_nfl_week",
+    "NFL_SEASON_START_MONTH",
+    "NFL_SEASON_START_DAY",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Season / week helpers
+# ---------------------------------------------------------------------------
+# Approximate NFL Week 1 kickoff (first Thursday of September). Used for
+# week-of-season math; off by a few days at most, capped 1-18.
+NFL_SEASON_START_MONTH = 9
+NFL_SEASON_START_DAY = 4
+# Months that count as "in fantasy season" for scrape gating: regular season
+# Sep-Dec, fantasy + NFL playoffs in Jan, Super Bowl in early Feb. Aug is
+# preseason and is intentionally skipped.
+_IN_SEASON_MONTHS = {1, 2, 9, 10, 11, 12}
+
+
+def get_current_fantasy_year(now: Optional[datetime] = None) -> int:
+    """Return the fantasy season year as an int.
+
+    Anything Jan-Jul still belongs to the previous season (post-season /
+    offseason for the year that already kicked off).
+    """
+    now = now or datetime.now()
+    return now.year - 1 if now.month <= 7 else now.year
+
+
+def is_in_fantasy_season(now: Optional[datetime] = None) -> bool:
+    """True when scrapers should be running. Aug returns False (preseason)."""
+    now = now or datetime.now()
+    return now.month in _IN_SEASON_MONTHS
+
+
+def get_current_nfl_week(now: Optional[datetime] = None) -> int:
+    """Return the current NFL week (1-18, capped)."""
+    now = now or datetime.now()
+    season_year = get_current_fantasy_year(now)
+    season_start = datetime(season_year, NFL_SEASON_START_MONTH, NFL_SEASON_START_DAY)
+    week = ((now - season_start).days // 7) + 1
+    return max(1, min(week, 18))
