@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Box,
@@ -208,8 +208,23 @@ export default function OverallRankingsTable({
 
   const [tab, setTab] = useState<PositionTab>("ALL");
   const [search, setSearch] = useState("");
+  // Debounced search value; filtering uses this so we don't re-render the
+  // entire table on every keystroke when the dataset is large.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortKey, setSortKey] = useState<string>("RANK");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Pagination. Keeps the rendered DOM bounded (max ~PAGE_SIZE <Tr> nodes)
+  // which is the actual cause of the "laggy" feel - browsers struggle to
+  // reflow a 4000-row table on every state change.
+  const PAGE_SIZE = 100;
+  const [page, setPage] = useState(0);
+
+  // Debounce the search input by 200ms.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const allRows: PlayerRow[] = useMemo(() => {
     if (!rankings) return [];
@@ -222,12 +237,12 @@ export default function OverallRankingsTable({
     return allRows.filter((r) => (r.POS ?? "").toUpperCase() === tab);
   }, [allRows, tab]);
 
-  // Apply search filter
+  // Apply search filter (uses debounced value so typing is smooth)
   const searchedRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     if (!q) return positionRows;
     return positionRows.filter((r) => r.NAME.toLowerCase().includes(q));
-  }, [positionRows, search]);
+  }, [positionRows, debouncedSearch]);
 
   // Pre-compute the rank index *within the position group* before sorting,
   // so the # column always shows positional rank order even after re-sorting.
@@ -254,6 +269,20 @@ export default function OverallRankingsTable({
     });
     return copy;
   }, [indexedRows, sortKey, sortDir, tab]);
+
+  // Paginate. We slice *after* sort/filter so page 1 always reflects the
+  // current sort + filter state.
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = useMemo(
+    () => sortedRows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+    [sortedRows, safePage]
+  );
+
+  // Whenever filters / sort / variant change, snap back to page 1.
+  useEffect(() => {
+    setPage(0);
+  }, [tab, debouncedSearch, sortKey, sortDir, effectiveVariantKey]);
 
   // When tab changes, reset sort to the natural order (rank ascending).
   React.useEffect(() => {
@@ -377,7 +406,12 @@ export default function OverallRankingsTable({
               {tab === "ALL" ? "Overall Rankings" : `${tab} Rankings`}
             </Text>
             <Text fontSize="sm" color="gray.600">
-              {sortedRows.length} player{sortedRows.length === 1 ? "" : "s"}
+              {sortedRows.length === 0
+                ? "0 players"
+                : `Showing ${safePage * PAGE_SIZE + 1}\u2013${Math.min(
+                    (safePage + 1) * PAGE_SIZE,
+                    sortedRows.length
+                  )} of ${sortedRows.length}`}
             </Text>
           </HStack>
 
@@ -415,7 +449,7 @@ export default function OverallRankingsTable({
                   </Td>
                 </Tr>
               ) : (
-                sortedRows.map(({ row: p, rank }) => (
+                pageRows.map(({ row: p, rank }) => (
                   <Tr key={p.PID ?? p.NAME} _hover={{ bg: "gray.50" }}>
                     {cols.map((c) => {
                       if (c.key === "NAME") {
@@ -513,6 +547,57 @@ export default function OverallRankingsTable({
             </Tbody>
           </Table>
         </Box>
+
+        {/* Pagination footer */}
+        {sortedRows.length > PAGE_SIZE && (
+          <HStack
+            justify="space-between"
+            spacing={2}
+            bg="white"
+            borderWidth="1px"
+            borderRadius="md"
+            px={3}
+            py={2}
+          >
+            <Text fontSize="sm" color="gray.600">
+              Page {safePage + 1} of {totalPages}
+            </Text>
+            <HStack spacing={1}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage(0)}
+                isDisabled={safePage === 0}
+              >
+                « First
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                isDisabled={safePage === 0}
+              >
+                ‹ Prev
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                isDisabled={safePage >= totalPages - 1}
+              >
+                Next ›
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage(totalPages - 1)}
+                isDisabled={safePage >= totalPages - 1}
+              >
+                Last »
+              </Button>
+            </HStack>
+          </HStack>
+        )}
       </VStack>
     </Box>
   );

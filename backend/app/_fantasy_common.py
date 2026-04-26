@@ -128,7 +128,8 @@ def get_current_fantasy_year(now: Optional[datetime] = None) -> int:
     offseason for the year that already kicked off).
     """
     now = now or datetime.now()
-    return now.year - 1 if now.month <= 7 else now.year
+    return 2026
+    #return now.year - 1 if now.month <= 7 else now.year
 
 
 def is_in_fantasy_season(now: Optional[datetime] = None) -> bool:

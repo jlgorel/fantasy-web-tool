@@ -27,7 +27,7 @@ def get_sleeper_rosters_for_user(username: str) -> List[Dict[str, Any]]:
     curr_leagues = [
         {"name": league["name"], "id": league["league_id"]}
         for league in leagues_data
-        if league["status"] in ("in_season", "post_season")
+        if league["status"] in ("pre_draft","in_season", "post_season")
     ]
     curr_rosters: List[Dict[str, Any]] = []
 

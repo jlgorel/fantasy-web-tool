@@ -581,6 +581,13 @@ def form_all_projections_and_points_dict():
         # Sort descending by projected points
         player_ranks_sorted = sorted(player_ranks, key=lambda x: x["VEGAS"], reverse=True)
 
+        # Cap to the top N per variant. Even 12-team leagues only roster ~200
+        # players; deep dynasty leagues max out around ~300. Anything below
+        # that threshold has VEGAS=0 anyway (no projection data) and only
+        # bloats the payload + slows the rankings UI.
+        TOP_N_PER_VARIANT = 500
+        player_ranks_sorted = player_ranks_sorted[:TOP_N_PER_VARIANT]
+
         key = f"{ppr_label}_{pass_td_points}ptpass"
         results[key] = player_ranks_sorted
 
