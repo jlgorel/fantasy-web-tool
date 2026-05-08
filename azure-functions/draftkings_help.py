@@ -555,6 +555,8 @@ def form_all_projections_and_points_dict():
             boom = None
             bust = None
             sim_mean = None
+            sim_p10 = None
+            sim_p90 = None
             playerkey = ''.join(c for c in player_name if c.isalnum()).lower()
             sim_block = sportsbook_projections.get(playerkey, {}).get("Simulations") or {}
             if sim_block and "error" not in sim_block:
@@ -564,6 +566,10 @@ def form_all_projections_and_points_dict():
                     boom = stat_block.get("boom")
                     bust = stat_block.get("bust")
                     sim_mean = stat_block.get("mean")
+                    pcts = stat_block.get("percentiles") or {}
+                    # percentiles are keyed by str or int depending on path; tolerate both.
+                    sim_p10 = pcts.get(10) if 10 in pcts else pcts.get("10")
+                    sim_p90 = pcts.get(90) if 90 in pcts else pcts.get("90")
 
             player_ranks.append({
                 "PID": pid,
@@ -576,6 +582,10 @@ def form_all_projections_and_points_dict():
                 "BOOM": round(boom, 3) if boom is not None else None,
                 "BUST": round(bust, 3) if bust is not None else None,
                 "SIM_MEAN": round(sim_mean, 2) if sim_mean is not None else None,
+                # Floor / ceiling from the Monte-Carlo distribution. Used by
+                # the "Highest ceiling" / "Safest floor" leaderboard sorts.
+                "P10": round(sim_p10, 2) if sim_p10 is not None else None,
+                "P90": round(sim_p90, 2) if sim_p90 is not None else None,
             })
 
         # Sort descending by projected points

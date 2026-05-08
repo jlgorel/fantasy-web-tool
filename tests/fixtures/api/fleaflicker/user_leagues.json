@@ -1,0 +1,205 @@
+{
+  "leagues": [
+    {
+      "id": "LEAGUE_009",
+      "name": "Test League",
+      "logoUrl": "",
+      "ownedTeam": {
+        "id": "TEAM_001",
+        "name": "Test Team",
+        "logoUrl": "",
+        "recordOverall": {
+          "wins": 7,
+          "losses": 7,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 7,
+          "formatted": "7-7"
+        },
+        "recordDivision": {
+          "wins": 4,
+          "losses": 2,
+          "winPercentage": {
+            "value": 0.6666667,
+            "formatted": ".667"
+          },
+          "rank": 3,
+          "formatted": "4-2"
+        },
+        "recordPostseason": {
+          "wins": 1,
+          "losses": 1,
+          "winPercentage": {
+            "value": 0.5,
+            "formatted": ".500"
+          },
+          "rank": 7,
+          "formatted": "1-1"
+        },
+        "pointsFor": {
+          "value": 1711.64,
+          "formatted": "1,711.64"
+        },
+        "pointsAgainst": {
+          "value": 1596.58,
+          "formatted": "1,596.58"
+        },
+        "streak": {
+          "value": -2.0,
+          "formatted": "L2"
+        },
+        "waiverAcquisitionBudget": {
+          "value": 5.0,
+          "formatted": "$5"
+        },
+        "initials": "AI"
+      },
+      "draftStatus": "POST_DRAFT",
+      "membershipType": "MEMBER",
+      "rosterRequirements": {
+        "positions": [
+          {
+            "label": "QB",
+            "group": "START",
+            "eligibility": [
+              "QB"
+            ],
+            "min": 1,
+            "max": 16,
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_RED"
+            ]
+          },
+          {
+            "label": "RB",
+            "group": "START",
+            "eligibility": [
+              "RB"
+            ],
+            "min": 2,
+            "max": 16,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_GREEN"
+            ]
+          },
+          {
+            "label": "WR",
+            "group": "START",
+            "eligibility": [
+              "WR"
+            ],
+            "min": 2,
+            "max": 16,
+            "start": 2,
+            "colors": [
+              "DRAFT_BOARD_BLUE"
+            ]
+          },
+          {
+            "label": "TE",
+            "group": "START",
+            "eligibility": [
+              "TE"
+            ],
+            "min": 1,
+            "max": 16,
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_YELLOW"
+            ]
+          },
+          {
+            "label": "RB/WR/TE",
+            "group": "START",
+            "eligibility": [
+              "RB",
+              "WR",
+              "TE"
+            ],
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_GREEN",
+              "DRAFT_BOARD_BLUE",
+              "DRAFT_BOARD_YELLOW"
+            ]
+          },
+          {
+            "label": "K",
+            "group": "START",
+            "eligibility": [
+              "K"
+            ],
+            "min": 1,
+            "max": 16,
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_GRAY"
+            ]
+          },
+          {
+            "label": "D/ST",
+            "group": "START",
+            "eligibility": [
+              "D/ST"
+            ],
+            "min": 1,
+            "max": 16,
+            "start": 1,
+            "colors": [
+              "DRAFT_BOARD_PURPLE"
+            ]
+          },
+          {
+            "label": "BN",
+            "max": 7
+          }
+        ],
+        "rosterSize": 16,
+        "starterCount": 9,
+        "benchCount": 7,
+        "eligibility": [
+          "QB",
+          "RB",
+          "WR",
+          "TE",
+          "K",
+          "D/ST"
+        ]
+      },
+      "waiverType": "BLIND_BID",
+      "draftLiveTimeEpochMilli": "1756776600000",
+      "defaultWaiverBudget": 100,
+      "size": 12,
+      "capacity": 12,
+      "initials": "NM",
+      "description": "12-Team Redraft",
+      "chatChannel": "",
+      "draftSecondsPerSelection": 90,
+      "ownedTeamCurrentGame": {
+        "id": "58144643",
+        "away": {
+          "id": "TEAM_002",
+          "name": "Test Team",
+          "logoUrl": "",
+          "initials": "PP"
+        },
+        "home": {
+          "id": "TEAM_001",
+          "name": "Test Team",
+          "logoUrl": "",
+          "initials": "AI"
+        },
+        "homeResult": "WIN",
+        "awayResult": "LOSE",
+        "isFinalScore": true,
+        "isConsolation": true
+      }
+    }
+  ],
+  "season": 2026,
+  "canCreateNew": true
+}

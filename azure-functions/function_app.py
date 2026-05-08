@@ -138,6 +138,18 @@ def get_sleeper_owned_for_week():
 
     upload_to_azure_blob(data, "owned.json")
 
+    # Also merge this week into the historic per-week blob used by the
+    # League Wrapped feature. Shape: { "<pid>": { "<week>": {"owned": x,
+    # "started": y} } }. Idempotent — we always overwrite the current
+    # week's slot with the latest snapshot, leaving prior weeks untouched.
+    history_blob_name = f"owned_history_{year}.json"
+    history = try_download_blob_json(history_blob_name) or {}
+    week_str = str(week)
+    for pid, owned_info in data.items():
+        # Some pids only show up later in the season; auto-create their dict.
+        history.setdefault(pid, {})[week_str] = owned_info
+    upload_to_azure_blob(history, history_blob_name)
+
     return True
 
 def get_sleeper_player_data():
@@ -250,6 +262,23 @@ def get_sleeper_player_data():
         })
 
     upload_to_azure_blob(players_dict, "players.json")
+
+    # Sibling write: year-stamped slim extract of just the scoring data, used
+    # by the League Wrapped feature to compute season-aware accolades like
+    # best/worst draft picks and biggest add. Keeping it as its own blob (a)
+    # avoids bloating players.json with year-archived data and (b) lets us
+    # retain old years even when players.json gets overwritten each week.
+    season_scoring_blob = {
+        pid: {
+            "full_name": pdata.get("full_name"),
+            "fantasy_positions": pdata.get("fantasy_positions") or [],
+            "scoring_data_weekly": pdata.get("scoring_data_weekly", {}),
+            "scoring_data_season": pdata.get("scoring_data_season", {}),
+        }
+        for pid, pdata in players_dict.items()
+        if pdata.get("scoring_data_season")
+    }
+    upload_to_azure_blob(season_scoring_blob, f"player_season_scoring_{year}.json")
 
     return True
 
@@ -557,10 +586,33 @@ def getProjectionsFromAllVegas():
     return sportsbook_proj
 
 def getDraftkingsProjections():
+    # Snapshot the existing projections as "_prev" before overwriting so the
+    # backend Risers/Fallers endpoint has a previous-run baseline to diff
+    # against. We only do this if the existing blob looks healthy (i.e. is a
+    # non-empty dict) — otherwise an off-season run with empty projections
+    # would clobber a useful previous snapshot.
+    try:
+        existing = try_download_blob_json("hand_calculated_projections.json")
+        if isinstance(existing, dict) and len(existing) > 0:
+            upload_to_azure_blob(existing, "hand_calculated_projections_prev.json")
+    except Exception as e:
+        logging.info("Failed to snapshot prev projections (continuing): %s", e)
+
     player_projections = form_player_projections_dict()
     upload_to_azure_blob(player_projections, "hand_calculated_projections.json")
 
 def form_standard_player_rankings():
+    # Snapshot the existing standard rankings as "_prev" before overwriting
+    # so the Risers/Fallers endpoint has a previous-run baseline. Same
+    # safety guard as getDraftkingsProjections — don't clobber a healthy
+    # snapshot with an empty off-season scrape.
+    try:
+        existing = try_download_blob_json("standard_player_rankings.json")
+        if isinstance(existing, dict) and any(existing.values()):
+            upload_to_azure_blob(existing, "standard_player_rankings_prev.json")
+    except Exception as e:
+        logging.info("Failed to snapshot prev standard rankings (continuing): %s", e)
+
     standard_league_projections = form_all_projections_and_points_dict()
     upload_to_azure_blob(standard_league_projections, "standard_player_rankings.json")
     

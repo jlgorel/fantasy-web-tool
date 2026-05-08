@@ -1,5 +1,14 @@
 from flask import request, Blueprint, jsonify, current_app
 from app.services.sleeper_service import cache_sleeper_user_info, load_json_from_azure_storage, get_overall_rankings
+from app.services.waiver_wire import get_waiver_wire
+from app.services.risers_fallers import get_risers_fallers
+from app.services.wrapped import compute_wrapped
+from app.services.player_detail import get_player_detail
+from app.services.sleeper_league_lookup import (
+    get_league_season_chain,
+    get_user_leagues,
+    resolve_league_for_year,
+)
 import traceback
 from app.config import Config
 import json
@@ -65,6 +74,40 @@ def overall_rankings():
     return jsonify({"overall_rankings": overall_ranking_data}), 200
 
 
+@main.route('/waiver-wire', methods=['GET'])
+def waiver_wire():
+    """League-agnostic top low-owned players per position.
+
+    Query params:
+      - variant: scoring variant key (default halfppr_4ptpass)
+      - max_owned: max ownership pct to include (default 50)
+      - top_n: rows per position (default 15)
+    """
+    variant = request.args.get('variant', 'halfppr_4ptpass')
+    try:
+        max_owned = float(request.args.get('max_owned', 50))
+    except ValueError:
+        max_owned = 50.0
+    try:
+        top_n = int(request.args.get('top_n', 15))
+    except ValueError:
+        top_n = 15
+    payload = get_waiver_wire(variant=variant, max_owned_pct=max_owned, top_n=top_n)
+    return jsonify(payload), 200
+
+
+@main.route('/risers-fallers', methods=['GET'])
+def risers_fallers():
+    """Top movers since the previous scrape, per scoring variant."""
+    variant = request.args.get('variant', 'halfppr_4ptpass')
+    try:
+        top_n = int(request.args.get('top_n', 10))
+    except ValueError:
+        top_n = 10
+    payload = get_risers_fallers(variant=variant, top_n=top_n)
+    return jsonify(payload), 200
+
+
 @main.route('/load-league-data', methods=['GET'])
 def load_league_data():
     user_uuid = request.headers.get('X-User-UUID', 'TESTUSER')
@@ -101,7 +144,17 @@ def load_league_data():
                         'cache_key': cache_key,
                         'jsonified_data': jsonified_data}), 404
 
-    return jsonify({"suggested_starts": league_data, "free_agent_recs": free_agent_recs}), 200
+    # league_data is now a dict { boris_optimized, vegas_optimized, your_lineup }.
+    # Keep `suggested_starts` (== boris_optimized) as the legacy field so any
+    # older client builds that haven't picked up the new keys keep working;
+    # new clients consume the explicit *_optimized fields.
+    return jsonify({
+        "suggested_starts": league_data.get("boris_optimized", []),
+        "boris_optimized": league_data.get("boris_optimized", []),
+        "vegas_optimized": league_data.get("vegas_optimized", []),
+        "your_lineup": league_data.get("your_lineup"),
+        "free_agent_recs": free_agent_recs,
+    }), 200
 
 @main.route('/load-last-run-info', methods=['GET'])
 def load_last_run_info():
@@ -109,5 +162,191 @@ def load_last_run_info():
     return jsonify(run_info), 200
 
 
+@main.route('/wrapped/sleeper/<league_id>', methods=['GET'])
+def wrapped_sleeper(league_id):
+    """Return Fantasy Wrapped payload for a Sleeper league.
+
+    Query params:
+        year: 4-digit fantasy year (e.g. "2024") or "all" (not yet implemented).
+    """
+    try:
+        year = request.args.get('year', '2024')
+        if year == 'all':
+            return jsonify({'error': "year='all' aggregation is not yet implemented"}), 501
+
+        # v4: payload now includes the Phase-4 `streamers` section.
+        cache_key = f"wrapped_v4_sleeper_{league_id}_{year}"
+        redis_client = current_app.redis_client
+
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass  # fall through to recompute
+
+        payload = compute_wrapped(league_id, year)
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=86400)  # 24h
+        except Exception as cache_err:
+            print(f"Wrapped cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in wrapped_sleeper: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
+@main.route('/player/<player_id>', methods=['GET'])
+def player_detail(player_id):
+    """Return aggregated metadata + scoring + ownership history for a player."""
+    try:
+        cache_key = f"player_detail_v1_{player_id}"
+        redis_client = current_app.redis_client
+
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass
+
+        payload = get_player_detail(player_id)
+        if payload is None:
+            return jsonify({'error': f'Unknown player_id: {player_id}'}), 404
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=3600)  # 1h
+        except Exception as cache_err:
+            print(f"Player detail cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in player_detail: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/sleeper/user/<username>/leagues', methods=['GET'])
+def sleeper_user_leagues(username):
+    """List a Sleeper user's NFL leagues for a given year.
+
+    Query params:
+        year: 4-digit fantasy year (default = current fantasy year).
+    """
+    try:
+        from app.services.season import get_current_fantasy_year
+        year = request.args.get('year') or get_current_fantasy_year()
+
+        cache_key = f"sleeper_user_leagues_{username}_{year}"
+        redis_client = current_app.redis_client
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass
+
+        leagues = get_user_leagues(username, str(year))
+        payload = {'username': username, 'year': str(year), 'leagues': leagues}
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=300)  # 5 min
+        except Exception as cache_err:
+            print(f"sleeper_user_leagues cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in sleeper_user_leagues: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/sleeper/league/<league_id>/resolve', methods=['GET'])
+def sleeper_league_resolve(league_id):
+    """Resolve a current league_id to its historical id for ?year=YYYY.
+
+    Walks Sleeper's previous_league_id chain. Returns ``{league_id: null}``
+    if the league didn't exist that year.
+    """
+    try:
+        year = request.args.get('year')
+        if not year:
+            return jsonify({'error': "Query param 'year' is required"}), 400
+
+        cache_key = f"sleeper_league_resolve_{league_id}_{year}"
+        redis_client = current_app.redis_client
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass
+
+        resolved = resolve_league_for_year(league_id, str(year))
+        payload = {
+            'requested_league_id': league_id,
+            'requested_year': str(year),
+            'league_id': resolved,
+        }
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=3600)  # 1h
+        except Exception as cache_err:
+            print(f"sleeper_league_resolve cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in sleeper_league_resolve: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/sleeper/league/<league_id>/seasons', methods=['GET'])
+def sleeper_league_seasons(league_id):
+    """List every season this league has on Sleeper, newest first.
+
+    Walks the ``previous_league_id`` chain. Used by the Wrapped page to
+    populate its year dropdown with only the years that actually exist
+    for this league.
+    """
+    try:
+        cache_key = f"sleeper_league_seasons_{league_id}"
+        redis_client = current_app.redis_client
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass
+
+        seasons = get_league_season_chain(league_id)
+        payload = {'requested_league_id': league_id, 'seasons': seasons}
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=3600)  # 1h
+        except Exception as cache_err:
+            print(f"sleeper_league_seasons cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in sleeper_league_seasons: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

@@ -1,9 +1,12 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+﻿import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PlayerTable from "./PlayerTable";
+import LineupConfidence from "./LineupConfidence";
 import { useUUID } from "../context/UUIDContext";
-import { VStack, HStack, Button, Text, Box, Spinner } from "@chakra-ui/react";
+import { VStack, HStack, Button, Text, Box, Spinner, ButtonGroup } from "@chakra-ui/react";
 import { api } from "../api/client";
 import { FreeAgentRecs, Player } from "../types/player";
+
+type LineupView = "boris" | "vegas" | "your";
 
 interface DynamicTabsProps {
   showTabs: boolean;
@@ -12,14 +15,12 @@ interface DynamicTabsProps {
 const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
   const [leagueNames, setLeagueNames] = useState<string[]>([]);
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
-  const [suggestedStarts, setSuggestedStarts] = useState<Player[] | null>(null);
+  const [borisOptimized, setBorisOptimized] = useState<Player[] | null>(null);
+  const [vegasOptimized, setVegasOptimized] = useState<Player[] | null>(null);
+  const [yourLineup, setYourLineup] = useState<Player[] | null>(null);
   const [freeAgentRecs, setFreeAgentRecs] = useState<FreeAgentRecs | null>(null);
+  const [lineupView, setLineupView] = useState<LineupView>("boris");
   const [error, setError] = useState<string | null>(null);
-  // Stale-while-revalidate: when switching leagues, keep showing the
-  // previous data so the page height stays stable. Just dim it + show a
-  // small spinner so the user knows something is happening. This avoids
-  // the layout jump where the username form bounces up under the tab
-  // buttons during the half-second fetch.
   const [refreshing, setRefreshing] = useState(false);
 
   const userUUID = useUUID();
@@ -29,7 +30,9 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
       if (!userUUID) return;
 
       if (!keepStale) {
-        setSuggestedStarts(null);
+        setBorisOptimized(null);
+        setVegasOptimized(null);
+        setYourLineup(null);
         setFreeAgentRecs(null);
       }
       setError(null);
@@ -38,7 +41,11 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
       api
         .loadLeagueData(userUUID, leagueName)
         .then((data) => {
-          setSuggestedStarts(data.suggested_starts);
+          // Prefer the new explicit field; fall back to the legacy
+          // `suggested_starts` alias for older backend responses.
+          setBorisOptimized(data.boris_optimized ?? data.suggested_starts);
+          setVegasOptimized(data.vegas_optimized ?? null);
+          setYourLineup(data.your_lineup ?? null);
           setFreeAgentRecs(data.free_agent_recs);
         })
         .catch((err) => {
@@ -60,8 +67,6 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
         setLeagueNames(names);
         if (names.length > 0) {
           setSelectedTab(names[0]);
-          // First load - no stale data exists yet, so use the default
-          // (clear-then-fetch) path.
           fetchLeagueData(names[0]);
         }
       })
@@ -74,10 +79,19 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
   const handleTabChange = (leagueName: string) => {
     if (leagueName === selectedTab) return;
     setSelectedTab(leagueName);
-    // Keep showing the previous league's data while the new one loads;
-    // prevents the layout collapse + username-form bounce.
     fetchLeagueData(leagueName, { keepStale: true });
   };
+
+  // Pick which lineup to render. If the user picked "your" but this league
+  // has no user-set starters available, fall back to the boris optimizer.
+  const displayedLineup = useMemo<Player[] | null>(() => {
+    if (lineupView === "vegas") return vegasOptimized ?? borisOptimized;
+    if (lineupView === "your") return yourLineup ?? borisOptimized;
+    return borisOptimized;
+  }, [lineupView, borisOptimized, vegasOptimized, yourLineup]);
+
+  const hasYourLineup = !!yourLineup;
+  const hasVegasLineup = !!vegasOptimized;
 
   if (!showTabs) return null;
 
@@ -102,9 +116,45 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
         </Text>
       )}
 
-      {selectedTab && suggestedStarts && (
+      {selectedTab && displayedLineup && (
         <Box position="relative" opacity={refreshing ? 0.55 : 1} transition="opacity 0.15s">
-          <PlayerTable data={suggestedStarts} freeAgentRecs={freeAgentRecs ?? undefined} />
+          {/* Lineup view selector. Hide entirely if there's no comparison
+              available (no vegas + no your-lineup) so off-season / Fleaflicker
+              users don't see a useless 1-button toggle. */}
+          {(hasYourLineup || hasVegasLineup) && (
+            <HStack justify="center" mb={2}>
+              <ButtonGroup size="sm" isAttached variant="outline">
+                <Button
+                  onClick={() => setLineupView("boris")}
+                  colorScheme={lineupView === "boris" ? "blue" : "gray"}
+                  variant={lineupView === "boris" ? "solid" : "outline"}
+                >
+                  Boris-Optimized
+                </Button>
+                {hasVegasLineup && (
+                  <Button
+                    onClick={() => setLineupView("vegas")}
+                    colorScheme={lineupView === "vegas" ? "blue" : "gray"}
+                    variant={lineupView === "vegas" ? "solid" : "outline"}
+                  >
+                    Vegas-Optimized
+                  </Button>
+                )}
+                {hasYourLineup && (
+                  <Button
+                    onClick={() => setLineupView("your")}
+                    colorScheme={lineupView === "your" ? "blue" : "gray"}
+                    variant={lineupView === "your" ? "solid" : "outline"}
+                  >
+                    Your Lineup
+                  </Button>
+                )}
+              </ButtonGroup>
+            </HStack>
+          )}
+
+          <LineupConfidence starters={displayedLineup} />
+          <PlayerTable data={displayedLineup} freeAgentRecs={freeAgentRecs ?? undefined} />
           {refreshing && (
             <Box
               position="absolute"
@@ -127,9 +177,7 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
         </Box>
       )}
 
-      {/* First-load fallback: no stale data yet, reserve some vertical space
-          so the username form doesn't jump while initial fetch is in-flight. */}
-      {selectedTab && !suggestedStarts && refreshing && (
+      {selectedTab && !displayedLineup && refreshing && (
         <VStack minH="40vh" justify="center">
           <Spinner size="xl" />
           <Text>Loading {selectedTab}...</Text>

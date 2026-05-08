@@ -34,6 +34,9 @@ interface Props {
   /** Optional fixed variant (e.g. used in tests). When omitted, an in-component selector controls it. */
   variantKey?: string;
   loading?: boolean;
+  /** Notified whenever the active variant key changes. Lets the parent page
+   *  keep sibling components (e.g. the waiver-wire cheat sheet) in sync. */
+  onVariantChange?: (variantKey: string) => void;
 }
 
 // ---------- variant model ----------
@@ -111,6 +114,18 @@ const COL_BUST: Column = {
   numeric: true,
   value: (r) => (typeof r.BUST === "number" ? r.BUST : null),
 };
+const COL_CEILING: Column = {
+  key: "P90",
+  label: "Ceiling (90%)",
+  numeric: true,
+  value: (r) => (typeof r.P90 === "number" ? r.P90 : null),
+};
+const COL_FLOOR: Column = {
+  key: "P10",
+  label: "Floor (10%)",
+  numeric: true,
+  value: (r) => (typeof r.P10 === "number" ? r.P10 : null),
+};
 
 const STAT_COLS: Record<string, Column> = {
   PASS_YDS: { key: "PASS_YDS", label: "Pass Yds", numeric: true, statKey: "Passing Yards" },
@@ -136,6 +151,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_FLOOR,
+    COL_CEILING,
     COL_BOOM,
     COL_BUST,
   ],
@@ -148,6 +165,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.RUSH_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_FLOOR,
+    COL_CEILING,
     COL_BOOM,
     COL_BUST,
   ],
@@ -159,6 +178,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_FLOOR,
+    COL_CEILING,
     COL_BOOM,
     COL_BUST,
   ],
@@ -170,6 +191,8 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.RUSH_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_FLOOR,
+    COL_CEILING,
     COL_BOOM,
     COL_BUST,
   ],
@@ -180,9 +203,48 @@ const COLUMNS_BY_TAB: Record<PositionTab, Column[]> = {
     STAT_COLS.REC_YDS,
     STAT_COLS.TD,
     COL_VEGAS,
+    COL_FLOOR,
+    COL_CEILING,
     COL_BOOM,
     COL_BUST,
   ],
+};
+
+// ---------- leaderboard presets ----------
+// A preset is a "view" the user can pick that auto-configures position +
+// sort to answer a specific question like "highest ceiling QBs".
+type PresetKey =
+  | "DEFAULT"
+  | "CEIL_QB"
+  | "CEIL_RB"
+  | "CEIL_WR"
+  | "CEIL_TE"
+  | "FLOOR_QB"
+  | "FLOOR_RB"
+  | "FLOOR_WR"
+  | "FLOOR_TE"
+  | "BOOM_ALL"
+  | "SAFE_ALL";
+
+interface PresetSpec {
+  label: string;
+  tab: PositionTab;
+  sortKey: string;
+  sortDir: "asc" | "desc";
+}
+
+const PRESETS: Record<PresetKey, PresetSpec> = {
+  DEFAULT:    { label: "Default (Vegas projection)",  tab: "ALL", sortKey: "RANK",  sortDir: "asc"  },
+  CEIL_QB:    { label: "Highest-ceiling QBs",         tab: "QB",  sortKey: "P90",   sortDir: "desc" },
+  CEIL_RB:    { label: "Highest-ceiling RBs",         tab: "RB",  sortKey: "P90",   sortDir: "desc" },
+  CEIL_WR:    { label: "Highest-ceiling WRs",         tab: "WR",  sortKey: "P90",   sortDir: "desc" },
+  CEIL_TE:    { label: "Highest-ceiling TEs",         tab: "TE",  sortKey: "P90",   sortDir: "desc" },
+  FLOOR_QB:   { label: "Safest-floor QBs",            tab: "QB",  sortKey: "P10",   sortDir: "desc" },
+  FLOOR_RB:   { label: "Safest-floor RBs",            tab: "RB",  sortKey: "P10",   sortDir: "desc" },
+  FLOOR_WR:   { label: "Safest-floor WRs",            tab: "WR",  sortKey: "P10",   sortDir: "desc" },
+  FLOOR_TE:   { label: "Safest-floor TEs",            tab: "TE",  sortKey: "P10",   sortDir: "desc" },
+  BOOM_ALL:   { label: "Highest boom % (all)",        tab: "ALL", sortKey: "BOOM",  sortDir: "desc" },
+  SAFE_ALL:   { label: "Lowest bust % (all)",         tab: "ALL", sortKey: "BUST",  sortDir: "asc"  },
 };
 
 // Get the comparable numeric value for sorting; falls back to string compare for non-numeric.
@@ -200,6 +262,7 @@ export default function OverallRankingsTable({
   rankings,
   variantKey,
   loading = false,
+  onVariantChange,
 }: Props) {
   // Local variant state (used only when no fixed variantKey is passed in)
   const [pprMode, setPprMode] = useState<PprMode>(DEFAULT_PPR);
@@ -213,6 +276,10 @@ export default function OverallRankingsTable({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortKey, setSortKey] = useState<string>("RANK");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Active leaderboard preset. "DEFAULT" means user is driving sort/tab
+  // manually; any other value means we forced tab + sort and disabled the
+  // tab buttons until they reset the preset.
+  const [preset, setPreset] = useState<PresetKey>("DEFAULT");
 
   // Pagination. Keeps the rendered DOM bounded (max ~PAGE_SIZE <Tr> nodes)
   // which is the actual cause of the "laggy" feel - browsers struggle to
@@ -284,11 +351,28 @@ export default function OverallRankingsTable({
     setPage(0);
   }, [tab, debouncedSearch, sortKey, sortDir, effectiveVariantKey]);
 
-  // When tab changes, reset sort to the natural order (rank ascending).
+  // When tab changes manually (preset is DEFAULT), reset sort to the natural
+  // order (rank ascending). When a preset is active, the preset effect below
+  // owns sort/tab, so we don't fight it here.
   React.useEffect(() => {
+    if (preset !== "DEFAULT") return;
     setSortKey("RANK");
     setSortDir("asc");
-  }, [tab]);
+  }, [tab, preset]);
+
+  // Apply a leaderboard preset: snap tab + sort to the preset spec.
+  React.useEffect(() => {
+    if (preset === "DEFAULT") return;
+    const spec = PRESETS[preset];
+    setTab(spec.tab);
+    setSortKey(spec.sortKey);
+    setSortDir(spec.sortDir);
+  }, [preset]);
+
+  // Notify parent on variant changes so sibling components can refetch.
+  useEffect(() => {
+    onVariantChange?.(effectiveVariantKey);
+  }, [effectiveVariantKey, onVariantChange]);
 
   if (loading) {
     return (
@@ -301,6 +385,8 @@ export default function OverallRankingsTable({
 
   const cols = COLUMNS_BY_TAB[tab];
   const handleHeaderClick = (col: Column) => {
+    // Manual sort interaction clears any active preset.
+    if (preset !== "DEFAULT") setPreset("DEFAULT");
     if (sortKey === col.key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -308,6 +394,11 @@ export default function OverallRankingsTable({
       // Default: numeric columns descending (highest first), text columns ascending
       setSortDir(col.numeric ? "desc" : "asc");
     }
+  };
+
+  const handleTabClick = (p: PositionTab) => {
+    if (preset !== "DEFAULT") setPreset("DEFAULT");
+    setTab(p);
   };
 
   return (
@@ -374,11 +465,24 @@ export default function OverallRankingsTable({
               size="sm"
               variant={tab === p ? "solid" : "outline"}
               colorScheme={tab === p ? "blue" : "gray"}
-              onClick={() => setTab(p)}
+              onClick={() => handleTabClick(p)}
             >
               {p === "ALL" ? "Overall" : p}
             </Button>
           ))}
+          <Select
+            size="sm"
+            maxW="240px"
+            value={preset}
+            onChange={(e) => setPreset(e.target.value as PresetKey)}
+            ml={{ base: 0, md: 2 }}
+          >
+            {(Object.keys(PRESETS) as PresetKey[]).map((k) => (
+              <option key={k} value={k}>
+                {PRESETS[k].label}
+              </option>
+            ))}
+          </Select>
           <Box flex="1" />
           <HStack spacing={2} fontSize="xs" color="gray.600">
             <Box w="10px" h="10px" bg="yellow.100" borderWidth="1px" borderRadius="sm" />
@@ -501,6 +605,21 @@ export default function OverallRankingsTable({
                         return (
                           <Td key={c.key} isNumeric fontWeight="semibold">
                             {typeof v === "number" ? v.toFixed(2) : v ?? ""}
+                          </Td>
+                        );
+                      }
+                      if (c.key === "P10" || c.key === "P90") {
+                        const raw = c.key === "P10" ? p.P10 : p.P90;
+                        if (typeof raw !== "number") {
+                          return (
+                            <Td key={c.key} isNumeric color="gray.400">
+                              –
+                            </Td>
+                          );
+                        }
+                        return (
+                          <Td key={c.key} isNumeric>
+                            {raw.toFixed(1)}
                           </Td>
                         );
                       }

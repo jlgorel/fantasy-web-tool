@@ -5,6 +5,7 @@ import { Link as RouterLink, useLocation } from 'react-router-dom';
 const links: { to: string; label: string }[] = [
   { to: '/', label: 'My Teams' },
   { to: '/ranks', label: 'Overall Rankings' },
+  { to: '/wrapped', label: 'League Wrapped' },
 ];
 
 const NavBar: React.FC = () => {

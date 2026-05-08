@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
   Text,
@@ -13,7 +14,8 @@ import {
   SliderTrack,
   SliderFilledTrack,
   SliderThumb,
-  Tooltip
+  Tooltip,
+  Badge,
 } from '@chakra-ui/react';
 import { Player } from '../types/player';
 
@@ -175,6 +177,48 @@ const PlayerRow: React.FC<PlayerRowProps> = ({
               {p.NAME}
             </Text>
           </Grid>
+          {p.STACK_WITH_QB && (
+            <Tooltip
+              label={`Same NFL team as your starting QB${
+                p.STACK_QB_NAME ? ` (${p.STACK_QB_NAME})` : ''
+              }. Their fantasy outcomes are correlated.`}
+              placement="top"
+              hasArrow
+            >
+              <Badge
+                mt={1}
+                colorScheme="purple"
+                fontSize="2xs"
+                onClick={(e) => e.stopPropagation()}
+                cursor="help"
+              >
+                🔗 Stack w/ {p.STACK_QB_NAME ?? 'QB'}
+              </Badge>
+            </Tooltip>
+          )}
+          {p.DELTA_VS_PLAYER && (
+            <Tooltip
+              label={`Optimizer suggests promoting ${p.NAME} from your bench in place of ${p.DELTA_VS_PLAYER}${
+                p.DELTA_VS_YOUR_LINEUP != null
+                  ? ` (+${p.DELTA_VS_YOUR_LINEUP.toFixed(1)} projected pts)`
+                  : ''
+              }.`}
+              placement="top"
+              hasArrow
+            >
+              <Badge
+                mt={1}
+                ml={p.STACK_WITH_QB ? 1 : 0}
+                colorScheme="green"
+                fontSize="2xs"
+                onClick={(e) => e.stopPropagation()}
+                cursor="help"
+              >
+                ⬆ {p.DELTA_VS_YOUR_LINEUP != null ? `+${p.DELTA_VS_YOUR_LINEUP.toFixed(1)} ` : ''}
+                over {p.DELTA_VS_PLAYER}
+              </Badge>
+            </Tooltip>
+          )}
         </Box>
 
         {/* Tier info */}
@@ -309,6 +353,23 @@ const PlayerRow: React.FC<PlayerRowProps> = ({
               <Text fontSize="sm" color="gray.500" mt={2}>
                 Percentiles unavailable
               </Text>
+            )}
+
+            {p.PID && (
+              <Box mt={3} textAlign="right">
+                <RouterLink
+                  to={`/player/${encodeURIComponent(p.PID)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#3182ce',
+                    textDecoration: 'underline',
+                  }}
+                >
+                  Full Details →
+                </RouterLink>
+              </Box>
             )}
           </Box>
         )}

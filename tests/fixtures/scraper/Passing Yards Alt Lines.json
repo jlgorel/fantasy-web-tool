@@ -1,0 +1,5191 @@
+{
+    "sports": [
+        {
+            "id": "3",
+            "seoIdentifier": "Football",
+            "name": "Football",
+            "sortOrder": 56
+        }
+    ],
+    "leagues": [
+        {
+            "id": "88808",
+            "name": "NFL",
+            "sportId": "3",
+            "sortOrder": 4847,
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible",
+                "PrePack",
+                "ProgressiveParlayEligible",
+                "ProgressiveParlayTeamEligible",
+                "Featured",
+                "HasLiveEvents",
+                "LiveFeaturedSubcategory",
+                "FavoriteableFromPage"
+            ],
+            "isTeamSwap": true,
+            "featured": true,
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "mediaType": "LiveStreaming",
+                    "allowedDmas": [
+                        "525",
+                        "532",
+                        "644",
+                        "583",
+                        "524",
+                        "520",
+                        "512",
+                        "716",
+                        "821",
+                        "746",
+                        "630",
+                        "559",
+                        "637",
+                        "648",
+                        "584",
+                        "602",
+                        "598",
+                        "522",
+                        "673",
+                        "623",
+                        "682",
+                        "542",
+                        "505",
+                        "606",
+                        "676",
+                        "801",
+                        "649",
+                        "724",
+                        "513",
+                        "571",
+                        "509",
+                        "592",
+                        "563",
+                        "658",
+                        "647",
+                        "566",
+                        "569",
+                        "533",
+                        "710",
+                        "691",
+                        "527",
+                        "718",
+                        "561",
+                        "574",
+                        "702",
+                        "582",
+                        "642",
+                        "643",
+                        "551",
+                        "503",
+                        "669",
+                        "737",
+                        "553",
+                        "813",
+                        "711",
+                        "528",
+                        "617",
+                        "613",
+                        "687",
+                        "686",
+                        "628",
+                        "698",
+                        "659",
+                        "622",
+                        "501",
+                        "544",
+                        "534",
+                        "656",
+                        "675",
+                        "504",
+                        "820",
+                        "556",
+                        "573",
+                        "538",
+                        "611",
+                        "610",
+                        "576",
+                        "507",
+                        "819",
+                        "657",
+                        "612",
+                        "588",
+                        "881",
+                        "530",
+                        "539",
+                        "581",
+                        "540",
+                        "511",
+                        "705",
+                        "548",
+                        "627",
+                        "577",
+                        "810",
+                        "743",
+                        "745",
+                        "747",
+                        "662",
+                        "790",
+                        "634",
+                        "635",
+                        "800",
+                        "537",
+                        "692",
+                        "756",
+                        "502",
+                        "757",
+                        "506",
+                        "736",
+                        "514",
+                        "523",
+                        "754",
+                        "767",
+                        "519",
+                        "564",
+                        "517",
+                        "575",
+                        "759",
+                        "868",
+                        "515",
+                        "510",
+                        "752",
+                        "546",
+                        "604",
+                        "535",
+                        "600",
+                        "751",
+                        "679",
+                        "765",
+                        "565",
+                        "516",
+                        "802",
+                        "866",
+                        "670",
+                        "798",
+                        "773",
+                        "755",
+                        "518",
+                        "545",
+                        "567",
+                        "636",
+                        "766",
+                        "618",
+                        "758",
+                        "639",
+                        "734",
+                        "603",
+                        "616",
+                        "557",
+                        "749",
+                        "839",
+                        "541",
+                        "558",
+                        "722",
+                        "693",
+                        "803",
+                        "529",
+                        "651",
+                        "640",
+                        "762",
+                        "828",
+                        "570",
+                        "740",
+                        "633",
+                        "650",
+                        "652",
+                        "631",
+                        "632",
+                        "804",
+                        "597",
+                        "753",
+                        "508",
+                        "500",
+                        "552",
+                        "521",
+                        "717",
+                        "560",
+                        "764",
+                        "811",
+                        "862",
+                        "770",
+                        "661",
+                        "641",
+                        "825",
+                        "807",
+                        "855",
+                        "624",
+                        "725",
+                        "619",
+                        "543",
+                        "638",
+                        "609",
+                        "555",
+                        "547",
+                        "605",
+                        "531",
+                        "789",
+                        "671",
+                        "760",
+                        "709",
+                        "526",
+                        "626",
+                        "625",
+                        "549",
+                        "554",
+                        "678",
+                        "550",
+                        "536",
+                        "771",
+                        "596",
+                        "744"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "mediaType": "MatchTracker"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "mediaType": "Scoreboard"
+                }
+            ]
+        }
+    ],
+    "events": [
+        {
+            "id": "30568682",
+            "seoIdentifier": "BUF Bills @ SEA Seahawks",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "BUF Bills @ SEA Seahawks",
+            "startEventDate": "2024-10-27T20:05:24.0000000Z",
+            "participants": [
+                {
+                    "id": "18471",
+                    "name": "SEA Seahawks",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "199",
+                        "rosettaTeamId": "18471",
+                        "shortName": "SEA"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18302",
+                    "name": "BUF Bills",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "198",
+                        "rosettaTeamId": "18302",
+                        "shortName": "BUF"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "STARTED",
+            "liveGameState": {
+                "period": "3rd Quarter",
+                "gameTime": 855,
+                "isClockRunning": true
+            },
+            "eventScorecard": {
+                "mainScorecard": {
+                    "metadata": {
+                        "AmericanFootballPosession": "Possession [T2]",
+                        "AmericanFootballCurrentDown": "2",
+                        "AmericanFootballYardLine": "72",
+                        "AmericanFootballYardsToGo": "5"
+                    },
+                    "liveScoreData": {
+                        "americanFootballPossession": "Possession [T2]",
+                        "americanFootballCurrentDown": "2",
+                        "americanFootballYardLine": "72",
+                        "americanFootballYardsToGo": "5",
+                        "shortName": "BUF"
+                    },
+                    "intervalName": "T",
+                    "intervalNumber": 2147483647,
+                    "firstTeamScore": "14",
+                    "secondTeamScore": "3"
+                },
+                "scorecards": [
+                    {
+                        "intervalName": "Q1",
+                        "intervalNumber": 1,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "0"
+                    },
+                    {
+                        "intervalName": "Q2",
+                        "intervalNumber": 2,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "3"
+                    },
+                    {
+                        "intervalName": "Q3",
+                        "intervalNumber": 3,
+                        "firstTeamScore": "0",
+                        "secondTeamScore": "0"
+                    },
+                    {
+                        "intervalName": "Q4",
+                        "intervalNumber": 4,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "liveScoreData": {
+                            "americanFootballPossession": "Possession [T2]",
+                            "americanFootballCurrentDown": "2",
+                            "americanFootballYardLine": "72",
+                            "americanFootballYardsToGo": "5",
+                            "shortName": "BUF"
+                        },
+                        "intervalName": "T",
+                        "intervalNumber": 2147483647,
+                        "firstTeamScore": "14",
+                        "secondTeamScore": "3"
+                    }
+                ],
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061084",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "532",
+                        "635",
+                        "512",
+                        "537",
+                        "821",
+                        "502",
+                        "757",
+                        "506",
+                        "514",
+                        "523",
+                        "754",
+                        "767",
+                        "564",
+                        "759",
+                        "868",
+                        "515",
+                        "598",
+                        "510",
+                        "535",
+                        "600",
+                        "623",
+                        "542",
+                        "565",
+                        "516",
+                        "801",
+                        "802",
+                        "866",
+                        "755",
+                        "636",
+                        "566",
+                        "766",
+                        "618",
+                        "758",
+                        "527",
+                        "574",
+                        "749",
+                        "529",
+                        "813",
+                        "762",
+                        "828",
+                        "501",
+                        "597",
+                        "504",
+                        "508",
+                        "820",
+                        "500",
+                        "521",
+                        "811",
+                        "538",
+                        "862",
+                        "807",
+                        "855",
+                        "819",
+                        "881",
+                        "555",
+                        "760",
+                        "526",
+                        "626",
+                        "625",
+                        "549",
+                        "554",
+                        "627",
+                        "577",
+                        "810",
+                        "536",
+                        "596",
+                        "743",
+                        "745",
+                        "747"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128445",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128445",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128445",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253704501,
+            "subscriptionKey": "league-events-88808"
+        },
+        {
+            "id": "30568689",
+            "seoIdentifier": "NO Saints @ LA Chargers",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "NO Saints @ LA Chargers",
+            "startEventDate": "2024-10-27T20:05:29.0000000Z",
+            "participants": [
+                {
+                    "id": "18461",
+                    "name": "LA Chargers",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "115",
+                        "rosettaTeamId": "18461",
+                        "shortName": "LAC"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18423",
+                    "name": "NO Saints",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "114",
+                        "rosettaTeamId": "18423",
+                        "shortName": "NO"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "STARTED",
+            "liveGameState": {
+                "period": "Halftime",
+                "gameTime": 0
+            },
+            "eventScorecard": {
+                "mainScorecard": {
+                    "metadata": {
+                        "AmericanFootballPosession": "Possession [T1]",
+                        "AmericanFootballCurrentDown": "1",
+                        "AmericanFootballYardLine": "70",
+                        "AmericanFootballYardsToGo": "10"
+                    },
+                    "liveScoreData": {
+                        "americanFootballPossession": "Possession [T1]",
+                        "americanFootballCurrentDown": "1",
+                        "americanFootballYardLine": "70",
+                        "americanFootballYardsToGo": "10",
+                        "shortName": "LAC"
+                    },
+                    "intervalName": "T",
+                    "intervalNumber": 2147483647,
+                    "firstTeamScore": "5",
+                    "secondTeamScore": "9"
+                },
+                "scorecards": [
+                    {
+                        "intervalName": "Q1",
+                        "intervalNumber": 1,
+                        "firstTeamScore": "2",
+                        "secondTeamScore": "0"
+                    },
+                    {
+                        "intervalName": "Q2",
+                        "intervalNumber": 2,
+                        "firstTeamScore": "3",
+                        "secondTeamScore": "9"
+                    },
+                    {
+                        "intervalName": "Q3",
+                        "intervalNumber": 3,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "intervalName": "Q4",
+                        "intervalNumber": 4,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "liveScoreData": {
+                            "americanFootballPossession": "Possession [T1]",
+                            "americanFootballCurrentDown": "1",
+                            "americanFootballYardLine": "70",
+                            "americanFootballYardsToGo": "10",
+                            "shortName": "LAC"
+                        },
+                        "intervalName": "T",
+                        "intervalNumber": 2147483647,
+                        "firstTeamScore": "5",
+                        "secondTeamScore": "9"
+                    }
+                ],
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061083",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "644",
+                        "800",
+                        "692",
+                        "746",
+                        "673",
+                        "647",
+                        "710",
+                        "718",
+                        "642",
+                        "643",
+                        "803",
+                        "711",
+                        "686",
+                        "628",
+                        "622",
+                        "804",
+                        "825",
+                        "612"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128443",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128443",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128443",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253704502,
+            "subscriptionKey": "league-events-88808"
+        },
+        {
+            "id": "30568627",
+            "seoIdentifier": "KC Chiefs @ LV Raiders",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "KC Chiefs @ LV Raiders",
+            "startEventDate": "2024-10-27T20:25:29.0000000Z",
+            "participants": [
+                {
+                    "id": "18388",
+                    "name": "LV Raiders",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "127",
+                        "rosettaTeamId": "18388",
+                        "shortName": "LV"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18379",
+                    "name": "KC Chiefs",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "126",
+                        "rosettaTeamId": "18379",
+                        "shortName": "KC"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "STARTED",
+            "liveGameState": {
+                "period": "2nd Quarter",
+                "gameTime": 4
+            },
+            "eventScorecard": {
+                "mainScorecard": {
+                    "metadata": {
+                        "AmericanFootballPosession": "Possession [T2]",
+                        "AmericanFootballCurrentDown": "1",
+                        "AmericanFootballYardLine": "24",
+                        "AmericanFootballYardsToGo": "10"
+                    },
+                    "liveScoreData": {
+                        "americanFootballPossession": "Possession [T2]",
+                        "americanFootballCurrentDown": "1",
+                        "americanFootballYardLine": "24",
+                        "americanFootballYardsToGo": "10",
+                        "shortName": "KC"
+                    },
+                    "intervalName": "T",
+                    "intervalNumber": 2147483647,
+                    "firstTeamScore": "14",
+                    "secondTeamScore": "10"
+                },
+                "scorecards": [
+                    {
+                        "intervalName": "Q1",
+                        "intervalNumber": 1,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "7"
+                    },
+                    {
+                        "intervalName": "Q2",
+                        "intervalNumber": 2,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "3"
+                    },
+                    {
+                        "intervalName": "Q3",
+                        "intervalNumber": 3,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "intervalName": "Q4",
+                        "intervalNumber": 4,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "liveScoreData": {
+                            "americanFootballPossession": "Possession [T2]",
+                            "americanFootballCurrentDown": "1",
+                            "americanFootballYardLine": "24",
+                            "americanFootballYardsToGo": "10",
+                            "shortName": "KC"
+                        },
+                        "intervalName": "T",
+                        "intervalNumber": 2147483647,
+                        "firstTeamScore": "14",
+                        "secondTeamScore": "10"
+                    }
+                ],
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061085",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "662",
+                        "634",
+                        "635",
+                        "800",
+                        "537",
+                        "692",
+                        "502",
+                        "757",
+                        "506",
+                        "736",
+                        "514",
+                        "523",
+                        "564",
+                        "575",
+                        "868",
+                        "515",
+                        "510",
+                        "604",
+                        "535",
+                        "600",
+                        "679",
+                        "765",
+                        "565",
+                        "516",
+                        "802",
+                        "866",
+                        "670",
+                        "798",
+                        "755",
+                        "636",
+                        "766",
+                        "618",
+                        "758",
+                        "639",
+                        "734",
+                        "603",
+                        "616",
+                        "557",
+                        "749",
+                        "839",
+                        "541",
+                        "558",
+                        "722",
+                        "693",
+                        "803",
+                        "529",
+                        "651",
+                        "640",
+                        "762",
+                        "828",
+                        "740",
+                        "633",
+                        "650",
+                        "652",
+                        "631",
+                        "632",
+                        "804",
+                        "597",
+                        "753",
+                        "508",
+                        "500",
+                        "552",
+                        "521",
+                        "717",
+                        "811",
+                        "862",
+                        "770",
+                        "661",
+                        "641",
+                        "825",
+                        "807",
+                        "855",
+                        "624",
+                        "725",
+                        "619",
+                        "543",
+                        "638",
+                        "609",
+                        "555",
+                        "547",
+                        "605",
+                        "531",
+                        "789",
+                        "671",
+                        "760",
+                        "709",
+                        "526",
+                        "626",
+                        "625",
+                        "549",
+                        "554",
+                        "678",
+                        "536",
+                        "771",
+                        "744"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128451",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128451",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128451",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253706503,
+            "subscriptionKey": "league-events-88808"
+        },
+        {
+            "id": "30568672",
+            "seoIdentifier": "CAR Panthers @ DEN Broncos",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "CAR Panthers @ DEN Broncos",
+            "startEventDate": "2024-10-27T20:25:19.0000000Z",
+            "participants": [
+                {
+                    "id": "18342",
+                    "name": "DEN Broncos",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "157",
+                        "rosettaTeamId": "18342",
+                        "shortName": "DEN"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18484",
+                    "name": "CAR Panthers",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "156",
+                        "rosettaTeamId": "18484",
+                        "shortName": "CAR"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "STARTED",
+            "liveGameState": {
+                "period": "2nd Quarter",
+                "gameTime": 86,
+                "isClockRunning": true
+            },
+            "eventScorecard": {
+                "mainScorecard": {
+                    "metadata": {
+                        "AmericanFootballPosession": "Possession [T1]",
+                        "AmericanFootballCurrentDown": "3",
+                        "AmericanFootballYardLine": "1",
+                        "AmericanFootballYardsToGo": "1"
+                    },
+                    "liveScoreData": {
+                        "americanFootballPossession": "Possession [T1]",
+                        "americanFootballCurrentDown": "3",
+                        "americanFootballYardLine": "1",
+                        "americanFootballYardsToGo": "1",
+                        "shortName": "DEN"
+                    },
+                    "intervalName": "T",
+                    "intervalNumber": 2147483647,
+                    "firstTeamScore": "7",
+                    "secondTeamScore": "14"
+                },
+                "scorecards": [
+                    {
+                        "intervalName": "Q1",
+                        "intervalNumber": 1,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "0"
+                    },
+                    {
+                        "intervalName": "Q2",
+                        "intervalNumber": 2,
+                        "firstTeamScore": "0",
+                        "secondTeamScore": "14"
+                    },
+                    {
+                        "intervalName": "Q3",
+                        "intervalNumber": 3,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "intervalName": "Q4",
+                        "intervalNumber": 4,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "liveScoreData": {
+                            "americanFootballPossession": "Possession [T1]",
+                            "americanFootballCurrentDown": "3",
+                            "americanFootballYardLine": "1",
+                            "americanFootballYardsToGo": "1",
+                            "shortName": "DEN"
+                        },
+                        "intervalName": "T",
+                        "intervalNumber": 2147483647,
+                        "firstTeamScore": "7",
+                        "secondTeamScore": "14"
+                    }
+                ],
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061086",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "790",
+                        "756",
+                        "754",
+                        "767",
+                        "519",
+                        "517",
+                        "759",
+                        "752",
+                        "546",
+                        "751",
+                        "773",
+                        "518",
+                        "545",
+                        "567",
+                        "570",
+                        "560",
+                        "764",
+                        "550"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128449",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128449",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128449",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253706504,
+            "subscriptionKey": "league-events-88808"
+        },
+        {
+            "id": "30568591",
+            "seoIdentifier": "CHI Bears @ WAS Commanders",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "CHI Bears @ WAS Commanders",
+            "startEventDate": "2024-10-27T20:25:29.0000000Z",
+            "participants": [
+                {
+                    "id": "18480",
+                    "name": "WAS Commanders",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "197",
+                        "rosettaTeamId": "18480",
+                        "shortName": "WAS"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18312",
+                    "name": "CHI Bears",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "196",
+                        "rosettaTeamId": "18312",
+                        "shortName": "CHI"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "STARTED",
+            "liveGameState": {
+                "period": "2nd Quarter",
+                "gameTime": 102,
+                "isClockRunning": true
+            },
+            "eventScorecard": {
+                "mainScorecard": {
+                    "metadata": {
+                        "AmericanFootballPosession": "Possession [T2]",
+                        "AmericanFootballCurrentDown": "2",
+                        "AmericanFootballYardLine": "25",
+                        "AmericanFootballYardsToGo": "12"
+                    },
+                    "liveScoreData": {
+                        "americanFootballPossession": "Possession [T2]",
+                        "americanFootballCurrentDown": "2",
+                        "americanFootballYardLine": "25",
+                        "americanFootballYardsToGo": "12",
+                        "shortName": "CHI"
+                    },
+                    "intervalName": "T",
+                    "intervalNumber": 2147483647,
+                    "firstTeamScore": "0",
+                    "secondTeamScore": "9"
+                },
+                "scorecards": [
+                    {
+                        "intervalName": "Q1",
+                        "intervalNumber": 1,
+                        "firstTeamScore": "0",
+                        "secondTeamScore": "6"
+                    },
+                    {
+                        "intervalName": "Q2",
+                        "intervalNumber": 2,
+                        "firstTeamScore": "0",
+                        "secondTeamScore": "3"
+                    },
+                    {
+                        "intervalName": "Q3",
+                        "intervalNumber": 3,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "intervalName": "Q4",
+                        "intervalNumber": 4,
+                        "firstTeamScore": "",
+                        "secondTeamScore": ""
+                    },
+                    {
+                        "liveScoreData": {
+                            "americanFootballPossession": "Possession [T2]",
+                            "americanFootballCurrentDown": "2",
+                            "americanFootballYardLine": "25",
+                            "americanFootballYardsToGo": "12",
+                            "shortName": "CHI"
+                        },
+                        "intervalName": "T",
+                        "intervalNumber": 2147483647,
+                        "firstTeamScore": "0",
+                        "secondTeamScore": "9"
+                    }
+                ],
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061077",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "525",
+                        "532",
+                        "644",
+                        "583",
+                        "524",
+                        "520",
+                        "512",
+                        "716",
+                        "821",
+                        "746",
+                        "630",
+                        "559",
+                        "637",
+                        "648",
+                        "584",
+                        "602",
+                        "598",
+                        "522",
+                        "673",
+                        "623",
+                        "682",
+                        "542",
+                        "505",
+                        "606",
+                        "676",
+                        "801",
+                        "649",
+                        "724",
+                        "513",
+                        "571",
+                        "509",
+                        "592",
+                        "563",
+                        "658",
+                        "647",
+                        "566",
+                        "569",
+                        "533",
+                        "710",
+                        "691",
+                        "527",
+                        "718",
+                        "561",
+                        "574",
+                        "702",
+                        "582",
+                        "642",
+                        "643",
+                        "551",
+                        "503",
+                        "669",
+                        "737",
+                        "553",
+                        "813",
+                        "711",
+                        "528",
+                        "617",
+                        "613",
+                        "687",
+                        "686",
+                        "628",
+                        "698",
+                        "659",
+                        "622",
+                        "501",
+                        "544",
+                        "534",
+                        "656",
+                        "675",
+                        "504",
+                        "820",
+                        "556",
+                        "573",
+                        "538",
+                        "611",
+                        "610",
+                        "576",
+                        "507",
+                        "819",
+                        "657",
+                        "612",
+                        "588",
+                        "881",
+                        "530",
+                        "539",
+                        "581",
+                        "540",
+                        "511",
+                        "705",
+                        "548",
+                        "627",
+                        "577",
+                        "810",
+                        "743",
+                        "745",
+                        "747"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128441",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128441",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128441",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "Flashbet",
+                "LivePrePack",
+                "LiveStreaming",
+                "MatchTracker",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253706505,
+            "subscriptionKey": "league-events-88808"
+        },
+        {
+            "id": "30568741",
+            "seoIdentifier": "DAL Cowboys @ SF 49ers",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "DAL Cowboys @ SF 49ers",
+            "startEventDate": "2024-10-28T00:20:00.0000000Z",
+            "participants": [
+                {
+                    "id": "18465",
+                    "name": "SF 49ers",
+                    "venueRole": "Home",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "117",
+                        "rosettaTeamId": "18465",
+                        "shortName": "SF"
+                    },
+                    "sortOrder": 2
+                },
+                {
+                    "id": "18336",
+                    "name": "DAL Cowboys",
+                    "venueRole": "Away",
+                    "type": "Team",
+                    "metadata": {
+                        "retailRotNumber": "116",
+                        "rosettaTeamId": "18336",
+                        "shortName": "DAL"
+                    },
+                    "sortOrder": 1
+                }
+            ],
+            "eventParticipantType": "TwoTeam",
+            "status": "NOT_STARTED",
+            "eventScorecard": {
+                "scorecardComponentId": 1
+            },
+            "media": [
+                {
+                    "providerName": "BetGenius",
+                    "providerEventId": "11061088",
+                    "mediaType": "LiveStreaming",
+                    "metadata": {
+                        "BetGeniusDash": "Akamai",
+                        "BetGeniusHls": "Akamai",
+                        "BetGeniusLiveStreamId": "704ca8df"
+                    },
+                    "allowedDmas": [
+                        "662",
+                        "525",
+                        "532",
+                        "790",
+                        "644",
+                        "583",
+                        "634",
+                        "524",
+                        "520",
+                        "635",
+                        "800",
+                        "512",
+                        "537",
+                        "716",
+                        "692",
+                        "821",
+                        "756",
+                        "746",
+                        "502",
+                        "630",
+                        "559",
+                        "757",
+                        "506",
+                        "736",
+                        "514",
+                        "523",
+                        "767",
+                        "637",
+                        "648",
+                        "519",
+                        "564",
+                        "517",
+                        "584",
+                        "575",
+                        "759",
+                        "602",
+                        "868",
+                        "515",
+                        "598",
+                        "510",
+                        "752",
+                        "546",
+                        "604",
+                        "522",
+                        "535",
+                        "673",
+                        "600",
+                        "623",
+                        "682",
+                        "542",
+                        "751",
+                        "679",
+                        "505",
+                        "606",
+                        "676",
+                        "765",
+                        "565",
+                        "516",
+                        "801",
+                        "802",
+                        "649",
+                        "724",
+                        "513",
+                        "866",
+                        "571",
+                        "670",
+                        "509",
+                        "592",
+                        "798",
+                        "773",
+                        "563",
+                        "755",
+                        "658",
+                        "518",
+                        "545",
+                        "567",
+                        "647",
+                        "636",
+                        "566",
+                        "569",
+                        "533",
+                        "710",
+                        "766",
+                        "618",
+                        "691",
+                        "758",
+                        "527",
+                        "718",
+                        "639",
+                        "561",
+                        "574",
+                        "734",
+                        "603",
+                        "616",
+                        "557",
+                        "702",
+                        "582",
+                        "642",
+                        "643",
+                        "551",
+                        "749",
+                        "839",
+                        "541",
+                        "558",
+                        "722",
+                        "693",
+                        "803",
+                        "529",
+                        "651",
+                        "503",
+                        "669",
+                        "737",
+                        "553",
+                        "813",
+                        "640",
+                        "711",
+                        "528",
+                        "617",
+                        "613",
+                        "687",
+                        "762",
+                        "686",
+                        "628",
+                        "828",
+                        "698",
+                        "570",
+                        "659",
+                        "622",
+                        "501",
+                        "544",
+                        "740",
+                        "633",
+                        "650",
+                        "652",
+                        "534",
+                        "631",
+                        "632",
+                        "804",
+                        "656",
+                        "597",
+                        "675",
+                        "504",
+                        "753",
+                        "508",
+                        "820",
+                        "500",
+                        "552",
+                        "521",
+                        "717",
+                        "560",
+                        "764",
+                        "811",
+                        "556",
+                        "573",
+                        "538",
+                        "611",
+                        "610",
+                        "862",
+                        "576",
+                        "770",
+                        "661",
+                        "641",
+                        "825",
+                        "807",
+                        "855",
+                        "507",
+                        "819",
+                        "657",
+                        "612",
+                        "624",
+                        "725",
+                        "588",
+                        "881",
+                        "619",
+                        "543",
+                        "638",
+                        "609",
+                        "555",
+                        "530",
+                        "539",
+                        "581",
+                        "547",
+                        "605",
+                        "540",
+                        "531",
+                        "789",
+                        "671",
+                        "709",
+                        "526",
+                        "626",
+                        "625",
+                        "511",
+                        "549",
+                        "705",
+                        "548",
+                        "554",
+                        "627",
+                        "678",
+                        "577",
+                        "550",
+                        "810",
+                        "536",
+                        "771",
+                        "596",
+                        "743",
+                        "745",
+                        "747",
+                        "744"
+                    ]
+                },
+                {
+                    "providerName": "BetRadarStats",
+                    "providerEventId": "50128453",
+                    "mediaType": "Stats"
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128453",
+                    "mediaType": "MatchTracker",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                },
+                {
+                    "providerName": "BetRadarV3",
+                    "providerEventId": "50128453",
+                    "mediaType": "Scoreboard",
+                    "metadata": {
+                        "betRadarCoverage": "3"
+                    }
+                }
+            ],
+            "tags": [
+                "FeaturedSubcategory",
+                "LiveStreaming",
+                "MatchTracker",
+                "PrePack",
+                "ProgressiveParlayEligible",
+                "ProgressiveParlayTeamEligible",
+                "SGP",
+                "Scoreboard",
+                "SgpDynamicOdds",
+                "Stats",
+                "YourBetEligible"
+            ],
+            "metadata": {
+                "masterLeagueId": "40",
+                "numberOfParts": "4",
+                "secondsInOnePart": "900"
+            },
+            "sortOrder": 253730041,
+            "subscriptionKey": "league-events-88808"
+        }
+    ],
+    "markets": [
+        {
+            "id": "219473472",
+            "eventId": "30568682",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Geno Smith Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 582477472,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568682|12823|2:100881",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 95
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219473536",
+            "eventId": "30568682",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Josh Allen Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 582477536,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568682|12823|2:55094",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 167
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219473434",
+            "eventId": "30568689",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Justin Herbert Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 589477434,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568689|12823|2:61449",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 80
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219473437",
+            "eventId": "30568689",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Spencer Rattler Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 589477437,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568689|12823|2:123643",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 138
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219475020",
+            "eventId": "30568627",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Gardner Minshew Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 527477020,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568627|12823|2:54957",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 101
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219475021",
+            "eventId": "30568627",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Patrick Mahomes Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 527477021,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568627|12823|2:54965",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 192
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219474872",
+            "eventId": "30568672",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Bo Nix Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 572477872,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568672|12823|2:123925",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 207
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219474874",
+            "eventId": "30568672",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Bryce Young Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 572477874,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568672|12823|2:123911",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 58
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219475022",
+            "eventId": "30568591",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Jayden Daniels Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 591477022,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568591|12823|2:123830",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 111
+                    }
+                ]
+            }
+        },
+        {
+            "id": "219475023",
+            "eventId": "30568591",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Caleb Williams Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12823",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 591477023,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568591|12823|2:123644",
+            "statistics": {
+                "live": [
+                    {
+                        "type": "MarketStat",
+                        "prefix": "Current",
+                        "value": 33
+                    }
+                ]
+            }
+        },
+        {
+            "id": "218742459",
+            "eventId": "30568741",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Brock Purdy Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12330",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 41477459,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568741|12330|2:123619"
+        },
+        {
+            "id": "218742462",
+            "eventId": "30568741",
+            "sportId": "3",
+            "leagueId": "88808",
+            "name": "Dak Prescott Passing Yards",
+            "subcategoryId": 14119,
+            "marketType": {
+                "id": "12330",
+                "betOfferTypeId": 0,
+                "name": "Passing Yards Milestones"
+            },
+            "subscriptionKey": "league-events-88808",
+            "sortOrder": 41477462,
+            "tags": [
+                "SGP",
+                "YourBetEligible",
+                "Cashout",
+                "FeaturedSubcategory",
+                "IgnoreSortOrderOnPush",
+                "PlayerProps"
+            ],
+            "correlatedId": "30568741|12330|2:54914"
+        }
+    ],
+    "selections": [
+        {
+            "id": "0QA219475022#74820074_13L88808Q1-800424582Q20",
+            "marketId": "219475022",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−1200",
+                "decimal": "1.08",
+                "fractional": "1/12"
+            },
+            "trueOdds": 1.08333334,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 10874,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742462#71307103_13L88808Q1640774403Q20",
+            "marketId": "218742462",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−1000",
+                "decimal": "1.10",
+                "fractional": "1/10"
+            },
+            "trueOdds": 1.1,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 11003,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474872#74819230_13L88808Q1-399238935Q20",
+            "marketId": "219474872",
+            "label": "250+",
+            "displayOdds": {
+                "american": "−900",
+                "decimal": "1.11",
+                "fractional": "1/9"
+            },
+            "trueOdds": 1.11111112,
+            "participants": [
+                {
+                    "id": "787661",
+                    "name": "Bo Nix",
+                    "type": "Player",
+                    "seoIdentifier": "Bo Nix"
+                }
+            ],
+            "sortOrder": 11130,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019139_13L88808Q1640774403Q20",
+            "marketId": "218742459",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−700",
+                "decimal": "1.14",
+                "fractional": "1/7"
+            },
+            "trueOdds": 1.14285715,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 11438,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742462#71019151_13L88808Q11625228795Q20",
+            "marketId": "218742462",
+            "label": "200+",
+            "displayOdds": {
+                "american": "−425",
+                "decimal": "1.23",
+                "fractional": "4/17"
+            },
+            "trueOdds": 1.23529412,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 12351,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475022#74820075_13L88808Q1-1021625602Q20",
+            "marketId": "219475022",
+            "label": "200+",
+            "displayOdds": {
+                "american": "−425",
+                "decimal": "1.23",
+                "fractional": "4/17"
+            },
+            "trueOdds": 1.23529412,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 12375,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473536#74813245_13L88808Q1-1363158856Q20",
+            "marketId": "219473536",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−390",
+                "decimal": "1.25",
+                "fractional": "10/39"
+            },
+            "trueOdds": 1.25641026,
+            "participants": [
+                {
+                    "id": "11370",
+                    "name": "Josh Allen",
+                    "type": "Player",
+                    "seoIdentifier": "Josh Allen"
+                }
+            ],
+            "sortOrder": 12545,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473472#74812882_13L88808Q1-1021625602Q20",
+            "marketId": "219473472",
+            "label": "200+",
+            "displayOdds": {
+                "american": "−390",
+                "decimal": "1.25",
+                "fractional": "10/39"
+            },
+            "trueOdds": 1.25641026,
+            "participants": [
+                {
+                    "id": "19982",
+                    "name": "Geno Smith",
+                    "type": "Player",
+                    "seoIdentifier": "Geno Smith"
+                }
+            ],
+            "sortOrder": 12582,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475023#74824981_13L88808Q11964593519Q20",
+            "marketId": "219475023",
+            "label": "150+",
+            "displayOdds": {
+                "american": "−380",
+                "decimal": "1.26",
+                "fractional": "5/19"
+            },
+            "trueOdds": 1.2631579,
+            "participants": [
+                {
+                    "id": "779692",
+                    "name": "Caleb Williams",
+                    "type": "Player",
+                    "seoIdentifier": "Caleb Williams"
+                }
+            ],
+            "sortOrder": 12681,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473434#74812634_13L88808Q11964593519Q20",
+            "marketId": "219473434",
+            "label": "150+",
+            "displayOdds": {
+                "american": "−360",
+                "decimal": "1.27",
+                "fractional": "5/18"
+            },
+            "trueOdds": 1.27777778,
+            "participants": [
+                {
+                    "id": "468527",
+                    "name": "Justin Herbert",
+                    "type": "Player",
+                    "seoIdentifier": "Justin Herbert"
+                }
+            ],
+            "sortOrder": 12734,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019140_13L88808Q11625228795Q20",
+            "marketId": "218742459",
+            "label": "200+",
+            "displayOdds": {
+                "american": "−320",
+                "decimal": "1.31",
+                "fractional": "5/16"
+            },
+            "trueOdds": 1.3125,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 13140,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474874#74819189_13L88808Q11964593519Q20",
+            "marketId": "219474874",
+            "label": "150+",
+            "displayOdds": {
+                "american": "−320",
+                "decimal": "1.31",
+                "fractional": "5/16"
+            },
+            "trueOdds": 1.3125,
+            "participants": [
+                {
+                    "id": "693109",
+                    "name": "Bryce Young",
+                    "type": "Player",
+                    "seoIdentifier": "Bryce Young"
+                }
+            ],
+            "sortOrder": 13189,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474872#74819231_13L88808Q11822804915Q20",
+            "marketId": "219474872",
+            "label": "275+",
+            "displayOdds": {
+                "american": "−270",
+                "decimal": "1.37",
+                "fractional": "10/27"
+            },
+            "trueOdds": 1.37037038,
+            "participants": [
+                {
+                    "id": "787661",
+                    "name": "Bo Nix",
+                    "type": "Player",
+                    "seoIdentifier": "Bo Nix"
+                }
+            ],
+            "sortOrder": 13731,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475021#74820211_13L88808Q11822804915Q20",
+            "marketId": "219475021",
+            "label": "275+",
+            "displayOdds": {
+                "american": "−260",
+                "decimal": "1.38",
+                "fractional": "5/13"
+            },
+            "trueOdds": 1.38461539,
+            "participants": [
+                {
+                    "id": "11644",
+                    "name": "Patrick Mahomes",
+                    "type": "Player",
+                    "seoIdentifier": "Patrick Mahomes"
+                }
+            ],
+            "sortOrder": 13810,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742462#71019152_13L88808Q1-955958417Q20",
+            "marketId": "218742462",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−200",
+                "decimal": "1.50",
+                "fractional": "1/2"
+            },
+            "trueOdds": 1.5,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 15052,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475020#74820215_13L88808Q1-1021625602Q20",
+            "marketId": "219475020",
+            "label": "200+",
+            "displayOdds": {
+                "american": "−175",
+                "decimal": "1.57",
+                "fractional": "4/7"
+            },
+            "trueOdds": 1.57142858,
+            "participants": [
+                {
+                    "id": "20578",
+                    "name": "Gardner Minshew",
+                    "type": "Player",
+                    "seoIdentifier": "Gardner Minshew II"
+                }
+            ],
+            "sortOrder": 15715,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473437#74812560_13L88808Q1-1363158856Q20",
+            "marketId": "219473437",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−175",
+                "decimal": "1.57",
+                "fractional": "4/7"
+            },
+            "trueOdds": 1.57142858,
+            "participants": [
+                {
+                    "id": "787907",
+                    "name": "Spencer Rattler",
+                    "type": "Player",
+                    "seoIdentifier": "Spencer Rattler"
+                }
+            ],
+            "sortOrder": 15760,
+            "tags": [
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219475023#74820043_13L88808Q1-800424582Q20",
+            "marketId": "219475023",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−165",
+                "decimal": "1.60",
+                "fractional": "20/33"
+            },
+            "trueOdds": 1.60606061,
+            "participants": [
+                {
+                    "id": "779692",
+                    "name": "Caleb Williams",
+                    "type": "Player",
+                    "seoIdentifier": "Caleb Williams"
+                }
+            ],
+            "sortOrder": 16043,
+            "tags": [
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219473472#74812883_13L88808Q1-1363158856Q20",
+            "marketId": "219473472",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−165",
+                "decimal": "1.60",
+                "fractional": "20/33"
+            },
+            "trueOdds": 1.60606061,
+            "participants": [
+                {
+                    "id": "19982",
+                    "name": "Geno Smith",
+                    "type": "Player",
+                    "seoIdentifier": "Geno Smith"
+                }
+            ],
+            "sortOrder": 16083,
+            "tags": [
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019141_13L88808Q1-955958417Q20",
+            "marketId": "218742459",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−160",
+                "decimal": "1.62",
+                "fractional": "5/8"
+            },
+            "trueOdds": 1.625,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 16241,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475022#74820076_13L88808Q1-1363158856Q20",
+            "marketId": "219475022",
+            "label": "225+",
+            "displayOdds": {
+                "american": "−160",
+                "decimal": "1.62",
+                "fractional": "5/8"
+            },
+            "trueOdds": 1.625,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 16276,
+            "tags": [
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219473434#74812636_13L88808Q1-800424582Q20",
+            "marketId": "219473434",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−140",
+                "decimal": "1.71",
+                "fractional": "5/7"
+            },
+            "trueOdds": 1.71428572,
+            "participants": [
+                {
+                    "id": "468527",
+                    "name": "Justin Herbert",
+                    "type": "Player",
+                    "seoIdentifier": "Justin Herbert"
+                }
+            ],
+            "sortOrder": 17136,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219473536#74813246_13L88808Q1-399238935Q20",
+            "marketId": "219473536",
+            "label": "250+",
+            "displayOdds": {
+                "american": "−135",
+                "decimal": "1.74",
+                "fractional": "20/27"
+            },
+            "trueOdds": 1.74074075,
+            "participants": [
+                {
+                    "id": "11370",
+                    "name": "Josh Allen",
+                    "type": "Player",
+                    "seoIdentifier": "Josh Allen"
+                }
+            ],
+            "sortOrder": 17446,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219474874#74819190_13L88808Q1-800424582Q20",
+            "marketId": "219474874",
+            "label": "175+",
+            "displayOdds": {
+                "american": "−125",
+                "decimal": "1.80",
+                "fractional": "4/5"
+            },
+            "trueOdds": 1.8,
+            "participants": [
+                {
+                    "id": "693109",
+                    "name": "Bryce Young",
+                    "type": "Player",
+                    "seoIdentifier": "Bryce Young"
+                }
+            ],
+            "sortOrder": 18090,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA218742462#71019153_13L88808Q1-2079442314Q20",
+            "marketId": "218742462",
+            "label": "250+",
+            "displayOdds": {
+                "american": "−105",
+                "decimal": "1.95",
+                "fractional": "20/21"
+            },
+            "trueOdds": 1.95238096,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 19553,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219475021#74820212_13L88808Q11645859202Q20",
+            "marketId": "219475021",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+100",
+                "decimal": "2.00",
+                "fractional": "1/1"
+            },
+            "trueOdds": 2,
+            "participants": [
+                {
+                    "id": "11644",
+                    "name": "Patrick Mahomes",
+                    "type": "Player",
+                    "seoIdentifier": "Patrick Mahomes"
+                }
+            ],
+            "sortOrder": 20012,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219474872#74832200_13L88808Q11645859202Q20",
+            "marketId": "219474872",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+105",
+                "decimal": "2.05",
+                "fractional": "21/20"
+            },
+            "trueOdds": 2.05,
+            "participants": [
+                {
+                    "id": "787661",
+                    "name": "Bo Nix",
+                    "type": "Player",
+                    "seoIdentifier": "Bo Nix"
+                }
+            ],
+            "sortOrder": 20500,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019142_13L88808Q1-2079442314Q20",
+            "marketId": "218742459",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+120",
+                "decimal": "2.20",
+                "fractional": "6/5"
+            },
+            "trueOdds": 2.2,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 22042,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219475020#74820216_13L88808Q1-1363158856Q20",
+            "marketId": "219475020",
+            "label": "225+",
+            "displayOdds": {
+                "american": "+130",
+                "decimal": "2.30",
+                "fractional": "13/10"
+            },
+            "trueOdds": 2.3,
+            "participants": [
+                {
+                    "id": "20578",
+                    "name": "Gardner Minshew",
+                    "type": "Player",
+                    "seoIdentifier": "Gardner Minshew II"
+                }
+            ],
+            "sortOrder": 23016,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP",
+                "MostBalancedGlobalProbability"
+            ]
+        },
+        {
+            "id": "0QA219475023#74820044_13L88808Q1-1021625602Q20",
+            "marketId": "219475023",
+            "label": "200+",
+            "displayOdds": {
+                "american": "+130",
+                "decimal": "2.30",
+                "fractional": "13/10"
+            },
+            "trueOdds": 2.3,
+            "participants": [
+                {
+                    "id": "779692",
+                    "name": "Caleb Williams",
+                    "type": "Player",
+                    "seoIdentifier": "Caleb Williams"
+                }
+            ],
+            "sortOrder": 23044,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473472#74812884_13L88808Q1-399238935Q20",
+            "marketId": "219473472",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+135",
+                "decimal": "2.35",
+                "fractional": "27/20"
+            },
+            "trueOdds": 2.35,
+            "participants": [
+                {
+                    "id": "19982",
+                    "name": "Geno Smith",
+                    "type": "Player",
+                    "seoIdentifier": "Geno Smith"
+                }
+            ],
+            "sortOrder": 23584,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473437#74812561_13L88808Q1-399238935Q20",
+            "marketId": "219473437",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+140",
+                "decimal": "2.40",
+                "fractional": "7/5"
+            },
+            "trueOdds": 2.4,
+            "participants": [
+                {
+                    "id": "787907",
+                    "name": "Spencer Rattler",
+                    "type": "Player",
+                    "seoIdentifier": "Spencer Rattler"
+                }
+            ],
+            "sortOrder": 24061,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475022#74820077_13L88808Q1-399238935Q20",
+            "marketId": "219475022",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+145",
+                "decimal": "2.45",
+                "fractional": "29/20"
+            },
+            "trueOdds": 2.45,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 24577,
+            "tags": [
+                "MostBalancedOdds",
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473434#74812638_13L88808Q1-1021625602Q20",
+            "marketId": "219473434",
+            "label": "200+",
+            "displayOdds": {
+                "american": "+185",
+                "decimal": "2.85",
+                "fractional": "37/20"
+            },
+            "trueOdds": 2.85,
+            "participants": [
+                {
+                    "id": "468527",
+                    "name": "Justin Herbert",
+                    "type": "Player",
+                    "seoIdentifier": "Justin Herbert"
+                }
+            ],
+            "sortOrder": 28538,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742462#71019154_13L88808Q1-737182251Q20",
+            "marketId": "218742462",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+190",
+                "decimal": "2.90",
+                "fractional": "19/10"
+            },
+            "trueOdds": 2.9,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 29054,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474874#74819191_13L88808Q1-1021625602Q20",
+            "marketId": "219474874",
+            "label": "200+",
+            "displayOdds": {
+                "american": "+190",
+                "decimal": "2.90",
+                "fractional": "19/10"
+            },
+            "trueOdds": 2.9,
+            "participants": [
+                {
+                    "id": "693109",
+                    "name": "Bryce Young",
+                    "type": "Player",
+                    "seoIdentifier": "Bryce Young"
+                }
+            ],
+            "sortOrder": 29091,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473536#74813247_13L88808Q11822804915Q20",
+            "marketId": "219473536",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+195",
+                "decimal": "2.95",
+                "fractional": "39/20"
+            },
+            "trueOdds": 2.95,
+            "participants": [
+                {
+                    "id": "11370",
+                    "name": "Josh Allen",
+                    "type": "Player",
+                    "seoIdentifier": "Josh Allen"
+                }
+            ],
+            "sortOrder": 29547,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019143_13L88808Q1-737182251Q20",
+            "marketId": "218742459",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+240",
+                "decimal": "3.40",
+                "fractional": "12/5"
+            },
+            "trueOdds": 3.4,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 34043,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475021#74823397_13L88808Q1-1902438712Q20",
+            "marketId": "219475021",
+            "label": "325+",
+            "displayOdds": {
+                "american": "+255",
+                "decimal": "3.55",
+                "fractional": "51/20"
+            },
+            "trueOdds": 3.55,
+            "participants": [
+                {
+                    "id": "11644",
+                    "name": "Patrick Mahomes",
+                    "type": "Player",
+                    "seoIdentifier": "Patrick Mahomes"
+                }
+            ],
+            "sortOrder": 35597,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474872#74846109_13L88808Q1-1902438712Q20",
+            "marketId": "219474872",
+            "label": "325+",
+            "displayOdds": {
+                "american": "+295",
+                "decimal": "3.95",
+                "fractional": "59/20"
+            },
+            "trueOdds": 3.95,
+            "participants": [
+                {
+                    "id": "787661",
+                    "name": "Bo Nix",
+                    "type": "Player",
+                    "seoIdentifier": "Bo Nix"
+                }
+            ],
+            "sortOrder": 39509,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475023#74820045_13L88808Q1-1363158856Q20",
+            "marketId": "219475023",
+            "label": "225+",
+            "displayOdds": {
+                "american": "+295",
+                "decimal": "3.95",
+                "fractional": "59/20"
+            },
+            "trueOdds": 3.95,
+            "participants": [
+                {
+                    "id": "779692",
+                    "name": "Caleb Williams",
+                    "type": "Player",
+                    "seoIdentifier": "Caleb Williams"
+                }
+            ],
+            "sortOrder": 39545,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473472#74812885_13L88808Q11822804915Q20",
+            "marketId": "219473472",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+300",
+                "decimal": "4.00",
+                "fractional": "3/1"
+            },
+            "trueOdds": 4,
+            "participants": [
+                {
+                    "id": "19982",
+                    "name": "Geno Smith",
+                    "type": "Player",
+                    "seoIdentifier": "Geno Smith"
+                }
+            ],
+            "sortOrder": 40085,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475020#74820217_13L88808Q1-399238935Q20",
+            "marketId": "219475020",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+320",
+                "decimal": "4.20",
+                "fractional": "16/5"
+            },
+            "trueOdds": 4.2,
+            "participants": [
+                {
+                    "id": "20578",
+                    "name": "Gardner Minshew",
+                    "type": "Player",
+                    "seoIdentifier": "Gardner Minshew II"
+                }
+            ],
+            "sortOrder": 42017,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475022#74820078_13L88808Q11822804915Q20",
+            "marketId": "219475022",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+350",
+                "decimal": "4.50",
+                "fractional": "7/2"
+            },
+            "trueOdds": 4.5,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 45078,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742462#71019155_13L88808Q1-2038384185Q20",
+            "marketId": "218742462",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+370",
+                "decimal": "4.70",
+                "fractional": "37/10"
+            },
+            "trueOdds": 4.7,
+            "participants": [
+                {
+                    "id": "18078",
+                    "name": "Dak Prescott",
+                    "type": "Player",
+                    "seoIdentifier": "Dak Prescott"
+                }
+            ],
+            "sortOrder": 47055,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473437#74827035_13L88808Q11822804915Q20",
+            "marketId": "219473437",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+380",
+                "decimal": "4.80",
+                "fractional": "19/5"
+            },
+            "trueOdds": 4.8,
+            "participants": [
+                {
+                    "id": "787907",
+                    "name": "Spencer Rattler",
+                    "type": "Player",
+                    "seoIdentifier": "Spencer Rattler"
+                }
+            ],
+            "sortOrder": 48035,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA218742459#71019144_13L88808Q1-2038384185Q20",
+            "marketId": "218742459",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+475",
+                "decimal": "5.75",
+                "fractional": "19/4"
+            },
+            "trueOdds": 5.75,
+            "participants": [
+                {
+                    "id": "641156",
+                    "name": "Brock Purdy",
+                    "type": "Player",
+                    "seoIdentifier": "Brock Purdy"
+                }
+            ],
+            "sortOrder": 57544,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474874#74819192_13L88808Q1-1363158856Q20",
+            "marketId": "219474874",
+            "label": "225+",
+            "displayOdds": {
+                "american": "+475",
+                "decimal": "5.75",
+                "fractional": "19/4"
+            },
+            "trueOdds": 5.75,
+            "participants": [
+                {
+                    "id": "693109",
+                    "name": "Bryce Young",
+                    "type": "Player",
+                    "seoIdentifier": "Bryce Young"
+                }
+            ],
+            "sortOrder": 57592,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473434#74812640_13L88808Q1-1363158856Q20",
+            "marketId": "219473434",
+            "label": "225+",
+            "displayOdds": {
+                "american": "+500",
+                "decimal": "6.00",
+                "fractional": "5/1"
+            },
+            "trueOdds": 6,
+            "participants": [
+                {
+                    "id": "468527",
+                    "name": "Justin Herbert",
+                    "type": "Player",
+                    "seoIdentifier": "Justin Herbert"
+                }
+            ],
+            "sortOrder": 60040,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473536#74813248_13L88808Q11645859202Q20",
+            "marketId": "219473536",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+550",
+                "decimal": "6.50",
+                "fractional": "11/2"
+            },
+            "trueOdds": 6.5,
+            "participants": [
+                {
+                    "id": "11370",
+                    "name": "Josh Allen",
+                    "type": "Player",
+                    "seoIdentifier": "Josh Allen"
+                }
+            ],
+            "sortOrder": 65048,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475023#74820046_13L88808Q1-399238935Q20",
+            "marketId": "219475023",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+700",
+                "decimal": "8.00",
+                "fractional": "7/1"
+            },
+            "trueOdds": 8,
+            "participants": [
+                {
+                    "id": "779692",
+                    "name": "Caleb Williams",
+                    "type": "Player",
+                    "seoIdentifier": "Caleb Williams"
+                }
+            ],
+            "sortOrder": 80046,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475021#74823398_13L88808Q12023355888Q20",
+            "marketId": "219475021",
+            "label": "350+",
+            "displayOdds": {
+                "american": "+700",
+                "decimal": "8.00",
+                "fractional": "7/1"
+            },
+            "trueOdds": 8,
+            "participants": [
+                {
+                    "id": "11644",
+                    "name": "Patrick Mahomes",
+                    "type": "Player",
+                    "seoIdentifier": "Patrick Mahomes"
+                }
+            ],
+            "sortOrder": 80098,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473472#74812886_13L88808Q11645859202Q20",
+            "marketId": "219473472",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+750",
+                "decimal": "8.50",
+                "fractional": "15/2"
+            },
+            "trueOdds": 8.5,
+            "participants": [
+                {
+                    "id": "19982",
+                    "name": "Geno Smith",
+                    "type": "Player",
+                    "seoIdentifier": "Geno Smith"
+                }
+            ],
+            "sortOrder": 85086,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474872#74855783_13L88808Q12023355888Q20",
+            "marketId": "219474872",
+            "label": "350+",
+            "displayOdds": {
+                "american": "+850",
+                "decimal": "9.50",
+                "fractional": "17/2"
+            },
+            "trueOdds": 9.5,
+            "participants": [
+                {
+                    "id": "787661",
+                    "name": "Bo Nix",
+                    "type": "Player",
+                    "seoIdentifier": "Bo Nix"
+                }
+            ],
+            "sortOrder": 95083,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475020#74820218_13L88808Q11822804915Q20",
+            "marketId": "219475020",
+            "label": "275+",
+            "displayOdds": {
+                "american": "+900",
+                "decimal": "10.00",
+                "fractional": "9/1"
+            },
+            "trueOdds": 10,
+            "participants": [
+                {
+                    "id": "20578",
+                    "name": "Gardner Minshew",
+                    "type": "Player",
+                    "seoIdentifier": "Gardner Minshew II"
+                }
+            ],
+            "sortOrder": 100018,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219475022#74841162_13L88808Q11645859202Q20",
+            "marketId": "219475022",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+900",
+                "decimal": "10.00",
+                "fractional": "9/1"
+            },
+            "trueOdds": 10,
+            "participants": [
+                {
+                    "id": "779695",
+                    "name": "Jayden Daniels",
+                    "type": "Player",
+                    "seoIdentifier": "Jayden Daniels"
+                }
+            ],
+            "sortOrder": 100062,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219473437#74850208_13L88808Q11645859202Q20",
+            "marketId": "219473437",
+            "label": "300+",
+            "displayOdds": {
+                "american": "+1100",
+                "decimal": "12.00",
+                "fractional": "11/1"
+            },
+            "trueOdds": 12,
+            "participants": [
+                {
+                    "id": "787907",
+                    "name": "Spencer Rattler",
+                    "type": "Player",
+                    "seoIdentifier": "Spencer Rattler"
+                }
+            ],
+            "sortOrder": 120008,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": "0QA219474874#74819402_13L88808Q1-399238935Q20",
+            "marketId": "219474874",
+            "label": "250+",
+            "displayOdds": {
+                "american": "+1300",
+                "decimal": "14.00",
+                "fractional": "13/1"
+            },
+            "trueOdds": 14,
+            "participants": [
+                {
+                    "id": "693109",
+                    "name": "Bryce Young",
+                    "type": "Player",
+                    "seoIdentifier": "Bryce Young"
+                }
+            ],
+            "sortOrder": 140002,
+            "tags": [
+                "SGP"
+            ]
+        }
+    ],
+    "categories": [
+        {
+            "id": 492,
+            "name": "Game Lines",
+            "sortOrder": 492,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 998,
+            "name": "Live Drive Props",
+            "sortOrder": 526
+        },
+        {
+            "id": 1680,
+            "name": "Live Play Props",
+            "sortOrder": 527
+        },
+        {
+            "id": 1054,
+            "name": "Live TD Scorers",
+            "sortOrder": 528,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 1003,
+            "name": "TD Scorers",
+            "sortOrder": 532,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 1000,
+            "name": "Passing Props ",
+            "categoryType": "H2H",
+            "sortOrder": 550,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 1001,
+            "name": "Rushing Props",
+            "categoryType": "H2H",
+            "sortOrder": 634,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 1342,
+            "name": "Receiving Props",
+            "categoryType": "H2H",
+            "sortOrder": 638,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 1645,
+            "name": "Live Specials",
+            "sortOrder": 639
+        },
+        {
+            "id": 1002,
+            "name": "D/ST Props",
+            "sortOrder": 644,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 862,
+            "name": "Player Specials",
+            "sortOrder": 645
+        },
+        {
+            "id": 1303,
+            "name": "1st Drive",
+            "sortOrder": 669
+        },
+        {
+            "id": 1559,
+            "name": "1st of Game",
+            "sortOrder": 742,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 1644,
+            "name": "Game Specials",
+            "sortOrder": 771
+        },
+        {
+            "id": 526,
+            "name": "Halves",
+            "sortOrder": 780,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 527,
+            "name": "Quarters",
+            "sortOrder": 782,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 528,
+            "name": "Game Props",
+            "sortOrder": 785,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 530,
+            "name": "Team Props",
+            "sortOrder": 786,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 1657,
+            "name": "Kickoff Specials",
+            "sortOrder": 856
+        },
+        {
+            "id": 999,
+            "name": "DK Squares",
+            "sortOrder": 857
+        },
+        {
+            "id": 529,
+            "name": "Futures",
+            "sortOrder": 974
+        },
+        {
+            "id": 787,
+            "name": "Awards",
+            "sortOrder": 976
+        },
+        {
+            "id": 1591,
+            "name": "2025 Draft",
+            "sortOrder": 1635
+        }
+    ],
+    "subcategories": [
+        {
+            "id": 10554,
+            "categoryId": 530,
+            "name": "Team Odd/Even",
+            "componentId": 202,
+            "sortOrder": 10518,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 11792,
+            "categoryId": 998,
+            "name": "Sack This Drive",
+            "componentId": 29,
+            "sortOrder": 9615,
+            "tags": []
+        },
+        {
+            "id": 12447,
+            "categoryId": 1054,
+            "name": "Anytime TD",
+            "componentId": 204,
+            "sortOrder": 10095,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 12448,
+            "categoryId": 1054,
+            "name": "Next TD Scorer",
+            "componentId": 204,
+            "sortOrder": 10097,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 12450,
+            "categoryId": 1054,
+            "name": "TD Scorer This Drive",
+            "componentId": 204,
+            "sortOrder": 10096,
+            "tags": [
+                "Featured",
+                "Live"
+            ]
+        },
+        {
+            "id": 12725,
+            "categoryId": 1054,
+            "name": "2+ TDs",
+            "componentId": 204,
+            "sortOrder": 13038,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 12726,
+            "categoryId": 1054,
+            "name": "3+ TDs",
+            "componentId": 204,
+            "sortOrder": 13598,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 13195,
+            "categoryId": 492,
+            "name": "Alternate Spread",
+            "componentId": 240,
+            "sortOrder": 4645,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 13196,
+            "categoryId": 492,
+            "name": "Alternate Total",
+            "componentId": 240,
+            "sortOrder": 4653,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 13459,
+            "categoryId": 528,
+            "name": "Overtime",
+            "componentId": 12,
+            "sortOrder": 4804,
+            "tags": []
+        },
+        {
+            "id": 13583,
+            "categoryId": 526,
+            "name": "Alternate Spread - 2H",
+            "componentId": 240,
+            "sortOrder": 4634,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 13585,
+            "categoryId": 526,
+            "name": "Alternate Total - 2H",
+            "componentId": 240,
+            "sortOrder": 4636,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 13633,
+            "categoryId": 998,
+            "name": "X Yard Play This Drive",
+            "componentId": 29,
+            "sortOrder": 9614,
+            "tags": []
+        },
+        {
+            "id": 13636,
+            "categoryId": 998,
+            "name": "Conversion Props",
+            "componentId": 29,
+            "sortOrder": 9617,
+            "tags": []
+        },
+        {
+            "id": 14114,
+            "categoryId": 1342,
+            "name": "Rec Yards O/U",
+            "componentId": 8,
+            "sortOrder": 14075,
+            "tags": [
+                "SGP",
+                "Live",
+                "ProgressiveParlayEligible"
+            ]
+        },
+        {
+            "id": 14115,
+            "categoryId": 1342,
+            "name": "Receptions O/U",
+            "componentId": 8,
+            "sortOrder": 14074,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 14117,
+            "categoryId": 1342,
+            "name": "Rec Yards",
+            "componentId": 29,
+            "sortOrder": 14073,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 14118,
+            "categoryId": 1001,
+            "name": "Rush Yards",
+            "componentId": 29,
+            "sortOrder": 9478,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 14119,
+            "categoryId": 1000,
+            "name": "Pass Yards",
+            "componentId": 29,
+            "sortOrder": 9477,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 15708,
+            "categoryId": 527,
+            "name": "3rd Quarter - Alt Total",
+            "componentId": 240,
+            "sortOrder": 9728,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 15937,
+            "categoryId": 1000,
+            "name": "Interceptions O/U",
+            "componentId": 8,
+            "sortOrder": 9491,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 16079,
+            "categoryId": 527,
+            "name": "3rd Quarter - Alt Spread",
+            "componentId": 240,
+            "sortOrder": 9414,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 16246,
+            "categoryId": 1645,
+            "name": "Passing Specials",
+            "componentId": 29,
+            "sortOrder": 15821,
+            "tags": [
+                "Featured",
+                "Live"
+            ]
+        },
+        {
+            "id": 16247,
+            "categoryId": 1645,
+            "name": "Rushing Specials",
+            "componentId": 29,
+            "sortOrder": 16203,
+            "tags": [
+                "Featured",
+                "Live"
+            ]
+        },
+        {
+            "id": 16280,
+            "categoryId": 1680,
+            "name": "Next Play TD",
+            "componentId": 29,
+            "sortOrder": 16237,
+            "tags": []
+        },
+        {
+            "id": 16281,
+            "categoryId": 1680,
+            "name": "Next Play 1st Down",
+            "componentId": 29,
+            "sortOrder": 16238,
+            "tags": []
+        },
+        {
+            "id": 16283,
+            "categoryId": 1680,
+            "name": "Next  Pass Attempt",
+            "componentId": 29,
+            "sortOrder": 16240,
+            "tags": []
+        },
+        {
+            "id": 16284,
+            "categoryId": 1680,
+            "name": "Next Carry",
+            "componentId": 29,
+            "sortOrder": 16241,
+            "tags": []
+        },
+        {
+            "id": 16285,
+            "categoryId": 1680,
+            "name": "Next Reception",
+            "componentId": 29,
+            "sortOrder": 16242,
+            "tags": []
+        },
+        {
+            "id": 4518,
+            "categoryId": 492,
+            "name": "Game",
+            "componentId": 210,
+            "sortOrder": 4513,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live",
+                "ProgressiveParlayTeamEligible"
+            ]
+        },
+        {
+            "id": 4641,
+            "categoryId": 526,
+            "name": "2nd Half",
+            "componentId": 210,
+            "sortOrder": 4633,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4643,
+            "categoryId": 527,
+            "name": "3rd Quarter",
+            "componentId": 210,
+            "sortOrder": 4635,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4644,
+            "categoryId": 527,
+            "name": "4th Quarter",
+            "componentId": 210,
+            "sortOrder": 4637,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4653,
+            "categoryId": 530,
+            "name": "Team Totals",
+            "componentId": 29,
+            "sortOrder": 4648,
+            "tags": [
+                "Featured",
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4659,
+            "categoryId": 528,
+            "name": "Odd/Even",
+            "componentId": 12,
+            "sortOrder": 14999,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4660,
+            "categoryId": 526,
+            "name": "Odd/Even",
+            "componentId": 29,
+            "sortOrder": 13543,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4661,
+            "categoryId": 527,
+            "name": "Odd/Even",
+            "componentId": 29,
+            "sortOrder": 10488,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4674,
+            "categoryId": 527,
+            "name": "3rd Quarter (3 Way)",
+            "componentId": 11,
+            "sortOrder": 10412,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 4738,
+            "categoryId": 526,
+            "name": "2nd Half - 3 Way",
+            "componentId": 11,
+            "sortOrder": 9305,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 8480,
+            "categoryId": 527,
+            "name": "Quarter Team Totals",
+            "componentId": 29,
+            "sortOrder": 4642,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9479,
+            "categoryId": 998,
+            "name": "Drive Result",
+            "componentId": 29,
+            "sortOrder": 9445,
+            "tags": [
+                "Featured",
+                "Live"
+            ]
+        },
+        {
+            "id": 9480,
+            "categoryId": 998,
+            "name": "Drive Yardage",
+            "componentId": 29,
+            "sortOrder": 9446,
+            "tags": []
+        },
+        {
+            "id": 9514,
+            "categoryId": 1001,
+            "name": "Rush Yards O/U",
+            "componentId": 8,
+            "sortOrder": 9480,
+            "tags": [
+                "SGP",
+                "Live",
+                "ProgressiveParlayEligible"
+            ]
+        },
+        {
+            "id": 9517,
+            "categoryId": 1000,
+            "name": "Pass Attempts O/U",
+            "componentId": 8,
+            "sortOrder": 9498,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9518,
+            "categoryId": 1001,
+            "name": "Rush Attempts O/U",
+            "componentId": 8,
+            "sortOrder": 9485,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9522,
+            "categoryId": 1000,
+            "name": "Completions O/U",
+            "componentId": 8,
+            "sortOrder": 9594,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9523,
+            "categoryId": 1001,
+            "name": "Rush + Rec Yards O/U",
+            "componentId": 8,
+            "sortOrder": 9484,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9524,
+            "categoryId": 1000,
+            "name": "Pass Yards O/U",
+            "componentId": 8,
+            "sortOrder": 9483,
+            "tags": [
+                "SGP",
+                "Live",
+                "ProgressiveParlayEligible"
+            ]
+        },
+        {
+            "id": 9525,
+            "categoryId": 1000,
+            "name": "Pass TDs O/U",
+            "componentId": 8,
+            "sortOrder": 9488,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 9532,
+            "categoryId": 1000,
+            "name": "Pass + Rush Yards O/U",
+            "componentId": 8,
+            "sortOrder": 9492,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9588,
+            "categoryId": 526,
+            "name": "Highest Scoring Half",
+            "componentId": 11,
+            "sortOrder": 8476,
+            "tags": [
+                "SGP",
+                "Live"
+            ]
+        },
+        {
+            "id": 10398,
+            "categoryId": 492,
+            "name": "Quarter / Full Time",
+            "componentId": 204,
+            "sortOrder": 10509,
+            "tags": []
+        },
+        {
+            "id": 10400,
+            "categoryId": 527,
+            "name": "Race to X Points",
+            "componentId": 30,
+            "sortOrder": 4666,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 10404,
+            "categoryId": 527,
+            "name": "Winning Margin - 1st Quarter",
+            "componentId": 203,
+            "sortOrder": 4650,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 10405,
+            "categoryId": 526,
+            "name": "Winning Margin - Listed Half",
+            "componentId": 203,
+            "sortOrder": 4732,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 10445,
+            "categoryId": 526,
+            "name": "Shutout - Listed Half",
+            "componentId": 29,
+            "sortOrder": 9411,
+            "tags": []
+        },
+        {
+            "id": 10448,
+            "categoryId": 527,
+            "name": "Shutout - Listed Quarter",
+            "componentId": 29,
+            "sortOrder": 8471,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 10508,
+            "categoryId": 530,
+            "name": "To Score 1st & Win/Lose",
+            "componentId": 29,
+            "sortOrder": 10478,
+            "tags": []
+        },
+        {
+            "id": 10509,
+            "categoryId": 530,
+            "name": "To Win With Shutout",
+            "componentId": 29,
+            "sortOrder": 10505,
+            "tags": []
+        },
+        {
+            "id": 10523,
+            "categoryId": 527,
+            "name": "Scoring Props",
+            "componentId": 29,
+            "sortOrder": 4668,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 10623,
+            "categoryId": 527,
+            "name": "Quarter TDs - Total",
+            "componentId": 29,
+            "sortOrder": 4643,
+            "tags": []
+        },
+        {
+            "id": 10627,
+            "categoryId": 526,
+            "name": "Scoring Props - Listed Half",
+            "componentId": 29,
+            "sortOrder": 4667,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 11812,
+            "categoryId": 1002,
+            "name": "Sacks",
+            "componentId": 8,
+            "sortOrder": 9486,
+            "tags": []
+        },
+        {
+            "id": 11924,
+            "categoryId": 530,
+            "name": "Team Totals (Bands)",
+            "componentId": 29,
+            "sortOrder": 5084,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 11944,
+            "categoryId": 999,
+            "name": "DK Squares - Any Quarter",
+            "componentId": 204,
+            "sortOrder": 9457,
+            "tags": []
+        },
+        {
+            "id": 12032,
+            "categoryId": 999,
+            "name": "DK Squares - Final Result",
+            "componentId": 204,
+            "sortOrder": 9459,
+            "tags": []
+        },
+        {
+            "id": 12094,
+            "categoryId": 1001,
+            "name": "Alt Rush Yards O/U",
+            "componentId": 29,
+            "sortOrder": 9481,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12096,
+            "categoryId": 1001,
+            "name": "Rush + Rec Yards",
+            "componentId": 29,
+            "sortOrder": 9479,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 12130,
+            "categoryId": 528,
+            "name": "Correct Score",
+            "componentId": 204,
+            "sortOrder": 5100,
+            "tags": []
+        },
+        {
+            "id": 12438,
+            "categoryId": 1003,
+            "name": "TD Scorer",
+            "componentId": 18,
+            "sortOrder": 9512,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 12625,
+            "categoryId": 526,
+            "name": "Halves Won",
+            "componentId": 29,
+            "sortOrder": 8473,
+            "tags": []
+        },
+        {
+            "id": 12635,
+            "categoryId": 527,
+            "name": "Correct Score - 1st Quarter",
+            "componentId": 204,
+            "sortOrder": 4644,
+            "tags": []
+        },
+        {
+            "id": 12636,
+            "categoryId": 526,
+            "name": "Correct Score - 1st Half",
+            "componentId": 204,
+            "sortOrder": 4712,
+            "tags": []
+        },
+        {
+            "id": 13561,
+            "categoryId": 1303,
+            "name": "1st Drive Result",
+            "componentId": 29,
+            "sortOrder": 13521,
+            "tags": [
+                "Featured"
+            ]
+        },
+        {
+            "id": 13566,
+            "categoryId": 1303,
+            "name": "1st Drive - TD Scorer",
+            "componentId": 29,
+            "sortOrder": 13528,
+            "tags": []
+        },
+        {
+            "id": 13567,
+            "categoryId": 1303,
+            "name": "1st Drive - Conversions",
+            "componentId": 29,
+            "sortOrder": 13679,
+            "tags": []
+        },
+        {
+            "id": 13569,
+            "categoryId": 1303,
+            "name": "1st Drive - 1st Down",
+            "componentId": 29,
+            "sortOrder": 13532,
+            "tags": []
+        },
+        {
+            "id": 13570,
+            "categoryId": 1303,
+            "name": "1st Drive - Sack",
+            "componentId": 29,
+            "sortOrder": 13538,
+            "tags": []
+        },
+        {
+            "id": 13571,
+            "categoryId": 1303,
+            "name": "1st Drive - Distance",
+            "componentId": 29,
+            "sortOrder": 13548,
+            "tags": []
+        },
+        {
+            "id": 13572,
+            "categoryId": 1303,
+            "name": "1st Drive - Big Play",
+            "componentId": 29,
+            "sortOrder": 13549,
+            "tags": []
+        },
+        {
+            "id": 13578,
+            "categoryId": 1303,
+            "name": "1st Drive FG",
+            "componentId": 29,
+            "sortOrder": 13550,
+            "tags": []
+        },
+        {
+            "id": 13588,
+            "categoryId": 1303,
+            "name": "Score on 1st Drive",
+            "componentId": 29,
+            "sortOrder": 13524,
+            "tags": []
+        },
+        {
+            "id": 13705,
+            "categoryId": 530,
+            "name": "Comeback",
+            "componentId": 29,
+            "sortOrder": 10510,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 13720,
+            "categoryId": 1303,
+            "name": "Each Team 1st Drive",
+            "componentId": 204,
+            "sortOrder": 13529,
+            "tags": []
+        },
+        {
+            "id": 14113,
+            "categoryId": 1342,
+            "name": "Alt Rec Yards O/U",
+            "componentId": 29,
+            "sortOrder": 14077,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 14225,
+            "categoryId": 1342,
+            "name": "Rec Yards - Race To",
+            "componentId": 204,
+            "sortOrder": 15974,
+            "tags": []
+        },
+        {
+            "id": 14457,
+            "categoryId": 1002,
+            "name": "Kick/Punt Return Props",
+            "componentId": 29,
+            "sortOrder": 14417,
+            "tags": []
+        },
+        {
+            "id": 14479,
+            "categoryId": 1002,
+            "name": "Turnovers",
+            "componentId": 29,
+            "sortOrder": 10498,
+            "tags": []
+        },
+        {
+            "id": 14489,
+            "categoryId": 528,
+            "name": "Last Scoring Play",
+            "componentId": 29,
+            "sortOrder": 5324,
+            "tags": []
+        },
+        {
+            "id": 14806,
+            "categoryId": 530,
+            "name": "Team Totals - TDs",
+            "componentId": 29,
+            "sortOrder": 4657,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 15030,
+            "categoryId": 1002,
+            "name": "Safety",
+            "componentId": 29,
+            "sortOrder": 10497,
+            "tags": []
+        },
+        {
+            "id": 15031,
+            "categoryId": 1002,
+            "name": "FG Yards",
+            "componentId": 29,
+            "sortOrder": 11776,
+            "tags": []
+        },
+        {
+            "id": 15032,
+            "categoryId": 1002,
+            "name": "FG Total",
+            "componentId": 29,
+            "sortOrder": 11921,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 15033,
+            "categoryId": 1002,
+            "name": "FG Props",
+            "componentId": 29,
+            "sortOrder": 12124,
+            "tags": []
+        },
+        {
+            "id": 15035,
+            "categoryId": 1002,
+            "name": "Punt Total",
+            "componentId": 29,
+            "sortOrder": 14413,
+            "tags": []
+        },
+        {
+            "id": 15036,
+            "categoryId": 1002,
+            "name": "Punt Props",
+            "componentId": 29,
+            "sortOrder": 14414,
+            "tags": []
+        },
+        {
+            "id": 15037,
+            "categoryId": 1002,
+            "name": "Sacks Team",
+            "componentId": 29,
+            "sortOrder": 9603,
+            "tags": []
+        },
+        {
+            "id": 15047,
+            "categoryId": 527,
+            "name": "Every Quarter",
+            "componentId": 29,
+            "sortOrder": 4669,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 15049,
+            "categoryId": 1559,
+            "name": "1st First Down",
+            "componentId": 29,
+            "sortOrder": 15009,
+            "tags": []
+        },
+        {
+            "id": 15052,
+            "categoryId": 1559,
+            "name": "1st Score",
+            "componentId": 29,
+            "sortOrder": 15013,
+            "tags": []
+        },
+        {
+            "id": 15053,
+            "categoryId": 1559,
+            "name": "1st TD",
+            "componentId": 29,
+            "sortOrder": 15015,
+            "tags": []
+        },
+        {
+            "id": 15059,
+            "categoryId": 1559,
+            "name": "1st Sack",
+            "componentId": 29,
+            "sortOrder": 15020,
+            "tags": []
+        },
+        {
+            "id": 15060,
+            "categoryId": 1559,
+            "name": "1st Turnover",
+            "componentId": 29,
+            "sortOrder": 15017,
+            "tags": []
+        },
+        {
+            "id": 15064,
+            "categoryId": 1559,
+            "name": "1st FG",
+            "componentId": 29,
+            "sortOrder": 15016,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 15071,
+            "categoryId": 862,
+            "name": "Quarter Specials",
+            "componentId": 204,
+            "sortOrder": 9776,
+            "tags": []
+        },
+        {
+            "id": 15948,
+            "categoryId": 1342,
+            "name": "Longest Reception O/U",
+            "componentId": 8,
+            "sortOrder": 16018,
+            "tags": []
+        },
+        {
+            "id": 15959,
+            "categoryId": 1003,
+            "name": "Combined TDs",
+            "componentId": 204,
+            "sortOrder": 9525,
+            "tags": []
+        },
+        {
+            "id": 15964,
+            "categoryId": 1003,
+            "name": "Player Not To Score",
+            "componentId": 204,
+            "sortOrder": 16233,
+            "tags": []
+        },
+        {
+            "id": 15968,
+            "categoryId": 1000,
+            "name": "Longest Completion O/U",
+            "componentId": 8,
+            "sortOrder": 9595,
+            "tags": []
+        },
+        {
+            "id": 15976,
+            "categoryId": 862,
+            "name": "Trending Specials",
+            "componentId": 204,
+            "sortOrder": 7937,
+            "tags": []
+        },
+        {
+            "id": 15987,
+            "categoryId": 1000,
+            "name": "Pass TDs",
+            "componentId": 29,
+            "sortOrder": 9482,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 16013,
+            "categoryId": 1303,
+            "name": "1st Drive - Catch a Pass",
+            "componentId": 204,
+            "sortOrder": 13527,
+            "tags": []
+        },
+        {
+            "id": 16014,
+            "categoryId": 862,
+            "name": "Half Specials",
+            "componentId": 204,
+            "sortOrder": 9775,
+            "tags": []
+        },
+        {
+            "id": 16015,
+            "categoryId": 862,
+            "name": "Combined Player Yards",
+            "componentId": 204,
+            "sortOrder": 9777,
+            "tags": []
+        },
+        {
+            "id": 16060,
+            "categoryId": 1000,
+            "name": "Pass Yards - 1Q",
+            "componentId": 29,
+            "sortOrder": 9572,
+            "tags": []
+        },
+        {
+            "id": 16061,
+            "categoryId": 1342,
+            "name": "Rec Yards - 1Q",
+            "componentId": 29,
+            "sortOrder": 14185,
+            "tags": []
+        },
+        {
+            "id": 16062,
+            "categoryId": 1001,
+            "name": "Rush Yards - 1Q",
+            "componentId": 29,
+            "sortOrder": 9493,
+            "tags": []
+        },
+        {
+            "id": 16072,
+            "categoryId": 1001,
+            "name": "Rush Yards - H2H",
+            "componentId": 310,
+            "sortOrder": 16029,
+            "tags": []
+        },
+        {
+            "id": 16073,
+            "categoryId": 1342,
+            "name": "Rec Yards - H2H",
+            "componentId": 310,
+            "sortOrder": 16033,
+            "tags": []
+        },
+        {
+            "id": 16076,
+            "categoryId": 1342,
+            "name": "Most Rec Yards",
+            "componentId": 204,
+            "sortOrder": 16045,
+            "tags": []
+        },
+        {
+            "id": 16087,
+            "categoryId": 1003,
+            "name": "Either Player 1st TD",
+            "componentId": 204,
+            "sortOrder": 9520,
+            "tags": []
+        },
+        {
+            "id": 16234,
+            "categoryId": 1644,
+            "name": "Popular Specials",
+            "componentId": 204,
+            "sortOrder": 16191,
+            "tags": [
+                "Featured"
+            ]
+        },
+        {
+            "id": 16276,
+            "categoryId": 1003,
+            "name": "Either Player to Score",
+            "componentId": 29,
+            "sortOrder": 9518,
+            "tags": []
+        },
+        {
+            "id": 16282,
+            "categoryId": 1003,
+            "name": "Either Player to Score X+",
+            "componentId": 204,
+            "sortOrder": 9529,
+            "tags": []
+        },
+        {
+            "id": 4631,
+            "categoryId": 526,
+            "name": "1st Half",
+            "componentId": 210,
+            "sortOrder": 4626,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 4632,
+            "categoryId": 527,
+            "name": "1st Quarter",
+            "componentId": 210,
+            "sortOrder": 4627,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 4642,
+            "categoryId": 527,
+            "name": "2nd Quarter",
+            "componentId": 210,
+            "sortOrder": 4631,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 5873,
+            "categoryId": 528,
+            "name": "Winning Margin",
+            "componentId": 202,
+            "sortOrder": 4640,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 8411,
+            "categoryId": 492,
+            "name": "3-Way Moneyline",
+            "componentId": 30,
+            "sortOrder": 15577,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9319,
+            "categoryId": 528,
+            "name": "TD Props",
+            "componentId": 29,
+            "sortOrder": 4632,
+            "tags": [
+                "Featured",
+                "SGP"
+            ]
+        },
+        {
+            "id": 9320,
+            "categoryId": 526,
+            "name": "TD Props",
+            "componentId": 29,
+            "sortOrder": 4733,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9323,
+            "categoryId": 528,
+            "name": "Largest Lead",
+            "componentId": 29,
+            "sortOrder": 9559,
+            "tags": []
+        },
+        {
+            "id": 9325,
+            "categoryId": 528,
+            "name": "Scoring Specials",
+            "componentId": 29,
+            "sortOrder": 4628,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9326,
+            "categoryId": 528,
+            "name": "Both Teams to Score X",
+            "componentId": 29,
+            "sortOrder": 4659,
+            "tags": []
+        },
+        {
+            "id": 9449,
+            "categoryId": 526,
+            "name": "Team Odd/Even",
+            "componentId": 203,
+            "sortOrder": 9413,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9520,
+            "categoryId": 1002,
+            "name": "Kicking Pts",
+            "componentId": 8,
+            "sortOrder": 10539,
+            "tags": []
+        },
+        {
+            "id": 9528,
+            "categoryId": 1002,
+            "name": "PAT Made",
+            "componentId": 8,
+            "sortOrder": 10540,
+            "tags": []
+        },
+        {
+            "id": 9529,
+            "categoryId": 1002,
+            "name": "FG Made",
+            "componentId": 8,
+            "sortOrder": 10533,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9533,
+            "categoryId": 1001,
+            "name": "Longest Rush O/U",
+            "componentId": 8,
+            "sortOrder": 12058,
+            "tags": []
+        },
+        {
+            "id": 9567,
+            "categoryId": 528,
+            "name": "Race to X Pts",
+            "componentId": 30,
+            "sortOrder": 4658,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9583,
+            "categoryId": 526,
+            "name": "Team Totals - Listed Half",
+            "componentId": 29,
+            "sortOrder": 4655,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9584,
+            "categoryId": 526,
+            "name": "Race to X Points",
+            "componentId": 30,
+            "sortOrder": 9272,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9590,
+            "categoryId": 528,
+            "name": "2 Pt Conversion",
+            "componentId": 29,
+            "sortOrder": 5080,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9712,
+            "categoryId": 492,
+            "name": "Half Time / Full Time",
+            "componentId": 204,
+            "sortOrder": 10484,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 11961,
+            "categoryId": 998,
+            "name": "New Downs",
+            "componentId": 29,
+            "sortOrder": 9650,
+            "tags": [
+                "Featured",
+                "Live"
+            ]
+        },
+        {
+            "id": 13689,
+            "categoryId": 998,
+            "name": "Catch This Drive",
+            "componentId": 29,
+            "sortOrder": 9616,
+            "tags": []
+        },
+        {
+            "id": 10336,
+            "categoryId": 1003,
+            "name": "Anytime TD - 2nd Half",
+            "componentId": 204,
+            "sortOrder": 11953,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 11818,
+            "categoryId": 1003,
+            "name": "Last TD Scorer",
+            "componentId": 204,
+            "sortOrder": 9927,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 11938,
+            "categoryId": 1003,
+            "name": "TD Exactas",
+            "componentId": 204,
+            "sortOrder": 9536,
+            "tags": []
+        },
+        {
+            "id": 11993,
+            "categoryId": 1003,
+            "name": "To Score in Both Halves",
+            "componentId": 204,
+            "sortOrder": 9924,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12093,
+            "categoryId": 1000,
+            "name": "Alt Pass Yards O/U",
+            "componentId": 29,
+            "sortOrder": 9490,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12422,
+            "categoryId": 1003,
+            "name": "3+ TDs",
+            "componentId": 204,
+            "sortOrder": 9531,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12423,
+            "categoryId": 1003,
+            "name": "Anytime TD - 1st Half",
+            "componentId": 204,
+            "sortOrder": 11783,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12424,
+            "categoryId": 1003,
+            "name": "Anytime TD - 1st Quarter",
+            "componentId": 204,
+            "sortOrder": 11955,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 12425,
+            "categoryId": 1003,
+            "name": "First TD Scorer - 2nd Half",
+            "componentId": 204,
+            "sortOrder": 15591,
+            "tags": []
+        },
+        {
+            "id": 13524,
+            "categoryId": 1003,
+            "name": "Q1 TD + Q1 ML",
+            "componentId": 204,
+            "sortOrder": 15916,
+            "tags": []
+        },
+        {
+            "id": 15038,
+            "categoryId": 1002,
+            "name": "Sacks Props",
+            "componentId": 29,
+            "sortOrder": 10496,
+            "tags": []
+        },
+        {
+            "id": 15057,
+            "categoryId": 1559,
+            "name": "1st Pass",
+            "componentId": 29,
+            "sortOrder": 15021,
+            "tags": []
+        },
+        {
+            "id": 15058,
+            "categoryId": 1559,
+            "name": "1st RZ Snap",
+            "componentId": 29,
+            "sortOrder": 15023,
+            "tags": []
+        },
+        {
+            "id": 15991,
+            "categoryId": 1657,
+            "name": "Opening Kickoff",
+            "componentId": 29,
+            "sortOrder": 15948,
+            "tags": []
+        },
+        {
+            "id": 15992,
+            "categoryId": 1657,
+            "name": "Total Returns",
+            "componentId": 29,
+            "sortOrder": 15949,
+            "tags": []
+        },
+        {
+            "id": 15993,
+            "categoryId": 1657,
+            "name": "Longest Return",
+            "componentId": 29,
+            "sortOrder": 15950,
+            "tags": []
+        },
+        {
+            "id": 15994,
+            "categoryId": 1657,
+            "name": "Return for a TD",
+            "componentId": 29,
+            "sortOrder": 15951,
+            "tags": []
+        },
+        {
+            "id": 15995,
+            "categoryId": 1657,
+            "name": "Starting Point",
+            "componentId": 29,
+            "sortOrder": 15952,
+            "tags": []
+        },
+        {
+            "id": 16070,
+            "categoryId": 1000,
+            "name": "Pass Yards - H2H",
+            "componentId": 310,
+            "sortOrder": 16027,
+            "tags": []
+        },
+        {
+            "id": 16074,
+            "categoryId": 1001,
+            "name": "Rush Yards - Race To",
+            "componentId": 204,
+            "sortOrder": 16031,
+            "tags": []
+        },
+        {
+            "id": 16075,
+            "categoryId": 1001,
+            "name": "Most Rush Yards",
+            "componentId": 204,
+            "sortOrder": 16032,
+            "tags": []
+        },
+        {
+            "id": 9521,
+            "categoryId": 1002,
+            "name": "Tackles + Ast",
+            "componentId": 8,
+            "sortOrder": 9487,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9530,
+            "categoryId": 1002,
+            "name": "Solo Tackles",
+            "componentId": 8,
+            "sortOrder": 9494,
+            "tags": [
+                "SGP"
+            ]
+        },
+        {
+            "id": 9531,
+            "categoryId": 1002,
+            "name": "Assists",
+            "componentId": 8,
+            "sortOrder": 9495,
+            "tags": []
+        },
+        {
+            "id": 9573,
+            "categoryId": 1003,
+            "name": "To Score & Win",
+            "componentId": 204,
+            "sortOrder": 9540,
+            "tags": []
+        },
+        {
+            "id": 9574,
+            "categoryId": 1003,
+            "name": "To Score 1st & Win",
+            "componentId": 204,
+            "sortOrder": 9658,
+            "tags": []
+        },
+        {
+            "id": 15363,
+            "categoryId": 1591,
+            "name": "Pick Number",
+            "componentId": 29,
+            "sortOrder": 15320,
+            "tags": []
+        },
+        {
+            "id": 13339,
+            "categoryId": 787,
+            "name": "MVP",
+            "componentId": 29,
+            "sortOrder": 7205,
+            "tags": []
+        },
+        {
+            "id": 10500,
+            "categoryId": 529,
+            "name": "Champion",
+            "componentId": 212,
+            "sortOrder": 4646,
+            "tags": []
+        }
+    ],
+    "subscriptionPartials": {
+        "league-events-88808": {
+            "entity": "events",
+            "query": "$filter=leagueId eq '88808' and clientMetadata/Subcategories/any(s: s/Id eq '14119')&$orderBy=startEventDate asc",
+            "includeMarkets": "$filter=tags/all(t: t ne 'SportcastBetBuilder') and clientMetadata/subCategoryId eq '14119'"
+        }
+    }
+}

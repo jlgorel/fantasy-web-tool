@@ -1,16 +1,21 @@
 """Build a suggested starting lineup per league.
 
-Uses Boris Chen tier rankings as the primary signal and Vegas projections as a
-tiebreaker. This module preserves the legacy behavior of
-``form_suggested_starts_based_on_boris`` exactly while splitting helpers out for
-clarity.
+Two ranking modes are supported via the ``mode`` parameter:
+
+* ``"boris"`` (default) — Boris Chen tier first, Flex tier as tiebreaker, Vegas
+  projection as final tiebreaker. Behavior is preserved bit-for-bit from the
+  original ``form_suggested_starts_based_on_boris`` so the existing
+  /load-league-data response shape is unchanged.
+* ``"vegas"`` — highest Vegas projected points first, falls back to Boris tier
+  + Flex tier when Vegas projections are tied or missing (off-season,
+  injured, no DraftKings line).
 """
 from __future__ import annotations
 
 import logging
 from collections import defaultdict
 from copy import copy, deepcopy
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Literal, Tuple
 
 from app.config import Config
 from app.services.blob_store import load_blob
@@ -18,6 +23,8 @@ from app.services.boris_chen import get_tier_page_names_from_league_settings
 from app.services.scoring import calculate_potential_fantasy_score
 
 logger = logging.getLogger(__name__)
+
+LineupMode = Literal["boris", "vegas"]
 
 
 # ---------------------------------------------------------------------------
@@ -86,11 +93,20 @@ def get_highest_ranked_player_from_page(
     sportsbook_projections: Dict[str, Any],
     backup_projections: Dict[str, Any],
     stat_point_multipliers: Dict[str, float],
+    mode: LineupMode = "boris",
 ):
-    """Pick the best player by:
+    """Pick the best player according to ``mode``.
+
+    ``mode="boris"`` (default — legacy behavior):
       1. Lowest Boris Chen tier at the given position
       2. If tied, lowest Flex tier (if available)
       3. If still tied, highest Vegas projection
+
+    ``mode="vegas"``:
+      1. Highest Vegas projected points
+      2. If tied (or both 0 — common off-season), lowest Boris Chen positional
+         tier as a sanity-preserving tiebreaker
+      3. If still tied, lowest Flex tier
     """
     if len(list_of_players) == 0:
         return "None Owned", "N/A"
@@ -109,11 +125,24 @@ def get_highest_ranked_player_from_page(
             player, pos_name, sportsbook_projections, backup_projections, stat_point_multipliers
         )
 
-        if (
-            tier < best_tier
-            or (tier == best_tier and flex < best_flex)
-            or (tier == best_tier and flex == best_flex and projected_points > best_proj)
-        ):
+        if mode == "vegas":
+            better = (
+                projected_points > best_proj
+                or (projected_points == best_proj and tier < best_tier)
+                or (
+                    projected_points == best_proj
+                    and tier == best_tier
+                    and flex < best_flex
+                )
+            )
+        else:
+            better = (
+                tier < best_tier
+                or (tier == best_tier and flex < best_flex)
+                or (tier == best_tier and flex == best_flex and projected_points > best_proj)
+            )
+
+        if better:
             best_player = player
             best_tier = tier
             best_flex = flex
@@ -243,11 +272,44 @@ def _format_starter_entry(
     return temp_dict
 
 
+def _annotate_qb_stacks(starters: List[Dict[str, Any]]) -> None:
+    """Mutate starter rows to mark same-NFL-team QB+WR/TE stacks.
+
+    For every starting QB (POS != BN, REALLIFE_POS == QB) we find any
+    starting WR/TE on the same NFL team and set ``STACK_WITH_QB`` + a
+    human-readable ``STACK_QB_NAME``. Bench rows are skipped intentionally
+    (the badge is meant to highlight active stacks the user has rolled out).
+    """
+    qb_team_to_name: Dict[str, str] = {}
+    for row in starters:
+        if row.get("POS") == "BN":
+            continue
+        if row.get("REALLIFE_POS") != "QB":
+            continue
+        team = row.get("TEAM_NAME")
+        if team and team != "UNKNOWN":
+            qb_team_to_name[team] = row.get("NAME", "QB")
+
+    if not qb_team_to_name:
+        return
+
+    for row in starters:
+        if row.get("POS") == "BN":
+            continue
+        if row.get("REALLIFE_POS") not in ("WR", "TE"):
+            continue
+        team = row.get("TEAM_NAME")
+        if team and team in qb_team_to_name:
+            row["STACK_WITH_QB"] = True
+            row["STACK_QB_NAME"] = qb_team_to_name[team]
+
+
 def form_suggested_starts_based_on_boris(
     user_rosters: List[Dict[str, Any]],
     league_position_groups: Dict[str, Dict[str, List[str]]],
     boris_chen_tiers: Dict[str, Dict[str, str]],
     name_to_pid: Dict[str, str],
+    mode: LineupMode = "boris",
 ) -> Dict[str, List[Dict[str, Any]]]:
     suggested_starts: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -300,6 +362,7 @@ def form_suggested_starts_based_on_boris(
                 sportsbook_projections,
                 backup_projections,
                 stat_point_multipliers,
+                mode=mode,
             )
 
             roster_table[pos_name].append({
@@ -335,6 +398,8 @@ def form_suggested_starts_based_on_boris(
                         stat_point_multipliers,
                     )
                 )
+
+        _annotate_qb_stacks(suggested_starts_for_roster)
 
         suggested_starts[str(roster["league"])] = suggested_starts_for_roster
 

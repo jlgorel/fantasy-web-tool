@@ -176,6 +176,15 @@ logs/
 #frontend local stuff
 *.env.local*
 
+# Local-only fixture blobs used with USE_FIXTURE_BLOBS=1 for offline dev.
+# These contain real Sleeper league ownership / projection data so they
+# should not be committed.
+tests/fixtures/blobs/
+
+# Raw (unsanitized) API captures from tools/capture_api_fixtures.py --raw.
+# The sanitized siblings (without the .raw suffix) are safe to commit.
+tests/fixtures/api/**/*.raw.json
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

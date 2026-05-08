@@ -26,6 +26,7 @@ from app.services.fleaflicker_client import (
 )
 from app.services.free_agents import form_top_free_agents_parallel
 from app.services.http_utils import fetch_json
+from app.services.lineup_compare import annotate_lineup_deltas, build_your_lineup
 from app.services.lineup_optimizer import (
     clean_up_pos_names,
     form_suggested_starts_based_on_boris,
@@ -47,12 +48,26 @@ logger = logging.getLogger(__name__)
 
 def cache_sleeper_user_info(
     username: str, user_uuid: str, website_name: str = "Sleeper"
-) -> Tuple[Dict[str, List[Dict[str, Any]]], Dict[str, Dict[str, List[Dict[str, Any]]]]]:
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, List[Dict[str, Any]]]]]:
     """Build suggested lineups + free agent recs for a user.
 
     Single entry point used by /load-sleeper-info. Pulls the user's rosters
     from the requested website (Sleeper or Fleaflicker), then runs the full
     Boris Chen + Vegas projection pipeline.
+
+    The returned lineup dict has shape::
+
+        {
+          "League Name": {
+            "boris_optimized": [player_rows...],   # primary, always present
+            "vegas_optimized": [player_rows...],   # always present
+            "your_lineup":     [player_rows...] | None,  # None for Fleaflicker
+          },
+          ...
+        }
+
+    The new shape is wrapper-compatible: callers that only need league names
+    just iterate the top-level keys, same as before.
     """
     pid_to_player, name_to_pid = prepare_pid_to_name_dict()
 
@@ -65,11 +80,35 @@ def cache_sleeper_user_info(
 
     boris_chen_dict = prepare_boris_chen_tier_dict()
     league_position_groups = prepare_position_groups_for_leagues(user_rosters, pid_to_player)
-    suggested_lineups = form_suggested_starts_based_on_boris(
-        user_rosters, league_position_groups, boris_chen_dict, name_to_pid
+
+    boris_lineups = form_suggested_starts_based_on_boris(
+        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="boris"
     )
+    vegas_lineups = form_suggested_starts_based_on_boris(
+        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="vegas"
+    )
+    your_lineups = build_your_lineup(user_rosters, name_to_pid, boris_chen_dict)
+
+    # Combine into a per-league dict and annotate optimized lineups with
+    # deltas vs the user's actual starters (when we have them).
+    combined: Dict[str, Dict[str, Any]] = {}
+    for league_name in boris_lineups.keys():
+        boris = boris_lineups[league_name]
+        vegas = vegas_lineups.get(league_name, [])
+        yours = your_lineups.get(league_name)
+
+        if yours:
+            annotate_lineup_deltas(boris, yours)
+            annotate_lineup_deltas(vegas, yours)
+
+        combined[league_name] = {
+            "boris_optimized": boris,
+            "vegas_optimized": vegas,
+            "your_lineup": yours,
+        }
+
     free_agents = form_top_free_agents_parallel(user_rosters, name_to_pid)
-    return suggested_lineups, free_agents
+    return combined, free_agents
 
 
 __all__ = [
