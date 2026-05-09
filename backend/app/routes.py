@@ -3,6 +3,7 @@ from app.services.sleeper_service import cache_sleeper_user_info, load_json_from
 from app.services.waiver_wire import get_waiver_wire
 from app.services.risers_fallers import get_risers_fallers
 from app.services.wrapped import compute_wrapped
+from app.services.wrapped.all_time import build_all_time_payload
 from app.services.player_detail import get_player_detail
 from app.services.sleeper_league_lookup import (
     get_league_season_chain,
@@ -172,7 +173,28 @@ def wrapped_sleeper(league_id):
     try:
         year = request.args.get('year', '2024')
         if year == 'all':
-            return jsonify({'error': "year='all' aggregation is not yet implemented"}), 501
+            cache_key = f"wrapped_all_v1_sleeper_{league_id}"
+            redis_client = current_app.redis_client
+            try:
+                cached = redis_client.get(cache_key)
+            except Exception:
+                cached = None
+            if cached:
+                try:
+                    return jsonify(json.loads(cached)), 200
+                except Exception:
+                    pass  # fall through to recompute
+
+            payload = build_all_time_payload(league_id)
+
+            try:
+                # Shorter TTL than per-year — small payload-of-payloads but
+                # we want changes to per-year caches to propagate quickly.
+                redis_client.set(cache_key, json.dumps(payload), ex=3600)  # 1h
+            except Exception as cache_err:
+                print(f"Wrapped all-time cache set failed: {cache_err}")
+
+            return jsonify(payload), 200
 
         # v4: payload now includes the Phase-4 `streamers` section.
         cache_key = f"wrapped_v4_sleeper_{league_id}_{year}"

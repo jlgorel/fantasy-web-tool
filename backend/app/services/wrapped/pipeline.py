@@ -251,6 +251,11 @@ def _build_payload(league_id: str, year: str) -> Dict[str, Any]:
             "playoff_week_start": ctx.playoff_week_start,
             "scoring_keys": {"qb": ctx.qb_score_key, "skill": ctx.skill_score_key},
             "users": sorted(weekly_scores.usernames),
+            # Stable user_id <-> display_name map for the all-time aggregator.
+            # Display names can change across seasons; user_ids do not. Additive
+            # field — pre-existing v4 caches that lack this gracefully degrade
+            # to display-name-only matching in the aggregator.
+            "user_id_to_username": dict(ctx.user_id_to_username),
         },
         "schedule": _build_schedule_section(weekly_scores),
         "roster_moves": _build_roster_moves_section(

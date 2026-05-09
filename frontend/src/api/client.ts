@@ -15,7 +15,7 @@ import {
   SleeperUserLeaguesResponse,
   WaiverWireResponse,
   WebsiteName,
-  WrappedResponse,
+  WrappedApiResponse,
 } from '../types/player';
 
 if (!process.env.REACT_APP_API_BASE_URL) {
@@ -91,9 +91,9 @@ export const api = {
     return request<PlayerDetailResponse>(`/player/${encodeURIComponent(playerId)}`);
   },
 
-  getWrappedSleeper(leagueId: string, year?: string): Promise<WrappedResponse> {
+  getWrappedSleeper(leagueId: string, year?: string): Promise<WrappedApiResponse> {
     const qs = year ? `?year=${encodeURIComponent(year)}` : '';
-    return request<WrappedResponse>(`/wrapped/sleeper/${encodeURIComponent(leagueId)}${qs}`);
+    return request<WrappedApiResponse>(`/wrapped/sleeper/${encodeURIComponent(leagueId)}${qs}`);
   },
 
   getSleeperUserLeagues(username: string, year?: string): Promise<SleeperUserLeaguesResponse> {

@@ -190,6 +190,9 @@ export interface WrappedMeta {
   playoff_week_start: number;
   scoring_keys: { qb: string; skill: string };
   users: string[];
+  // Phase 4 / TODO #5: stable user_id -> display_name map for the all-time
+  // aggregator. Optional because pre-Phase-4 v4 caches don't include it.
+  user_id_to_username?: { [userId: string]: string };
 }
 
 export interface WrappedLuckEntry {
@@ -254,6 +257,68 @@ export interface WrappedResponse {
   trades?: WrappedTradesPayload;
   streamers?: WrappedStreamersPayload;
 }
+
+// Phase 4 / TODO #5: all-time aggregator (year=all). Each accolade is a
+// crown winner across the full league_chain history. ``user_id`` is the
+// stable Sleeper id (null for legacy buckets keyed by display name only).
+export interface WrappedAllTimeCrown {
+  username: string;
+  user_id: string | null;
+  years_won: number;
+}
+
+export interface WrappedAllTimeTroll {
+  username: string;
+  user_id: string | null;
+  total_troll_value: number;
+  years_counted: number;
+}
+
+export interface WrappedAllTimeEfficiency {
+  username: string;
+  user_id: string | null;
+  avg_efficiency_pct: number;
+  years_counted: number;
+}
+
+export interface WrappedAllTimeTrades {
+  username: string;
+  user_id: string | null;
+  total_trades: number;
+}
+
+export interface WrappedAllTimeNetValue {
+  username: string;
+  user_id: string | null;
+  net_value_gained: number;
+}
+
+export interface WrappedAllTimeAccolades {
+  luckiest: WrappedAllTimeCrown | null;
+  unluckiest: WrappedAllTimeCrown | null;
+  worst_start_sit: WrappedAllTimeTroll | null;
+  most_efficient: WrappedAllTimeEfficiency | null;
+  least_efficient: WrappedAllTimeEfficiency | null;
+  most_active_trader: WrappedAllTimeTrades | null;
+  biggest_net_gainer: WrappedAllTimeNetValue | null;
+  biggest_net_loser: WrappedAllTimeNetValue | null;
+}
+
+export interface WrappedAllTimeYear {
+  year: string;
+  league_id: string;
+  payload: WrappedResponse;
+}
+
+export interface WrappedAllTimeResponse {
+  mode: 'all_time';
+  all_time: WrappedAllTimeAccolades;
+  years: WrappedAllTimeYear[];
+}
+
+// Discriminated union returned by the wrapped endpoint. Per-season payloads
+// don't carry a ``mode`` field; all-time payloads do.
+export type WrappedApiResponse = WrappedResponse | WrappedAllTimeResponse;
 
 // Phase 4: best-streamers section.
 export interface WrappedStreamerEntry {

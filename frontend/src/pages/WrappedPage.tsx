@@ -39,10 +39,15 @@ import {
   Th,
   Td,
   TableContainer,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
 } from '@chakra-ui/react';
 import { api } from '../api/client';
 import { LineChart, LineSeries } from '../components/LineChart';
-import { SleeperLeagueSeason, WrappedResponse, WrappedStreamersPayload } from '../types/player';
+import { SleeperLeagueSeason, WrappedApiResponse, WrappedAllTimeAccolades, WrappedAllTimeResponse, WrappedResponse, WrappedStreamersPayload } from '../types/player';
 
 
 function fallbackYearOptions(): string[] {
@@ -249,6 +254,657 @@ const StreamersSection: React.FC<{ data: WrappedStreamersPayload }> = ({
 };
 
 
+/**
+ * Renders the full per-season Wrapped content (hero accolades, best-ball
+ * leaderboard, hypothetical-schedule matrix, weekly chart, roster_moves /
+ * draft / trades / streamers sections) for one season's payload.
+ *
+ * Extracted out of ``WrappedPage`` so the all-time view (TODO #5) can reuse
+ * the same render code for each year inside its accordion. Pure over its
+ * ``payload`` prop — no fetching, no router state.
+ */
+const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
+  const weeklySeries: LineSeries[] = useMemo(() => {
+    const { weekly_scores } = payload.schedule;
+    return Object.entries(weekly_scores).map(([user, byWeek], i) => ({
+      label: user,
+      color: SERIES_COLORS[i % SERIES_COLORS.length],
+      points: Object.entries(byWeek)
+        .map(([w, pts]) => ({ x: parseInt(w, 10), y: Number(pts) }))
+        .filter((p) => Number.isFinite(p.x))
+        .sort((a, b) => a.x - b.x),
+    }));
+  }, [payload]);
+
+  // Median scores derived from the schedule payload — drawn as a single
+  // reference line on the weekly chart (averaged so it's a flat overlay
+  // rather than a per-week wiggle, which is hard to read at this size).
+  const medianAvg = useMemo(() => {
+    const vals = Object.values(payload.schedule.median_scores);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + Number(b), 0) / vals.length;
+  }, [payload]);
+
+  // Best-ball leaderboard sorted by wins desc.
+  const bestBallRanking = useMemo(() => {
+    return Object.entries(payload.schedule.best_ball_records)
+      .map(([user, rec]) => ({ user, ...rec }))
+      .sort((a, b) => b.wins - a.wins);
+  }, [payload]);
+
+  return (
+    <VStack align="stretch" gap={4}>
+      {/* Hero accolades */}
+      <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} gap={3}>
+        {accoladeCard(
+          'Luckiest',
+          payload.schedule.luck.luckiest.username,
+          payload.schedule.luck.luckiest.username
+            ? `${payload.schedule.luck.luckiest.count} wins below median`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Unluckiest',
+          payload.schedule.luck.unluckiest.username,
+          payload.schedule.luck.unluckiest.username
+            ? `${payload.schedule.luck.unluckiest.count} losses above median`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Most consistent',
+          payload.schedule.consistency.most_consistent?.username,
+          payload.schedule.consistency.most_consistent
+            ? `MAD ${payload.schedule.consistency.most_consistent.mad.toFixed(1)} pts`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Least consistent',
+          payload.schedule.consistency.least_consistent?.username,
+          payload.schedule.consistency.least_consistent
+            ? `MAD ${payload.schedule.consistency.least_consistent.mad.toFixed(1)} pts`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Best manager',
+          payload.schedule.manager_efficiency.most_efficient?.username,
+          payload.schedule.manager_efficiency.most_efficient
+            ? `${payload.schedule.manager_efficiency.most_efficient.efficiency_pct.toFixed(1)}% of best-ball`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Worst manager',
+          payload.schedule.manager_efficiency.least_efficient?.username,
+          payload.schedule.manager_efficiency.least_efficient
+            ? `${payload.schedule.manager_efficiency.least_efficient.efficiency_pct.toFixed(1)}% of best-ball`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Biggest come-up',
+          payload.schedule.falloff_comeup.biggest_come_up?.username,
+          payload.schedule.falloff_comeup.biggest_come_up
+            ? `+${payload.schedule.falloff_comeup.biggest_come_up.delta.toFixed(1)} pts/wk`
+            : undefined,
+        )}
+        {accoladeCard(
+          'Biggest fall-off',
+          payload.schedule.falloff_comeup.biggest_falloff?.username,
+          payload.schedule.falloff_comeup.biggest_falloff
+            ? `−${payload.schedule.falloff_comeup.biggest_falloff.delta.toFixed(1)} pts/wk`
+            : undefined,
+        )}
+      </SimpleGrid>
+
+      {/* Best-ball leaderboard */}
+      <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+        <Heading size="sm" mb={2}>
+          Best-ball season standings
+        </Heading>
+        <Text fontSize="xs" color="gray.500" mb={2}>
+          Each week, you "win" against everyone whose best-possible lineup
+          scored less than yours. Sums across all played weeks.
+        </Text>
+        <TableContainer>
+          <Table size="sm" variant="simple">
+            <Thead>
+              <Tr>
+                <Th>Manager</Th>
+                <Th isNumeric>Wins</Th>
+                <Th isNumeric>Losses</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {bestBallRanking.map(({ user, wins, losses }) => (
+                <Tr key={user}>
+                  <Td>{user}</Td>
+                  <Td isNumeric>{wins}</Td>
+                  <Td isNumeric>{losses}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      {/* Hypothetical schedule matrix */}
+      <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+        <Heading size="sm" mb={2}>
+          What if you had ___'s schedule?
+        </Heading>
+        <Text fontSize="xs" color="gray.500" mb={2}>
+          Rows = your scores. Columns = whose schedule you "borrow". Diagonal
+          cells are everyone's actual record.
+        </Text>
+        <TableContainer maxW="100%" overflowX="auto">
+          <Table
+            size="sm"
+            variant="simple"
+            sx={{
+              // Tight padding so a 12-team matrix (13 cols) fits the
+              // page width without horizontal scrolling.
+              'th, td': { px: 1.5, py: 1, fontSize: 'xs' },
+            }}
+          >
+            <Thead>
+              <Tr>
+                <Th>You ↓ / Schedule of →</Th>
+                {payload.meta.users.map((u) => (
+                  <Th key={u} isNumeric>
+                    {u}
+                  </Th>
+                ))}
+              </Tr>
+            </Thead>
+            <Tbody>
+              {payload.meta.users.map((rowUser) => {
+                const row = payload.schedule.hypothetical_matrix[rowUser] ?? {};
+                return (
+                  <Tr key={rowUser}>
+                    <Td fontWeight="semibold">{rowUser}</Td>
+                    {payload.meta.users.map((colUser) => {
+                      const rec = row[colUser];
+                      const isDiag = rowUser === colUser;
+                      return (
+                        <Td
+                          key={colUser}
+                          isNumeric
+                          bg={isDiag ? 'blue.50' : undefined}
+                        >
+                          {rec ? `${rec.wins}-${rec.losses}` : '—'}
+                        </Td>
+                      );
+                    })}
+                  </Tr>
+                );
+              })}
+            </Tbody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      {/* Weekly scores chart */}
+      <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+        <Heading size="sm" mb={2}>
+          Weekly scores
+        </Heading>
+        <LineChart
+          series={weeklySeries}
+          xLabel="Week"
+          yLabel="Points"
+          yMin={0}
+          refLine={
+            medianAvg != null
+              ? { y: medianAvg, label: `Avg median ${medianAvg.toFixed(1)}` }
+              : undefined
+          }
+        />
+      </Box>
+
+      {/* Phase 2: Roster moves */}
+      {payload.roster_moves && (
+        <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+          <Heading size="sm" mb={2}>
+            Roster moves
+          </Heading>
+          <Text fontSize="xs" color="gray.500" mb={3}>
+            Troll = the player you started over a higher-scoring bench
+            player most often. Add/drop accolades use value over the
+            league's positional replacement-level player.
+          </Text>
+          <TableContainer>
+            <Table
+              size="sm"
+              variant="simple"
+              sx={{
+                // Tight padding so 6 columns of accolades fit a
+                // 10/12-team league at typical desktop widths.
+                'th, td': { px: 2, py: 1.5, fontSize: 'xs' },
+              }}
+            >
+              <Thead>
+                <Tr>
+                  <Th>Manager</Th>
+                  <Th>Biggest troll</Th>
+                  <Th>Best waiver add</Th>
+                  <Th>Worst drop</Th>
+                  <Th>Earliest pickup</Th>
+                  <Th>Held longest</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {payload.meta.users.map((user) => {
+                  const moves = payload.roster_moves!.by_user[user];
+                  const troll = payload.roster_moves!.troll[user];
+                  const bestWorstByPos = moves?.worst_drop ?? {};
+                  const worstByVal = Object.values(bestWorstByPos).sort(
+                    (a, b) => b.value_over_baseline - a.value_over_baseline,
+                  )[0];
+                  return (
+                    <Tr key={user}>
+                      <Td fontWeight="semibold">{user}</Td>
+                      <Td>
+                        {troll ? (
+                          <>
+                            {troll.name}
+                            <Text fontSize="xs" color="gray.500">
+                              bench {troll.bench_avg.toFixed(1)} vs start{' '}
+                              {troll.start_avg.toFixed(1)} (×{troll.num_start})
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td>
+                        {moves?.best_add ? (
+                          <>
+                            {moves.best_add.name}
+                            <Text fontSize="xs" color="gray.500">
+                              +{moves.best_add.value_over_baseline.toFixed(1)} vs baseline
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td>
+                        {worstByVal ? (
+                          <>
+                            {worstByVal.name}
+                            <Text fontSize="xs" color="gray.500">
+                              +{worstByVal.value_over_baseline.toFixed(1)} vs baseline
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td>
+                        {moves?.early_pickup ? (
+                          <>
+                            {moves.early_pickup.name}
+                            <Text fontSize="xs" color="gray.500">
+                              Wk {moves.early_pickup.week_added} @{' '}
+                              {moves.early_pickup.owned_pct_when_added.toFixed(0)}% owned
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td>
+                        {moves?.late_drop ? (
+                          <>
+                            {moves.late_drop.name}
+                            <Text fontSize="xs" color="gray.500">
+                              Dropped Wk {moves.late_drop.week_dropped} @{' '}
+                              {moves.late_drop.owned_pct_at_drop.toFixed(0)}% owned
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
+
+      {/* Phase 3: Draft */}
+      {payload.draft && Object.keys(payload.draft.by_user).length > 0 && (
+        <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+          <Heading size="sm" mb={2}>
+            Draft grades
+          </Heading>
+          <Text fontSize="xs" color="gray.500" mb={3}>
+            Value-over-slot = where a player was drafted at his
+            position vs. where he actually finished. Positive = steal,
+            negative = bust.
+          </Text>
+
+          {/* Hero accolades for the draft */}
+          <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} gap={3} mb={3}>
+            {accoladeCard(
+              'Biggest steal',
+              payload.draft.biggest_steal?.name,
+              payload.draft.biggest_steal
+                ? `Pick ${payload.draft.biggest_steal.pick_no} • ${payload.draft.biggest_steal.position}${payload.draft.biggest_steal.actual_pos_rank} (drafted ${payload.draft.biggest_steal.position}${payload.draft.biggest_steal.drafted_pos_rank})`
+                : undefined,
+            )}
+            {accoladeCard(
+              'Biggest bust',
+              payload.draft.biggest_bust?.name,
+              payload.draft.biggest_bust
+                ? `Pick ${payload.draft.biggest_bust.pick_no} • ${payload.draft.biggest_bust.position}${payload.draft.biggest_bust.actual_pos_rank} (drafted ${payload.draft.biggest_bust.position}${payload.draft.biggest_bust.drafted_pos_rank})`
+                : undefined,
+            )}
+            {accoladeCard(
+              'Mr. Irrelevant Hero',
+              payload.draft.mr_irrelevant_hero?.name,
+              payload.draft.mr_irrelevant_hero
+                ? `Pick ${payload.draft.mr_irrelevant_hero.pick_no} by ${payload.draft.mr_irrelevant_hero.username}`
+                : undefined,
+            )}
+          </SimpleGrid>
+
+          <TableContainer>
+            <Table
+              size="sm"
+              variant="simple"
+              sx={{ 'th, td': { px: 2, py: 1.5, fontSize: 'xs' } }}
+            >
+              <Thead>
+                <Tr>
+                  <Th>Manager</Th>
+                  <Th>Best pick</Th>
+                  <Th>Worst pick</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {payload.meta.users.map((user) => {
+                  const rec = payload.draft!.by_user[user];
+                  if (!rec) return null;
+                  return (
+                    <Tr key={user}>
+                      <Td fontWeight="semibold">{user}</Td>
+                      <Td>
+                        {rec.best_pick ? (
+                          <>
+                            {rec.best_pick.name}
+                            <Text fontSize="xs" color="gray.500">
+                              Pick {rec.best_pick.pick_no} •{' '}
+                              {rec.best_pick.position}
+                              {rec.best_pick.actual_pos_rank} (drafted{' '}
+                              {rec.best_pick.position}
+                              {rec.best_pick.drafted_pos_rank})
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                      <Td>
+                        {rec.worst_pick ? (
+                          <>
+                            {rec.worst_pick.name}
+                            <Text fontSize="xs" color="gray.500">
+                              Pick {rec.worst_pick.pick_no} •{' '}
+                              {rec.worst_pick.position}
+                              {rec.worst_pick.actual_pos_rank} (drafted{' '}
+                              {rec.worst_pick.position}
+                              {rec.worst_pick.drafted_pos_rank})
+                            </Text>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
+
+      {/* Phase 3: Trades */}
+      {payload.trades && payload.trades.trades.length > 0 && (
+        <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+          <Heading size="sm" mb={2}>
+            Trade ledger
+          </Heading>
+          <Text fontSize="xs" color="gray.500" mb={3}>
+            Player values are FantasyCalc trade values for this league
+            shape ({payload.meta.is_dynasty ? 'dynasty' : 'redraft'},{' '}
+            {payload.meta.num_qbs}-QB). Future draft picks use a flat
+            per-round value.
+          </Text>
+
+          <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3} mb={3}>
+            {accoladeCard(
+              'Biggest fleecing',
+              payload.trades.biggest_fleecing?.winner,
+              payload.trades.biggest_fleecing
+                ? `+${payload.trades.biggest_fleecing.value_gap.toFixed(0)} value, Wk ${payload.trades.biggest_fleecing.week}`
+                : undefined,
+            )}
+            {accoladeCard(
+              'Most active trader',
+              payload.trades.most_active_trader?.username,
+              payload.trades.most_active_trader
+                ? `${payload.trades.most_active_trader.num_trades} trade${payload.trades.most_active_trader.num_trades === 1 ? '' : 's'}`
+                : undefined,
+            )}
+          </SimpleGrid>
+
+          {/* Per-trade list */}
+          <TableContainer>
+            <Table
+              size="sm"
+              variant="simple"
+              sx={{ 'th, td': { px: 2, py: 1.5, fontSize: 'xs', verticalAlign: 'top' } }}
+            >
+              <Thead>
+                <Tr>
+                  <Th>Wk</Th>
+                  <Th>Sides</Th>
+                  <Th isNumeric>Gap</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {payload.trades.trades.map((trade) => (
+                  <Tr key={trade.transaction_id || `${trade.week}-${trade.winner}`}>
+                    <Td>{trade.week}</Td>
+                    <Td>
+                      <VStack align="stretch" gap={1}>
+                        {trade.sides.map((side) => (
+                          <Box key={side.username}>
+                            <Text
+                              fontWeight={
+                                side.username === trade.winner
+                                  ? 'semibold'
+                                  : 'normal'
+                              }
+                            >
+                              {side.username} got{' '}
+                              {[
+                                ...side.players.map((p) => p.name),
+                                ...side.picks.map(
+                                  (pk) =>
+                                    `${pk.season ?? '?'} R${pk.round ?? '?'} pick`,
+                                ),
+                              ].join(', ') || '—'}
+                            </Text>
+                            <Text fontSize="2xs" color="gray.500">
+                              Value {side.total_value.toFixed(0)}
+                            </Text>
+                          </Box>
+                        ))}
+                      </VStack>
+                    </Td>
+                    <Td isNumeric>
+                      {trade.value_gap > 0
+                        ? `+${trade.value_gap.toFixed(0)}`
+                        : '—'}
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
+
+      {/* Phase 4: Best streamers */}
+      {payload.streamers &&
+        payload.streamers.positions_included.length > 0 && (
+          <StreamersSection data={payload.streamers} />
+        )}
+    </VStack>
+  );
+};
+
+
+/**
+ * All-time hero accolade strip — eight crown cards keyed off the aggregator
+ * payload's top-level fields (luckiest / unluckiest / worst_start_sit /
+ * efficiency / trades). Each card collapses to "—" when the corresponding
+ * accolade is null (e.g. a chain with no completed trades).
+ */
+const AllTimeAccolades: React.FC<{ data: WrappedAllTimeAccolades }> = ({ data }) => {
+  const yearLabel = (n: number) => `${n} year${n === 1 ? '' : 's'}`;
+  return (
+    <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} gap={3}>
+      {accoladeCard(
+        '👑 All-time luckiest',
+        data.luckiest?.username,
+        data.luckiest ? `${yearLabel(data.luckiest.years_won)} crowned` : undefined,
+      )}
+      {accoladeCard(
+        '💀 All-time unluckiest',
+        data.unluckiest?.username,
+        data.unluckiest ? `${yearLabel(data.unluckiest.years_won)} crowned` : undefined,
+      )}
+      {accoladeCard(
+        '🤡 Worst start/sit',
+        data.worst_start_sit?.username,
+        data.worst_start_sit
+          ? `+${data.worst_start_sit.total_troll_value.toFixed(1)} troll over ${yearLabel(data.worst_start_sit.years_counted)}`
+          : undefined,
+      )}
+      {accoladeCard(
+        '🧠 Best lineup-setter',
+        data.most_efficient?.username,
+        data.most_efficient
+          ? `${data.most_efficient.avg_efficiency_pct.toFixed(1)}% avg over ${yearLabel(data.most_efficient.years_counted)}`
+          : undefined,
+      )}
+      {accoladeCard(
+        '🥱 Worst lineup-setter',
+        data.least_efficient?.username,
+        data.least_efficient
+          ? `${data.least_efficient.avg_efficiency_pct.toFixed(1)}% avg over ${yearLabel(data.least_efficient.years_counted)}`
+          : undefined,
+      )}
+      {accoladeCard(
+        '🤝 Most active trader',
+        data.most_active_trader?.username,
+        data.most_active_trader
+          ? `${data.most_active_trader.total_trades} total trade${data.most_active_trader.total_trades === 1 ? '' : 's'}`
+          : undefined,
+      )}
+      {accoladeCard(
+        '📈 Biggest net gainer',
+        data.biggest_net_gainer?.username,
+        data.biggest_net_gainer
+          ? `+${data.biggest_net_gainer.net_value_gained.toFixed(0)} value`
+          : undefined,
+      )}
+      {accoladeCard(
+        '📉 Biggest net loser',
+        data.biggest_net_loser?.username,
+        data.biggest_net_loser
+          ? `${data.biggest_net_loser.net_value_gained.toFixed(0)} value`
+          : undefined,
+      )}
+    </SimpleGrid>
+  );
+};
+
+
+/**
+ * All-time view — hero accolade strip plus a Chakra accordion of every
+ * season in the chain. Each accordion panel reuses ``YearSections``, so
+ * adding a new per-season accolade automatically lights up here too.
+ */
+const AllTimeView: React.FC<{ data: WrappedAllTimeResponse }> = ({ data }) => {
+  return (
+    <VStack align="stretch" gap={4}>
+      <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+        <Heading size="sm" mb={2}>
+          All-time accolades
+        </Heading>
+        <Text fontSize="xs" color="gray.500" mb={3}>
+          Crowns and totals across every season this league has been on
+          Sleeper. Players who've changed display names are aggregated by
+          their stable Sleeper user_id and rendered with the most recent
+          name we saw.
+        </Text>
+        <AllTimeAccolades data={data.all_time} />
+      </Box>
+
+      <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
+        <Heading size="sm" mb={2}>
+          Season by season
+        </Heading>
+        <Text fontSize="xs" color="gray.500" mb={3}>
+          {data.years.length} season{data.years.length === 1 ? '' : 's'} on
+          record. Click a year to expand its full Wrapped.
+        </Text>
+        {data.years.length === 0 ? (
+          <Text fontSize="sm" color="gray.500">
+            No seasons could be loaded for this league.
+          </Text>
+        ) : (
+          <Accordion allowToggle allowMultiple>
+            {data.years.map((entry) => (
+              <AccordionItem key={`${entry.year}-${entry.league_id}`}>
+                <AccordionButton
+                  _hover={{ bg: 'gray.50' }}
+                  _expanded={{ bg: 'gray.100' }}
+                >
+                  <Box flex="1" textAlign="left" fontWeight="semibold" color="gray.800">
+                    {entry.year}
+                    {entry.payload.meta?.league_name && (
+                      <Text as="span" fontWeight="normal" color="gray.500" ml={2}>
+                        — {entry.payload.meta.league_name}
+                      </Text>
+                    )}
+                  </Box>
+                  <AccordionIcon color="gray.600" />
+                </AccordionButton>
+                <AccordionPanel pb={4} px={{ base: 0, md: 2 }}>
+                  <YearSections payload={entry.payload} />
+                </AccordionPanel>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        )}
+      </Box>
+    </VStack>
+  );
+};
+
+
+// Sentinel "year" the dropdown uses to request the all-time aggregator
+// from the backend (``?year=all``).
+const ALL_TIME_YEAR = 'all';
+
+
 const WrappedPage: React.FC = () => {
   const { leagueId } = useParams<{ leagueId: string }>();
   const navigate = useNavigate();
@@ -262,17 +918,21 @@ const WrappedPage: React.FC = () => {
     null,
   );
   const yearOptions = useMemo(() => {
-    if (seasonChain && seasonChain.length > 0) {
-      return seasonChain.map((s) => s.season);
-    }
-    return fallbackYears;
+    const base =
+      seasonChain && seasonChain.length > 0
+        ? seasonChain.map((s) => s.season)
+        : fallbackYears;
+    // Always offer "All time" as the last option. Surface it only when
+    // the chain has at least one season to walk — degenerate against a
+    // league that returned a 404 chain.
+    return [...base, ALL_TIME_YEAR];
   }, [seasonChain, fallbackYears]);
   // Year is sourced from the URL so the page is shareable and so navigating
   // to a new (resolved) league_id keeps the user on the year they picked.
   const urlYear = searchParams.get('year');
   const year =
     urlYear && yearOptions.includes(urlYear) ? urlYear : yearOptions[0];
-  const [payload, setPayload] = useState<WrappedResponse | null>(null);
+  const [payload, setPayload] = useState<WrappedApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -301,8 +961,18 @@ const WrappedPage: React.FC = () => {
   // chain server-side to find the matching season's league_id, then
   // navigate to that URL. This keeps shareable URLs honest — the league_id
   // in the path always corresponds to the data being shown.
+  //
+  // For ``year=all`` we skip the resolve step entirely — the all-time
+  // payload is keyed off the *current* league_id and the backend walks
+  // the chain itself.
   const handleYearChange = async (newYear: string) => {
     if (!leagueId || newYear === year) return;
+    if (newYear === ALL_TIME_YEAR) {
+      navigate(
+        `/wrapped/sleeper/${encodeURIComponent(leagueId)}?year=${ALL_TIME_YEAR}`,
+      );
+      return;
+    }
     setResolving(true);
     setError(null);
     try {
@@ -351,36 +1021,22 @@ const WrappedPage: React.FC = () => {
     };
   }, [leagueId, year]);
 
-  const weeklySeries: LineSeries[] = useMemo(() => {
-    if (!payload) return [];
-    const { weekly_scores } = payload.schedule;
-    return Object.entries(weekly_scores).map(([user, byWeek], i) => ({
-      label: user,
-      color: SERIES_COLORS[i % SERIES_COLORS.length],
-      points: Object.entries(byWeek)
-        .map(([w, pts]) => ({ x: parseInt(w, 10), y: Number(pts) }))
-        .filter((p) => Number.isFinite(p.x))
-        .sort((a, b) => a.x - b.x),
-    }));
-  }, [payload]);
+  // Type guard — the all-time aggregator response is the only one with a
+  // ``mode`` discriminator.
+  const isAllTime = (
+    p: WrappedApiResponse,
+  ): p is WrappedAllTimeResponse =>
+    (p as WrappedAllTimeResponse).mode === 'all_time';
 
-  // Median scores derived from the schedule payload — drawn as a single
-  // reference line on the weekly chart (averaged so it's a flat overlay
-  // rather than a per-week wiggle, which is hard to read at this size).
-  const medianAvg = useMemo(() => {
-    if (!payload) return null;
-    const vals = Object.values(payload.schedule.median_scores);
-    if (!vals.length) return null;
-    return vals.reduce((a, b) => a + Number(b), 0) / vals.length;
-  }, [payload]);
+  // Header label / dynasty tag come from the per-season meta; for all-time
+  // we surface the most recent season's league_name (years are newest-first).
+  const headerMeta = payload && !isAllTime(payload)
+    ? payload.meta
+    : payload && isAllTime(payload) && payload.years.length > 0
+      ? payload.years[0].payload.meta
+      : null;
 
-  // Best-ball leaderboard sorted by wins desc.
-  const bestBallRanking = useMemo(() => {
-    if (!payload) return [];
-    return Object.entries(payload.schedule.best_ball_records)
-      .map(([user, rec]) => ({ user, ...rec }))
-      .sort((a, b) => b.wins - a.wins);
-  }, [payload]);
+  const yearLabel = (y: string) => (y === ALL_TIME_YEAR ? 'All time' : y);
 
   return (
     <Box p={{ base: 3, md: 6 }} maxW={{ base: '100%', xl: '1400px' }} mx="auto">
@@ -388,10 +1044,10 @@ const WrappedPage: React.FC = () => {
         <HStack justify="space-between" wrap="wrap" gap={3}>
           <Box>
             <Heading size="lg">League Wrapped</Heading>
-            {payload?.meta?.league_name && (
+            {headerMeta?.league_name && (
               <Text color="gray.600">
-                {payload.meta.league_name}
-                {payload.meta.is_dynasty && (
+                {headerMeta.league_name}
+                {headerMeta.is_dynasty && (
                   <Tag ml={2} colorScheme="purple" size="sm">
                     Dynasty
                   </Tag>
@@ -412,7 +1068,7 @@ const WrappedPage: React.FC = () => {
             >
               {yearOptions.map((y) => (
                 <option key={y} value={y}>
-                  {y}
+                  {yearLabel(y)}
                 </option>
               ))}
             </Select>
@@ -432,478 +1088,9 @@ const WrappedPage: React.FC = () => {
         )}
 
         {!loading && !error && payload && (
-          <>
-            {/* Hero accolades */}
-            <SimpleGrid columns={{ base: 1, sm: 2, md: 4 }} gap={3}>
-              {accoladeCard(
-                'Luckiest',
-                payload.schedule.luck.luckiest.username,
-                payload.schedule.luck.luckiest.username
-                  ? `${payload.schedule.luck.luckiest.count} wins below median`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Unluckiest',
-                payload.schedule.luck.unluckiest.username,
-                payload.schedule.luck.unluckiest.username
-                  ? `${payload.schedule.luck.unluckiest.count} losses above median`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Most consistent',
-                payload.schedule.consistency.most_consistent?.username,
-                payload.schedule.consistency.most_consistent
-                  ? `MAD ${payload.schedule.consistency.most_consistent.mad.toFixed(1)} pts`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Least consistent',
-                payload.schedule.consistency.least_consistent?.username,
-                payload.schedule.consistency.least_consistent
-                  ? `MAD ${payload.schedule.consistency.least_consistent.mad.toFixed(1)} pts`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Best manager',
-                payload.schedule.manager_efficiency.most_efficient?.username,
-                payload.schedule.manager_efficiency.most_efficient
-                  ? `${payload.schedule.manager_efficiency.most_efficient.efficiency_pct.toFixed(1)}% of best-ball`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Worst manager',
-                payload.schedule.manager_efficiency.least_efficient?.username,
-                payload.schedule.manager_efficiency.least_efficient
-                  ? `${payload.schedule.manager_efficiency.least_efficient.efficiency_pct.toFixed(1)}% of best-ball`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Biggest come-up',
-                payload.schedule.falloff_comeup.biggest_come_up?.username,
-                payload.schedule.falloff_comeup.biggest_come_up
-                  ? `+${payload.schedule.falloff_comeup.biggest_come_up.delta.toFixed(1)} pts/wk`
-                  : undefined,
-              )}
-              {accoladeCard(
-                'Biggest fall-off',
-                payload.schedule.falloff_comeup.biggest_falloff?.username,
-                payload.schedule.falloff_comeup.biggest_falloff
-                  ? `−${payload.schedule.falloff_comeup.biggest_falloff.delta.toFixed(1)} pts/wk`
-                  : undefined,
-              )}
-            </SimpleGrid>
-
-            {/* Best-ball leaderboard */}
-            <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-              <Heading size="sm" mb={2}>
-                Best-ball season standings
-              </Heading>
-              <Text fontSize="xs" color="gray.500" mb={2}>
-                Each week, you "win" against everyone whose best-possible lineup
-                scored less than yours. Sums across all played weeks.
-              </Text>
-              <TableContainer>
-                <Table size="sm" variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th>Manager</Th>
-                      <Th isNumeric>Wins</Th>
-                      <Th isNumeric>Losses</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {bestBallRanking.map(({ user, wins, losses }) => (
-                      <Tr key={user}>
-                        <Td>{user}</Td>
-                        <Td isNumeric>{wins}</Td>
-                        <Td isNumeric>{losses}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            </Box>
-
-            {/* Hypothetical schedule matrix */}
-            <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-              <Heading size="sm" mb={2}>
-                What if you had ___'s schedule?
-              </Heading>
-              <Text fontSize="xs" color="gray.500" mb={2}>
-                Rows = your scores. Columns = whose schedule you "borrow". Diagonal
-                cells are everyone's actual record.
-              </Text>
-              <TableContainer maxW="100%" overflowX="auto">
-                <Table
-                  size="sm"
-                  variant="simple"
-                  sx={{
-                    // Tight padding so a 12-team matrix (13 cols) fits the
-                    // page width without horizontal scrolling.
-                    'th, td': { px: 1.5, py: 1, fontSize: 'xs' },
-                  }}
-                >
-                  <Thead>
-                    <Tr>
-                      <Th>You ↓ / Schedule of →</Th>
-                      {payload.meta.users.map((u) => (
-                        <Th key={u} isNumeric>
-                          {u}
-                        </Th>
-                      ))}
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {payload.meta.users.map((rowUser) => {
-                      const row = payload.schedule.hypothetical_matrix[rowUser] ?? {};
-                      return (
-                        <Tr key={rowUser}>
-                          <Td fontWeight="semibold">{rowUser}</Td>
-                          {payload.meta.users.map((colUser) => {
-                            const rec = row[colUser];
-                            const isDiag = rowUser === colUser;
-                            return (
-                              <Td
-                                key={colUser}
-                                isNumeric
-                                bg={isDiag ? 'blue.50' : undefined}
-                              >
-                                {rec ? `${rec.wins}-${rec.losses}` : '—'}
-                              </Td>
-                            );
-                          })}
-                        </Tr>
-                      );
-                    })}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            </Box>
-
-            {/* Weekly scores chart */}
-            <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-              <Heading size="sm" mb={2}>
-                Weekly scores
-              </Heading>
-              <LineChart
-                series={weeklySeries}
-                xLabel="Week"
-                yLabel="Points"
-                yMin={0}
-                refLine={
-                  medianAvg != null
-                    ? { y: medianAvg, label: `Avg median ${medianAvg.toFixed(1)}` }
-                    : undefined
-                }
-              />
-            </Box>
-
-            {/* Phase 2: Roster moves */}
-            {payload.roster_moves && (
-              <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-                <Heading size="sm" mb={2}>
-                  Roster moves
-                </Heading>
-                <Text fontSize="xs" color="gray.500" mb={3}>
-                  Troll = the player you started over a higher-scoring bench
-                  player most often. Add/drop accolades use value over the
-                  league's positional replacement-level player.
-                </Text>
-                <TableContainer>
-                  <Table
-                    size="sm"
-                    variant="simple"
-                    sx={{
-                      // Tight padding so 6 columns of accolades fit a
-                      // 10/12-team league at typical desktop widths.
-                      'th, td': { px: 2, py: 1.5, fontSize: 'xs' },
-                    }}
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th>Manager</Th>
-                        <Th>Biggest troll</Th>
-                        <Th>Best waiver add</Th>
-                        <Th>Worst drop</Th>
-                        <Th>Earliest pickup</Th>
-                        <Th>Held longest</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {payload.meta.users.map((user) => {
-                        const moves = payload.roster_moves!.by_user[user];
-                        const troll = payload.roster_moves!.troll[user];
-                        const bestWorstByPos = moves?.worst_drop ?? {};
-                        const worstByVal = Object.values(bestWorstByPos).sort(
-                          (a, b) => b.value_over_baseline - a.value_over_baseline,
-                        )[0];
-                        return (
-                          <Tr key={user}>
-                            <Td fontWeight="semibold">{user}</Td>
-                            <Td>
-                              {troll ? (
-                                <>
-                                  {troll.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    bench {troll.bench_avg.toFixed(1)} vs start{' '}
-                                    {troll.start_avg.toFixed(1)} (×{troll.num_start})
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                            <Td>
-                              {moves?.best_add ? (
-                                <>
-                                  {moves.best_add.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    +{moves.best_add.value_over_baseline.toFixed(1)} vs baseline
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                            <Td>
-                              {worstByVal ? (
-                                <>
-                                  {worstByVal.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    +{worstByVal.value_over_baseline.toFixed(1)} vs baseline
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                            <Td>
-                              {moves?.early_pickup ? (
-                                <>
-                                  {moves.early_pickup.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    Wk {moves.early_pickup.week_added} @{' '}
-                                    {moves.early_pickup.owned_pct_when_added.toFixed(0)}% owned
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                            <Td>
-                              {moves?.late_drop ? (
-                                <>
-                                  {moves.late_drop.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    Dropped Wk {moves.late_drop.week_dropped} @{' '}
-                                    {moves.late_drop.owned_pct_at_drop.toFixed(0)}% owned
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                          </Tr>
-                        );
-                      })}
-                    </Tbody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-
-            {/* Phase 3: Draft */}
-            {payload.draft && Object.keys(payload.draft.by_user).length > 0 && (
-              <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-                <Heading size="sm" mb={2}>
-                  Draft grades
-                </Heading>
-                <Text fontSize="xs" color="gray.500" mb={3}>
-                  Value-over-slot = where a player was drafted at his
-                  position vs. where he actually finished. Positive = steal,
-                  negative = bust.
-                </Text>
-
-                {/* Hero accolades for the draft */}
-                <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} gap={3} mb={3}>
-                  {accoladeCard(
-                    'Biggest steal',
-                    payload.draft.biggest_steal?.name,
-                    payload.draft.biggest_steal
-                      ? `Pick ${payload.draft.biggest_steal.pick_no} • ${payload.draft.biggest_steal.position}${payload.draft.biggest_steal.actual_pos_rank} (drafted ${payload.draft.biggest_steal.position}${payload.draft.biggest_steal.drafted_pos_rank})`
-                      : undefined,
-                  )}
-                  {accoladeCard(
-                    'Biggest bust',
-                    payload.draft.biggest_bust?.name,
-                    payload.draft.biggest_bust
-                      ? `Pick ${payload.draft.biggest_bust.pick_no} • ${payload.draft.biggest_bust.position}${payload.draft.biggest_bust.actual_pos_rank} (drafted ${payload.draft.biggest_bust.position}${payload.draft.biggest_bust.drafted_pos_rank})`
-                      : undefined,
-                  )}
-                  {accoladeCard(
-                    'Mr. Irrelevant Hero',
-                    payload.draft.mr_irrelevant_hero?.name,
-                    payload.draft.mr_irrelevant_hero
-                      ? `Pick ${payload.draft.mr_irrelevant_hero.pick_no} by ${payload.draft.mr_irrelevant_hero.username}`
-                      : undefined,
-                  )}
-                </SimpleGrid>
-
-                <TableContainer>
-                  <Table
-                    size="sm"
-                    variant="simple"
-                    sx={{ 'th, td': { px: 2, py: 1.5, fontSize: 'xs' } }}
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th>Manager</Th>
-                        <Th>Best pick</Th>
-                        <Th>Worst pick</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {payload.meta.users.map((user) => {
-                        const rec = payload.draft!.by_user[user];
-                        if (!rec) return null;
-                        return (
-                          <Tr key={user}>
-                            <Td fontWeight="semibold">{user}</Td>
-                            <Td>
-                              {rec.best_pick ? (
-                                <>
-                                  {rec.best_pick.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    Pick {rec.best_pick.pick_no} •{' '}
-                                    {rec.best_pick.position}
-                                    {rec.best_pick.actual_pos_rank} (drafted{' '}
-                                    {rec.best_pick.position}
-                                    {rec.best_pick.drafted_pos_rank})
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                            <Td>
-                              {rec.worst_pick ? (
-                                <>
-                                  {rec.worst_pick.name}
-                                  <Text fontSize="xs" color="gray.500">
-                                    Pick {rec.worst_pick.pick_no} •{' '}
-                                    {rec.worst_pick.position}
-                                    {rec.worst_pick.actual_pos_rank} (drafted{' '}
-                                    {rec.worst_pick.position}
-                                    {rec.worst_pick.drafted_pos_rank})
-                                  </Text>
-                                </>
-                              ) : (
-                                '—'
-                              )}
-                            </Td>
-                          </Tr>
-                        );
-                      })}
-                    </Tbody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-
-            {/* Phase 3: Trades */}
-            {payload.trades && payload.trades.trades.length > 0 && (
-              <Box bg="white" borderWidth={1} borderRadius="md" p={3}>
-                <Heading size="sm" mb={2}>
-                  Trade ledger
-                </Heading>
-                <Text fontSize="xs" color="gray.500" mb={3}>
-                  Player values are FantasyCalc trade values for this league
-                  shape ({payload.meta.is_dynasty ? 'dynasty' : 'redraft'},{' '}
-                  {payload.meta.num_qbs}-QB). Future draft picks use a flat
-                  per-round value.
-                </Text>
-
-                <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3} mb={3}>
-                  {accoladeCard(
-                    'Biggest fleecing',
-                    payload.trades.biggest_fleecing?.winner,
-                    payload.trades.biggest_fleecing
-                      ? `+${payload.trades.biggest_fleecing.value_gap.toFixed(0)} value, Wk ${payload.trades.biggest_fleecing.week}`
-                      : undefined,
-                  )}
-                  {accoladeCard(
-                    'Most active trader',
-                    payload.trades.most_active_trader?.username,
-                    payload.trades.most_active_trader
-                      ? `${payload.trades.most_active_trader.num_trades} trade${payload.trades.most_active_trader.num_trades === 1 ? '' : 's'}`
-                      : undefined,
-                  )}
-                </SimpleGrid>
-
-                {/* Per-trade list */}
-                <TableContainer>
-                  <Table
-                    size="sm"
-                    variant="simple"
-                    sx={{ 'th, td': { px: 2, py: 1.5, fontSize: 'xs', verticalAlign: 'top' } }}
-                  >
-                    <Thead>
-                      <Tr>
-                        <Th>Wk</Th>
-                        <Th>Sides</Th>
-                        <Th isNumeric>Gap</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {payload.trades.trades.map((trade) => (
-                        <Tr key={trade.transaction_id || `${trade.week}-${trade.winner}`}>
-                          <Td>{trade.week}</Td>
-                          <Td>
-                            <VStack align="stretch" gap={1}>
-                              {trade.sides.map((side) => (
-                                <Box key={side.username}>
-                                  <Text
-                                    fontWeight={
-                                      side.username === trade.winner
-                                        ? 'semibold'
-                                        : 'normal'
-                                    }
-                                  >
-                                    {side.username} got{' '}
-                                    {[
-                                      ...side.players.map((p) => p.name),
-                                      ...side.picks.map(
-                                        (pk) =>
-                                          `${pk.season ?? '?'} R${pk.round ?? '?'} pick`,
-                                      ),
-                                    ].join(', ') || '—'}
-                                  </Text>
-                                  <Text fontSize="2xs" color="gray.500">
-                                    Value {side.total_value.toFixed(0)}
-                                  </Text>
-                                </Box>
-                              ))}
-                            </VStack>
-                          </Td>
-                          <Td isNumeric>
-                            {trade.value_gap > 0
-                              ? `+${trade.value_gap.toFixed(0)}`
-                              : '—'}
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-
-            {/* Phase 4: Best streamers */}
-            {payload.streamers &&
-              payload.streamers.positions_included.length > 0 && (
-                <StreamersSection data={payload.streamers} />
-              )}
-          </>
+          isAllTime(payload)
+            ? <AllTimeView data={payload} />
+            : <YearSections payload={payload} />
         )}
       </VStack>
     </Box>
@@ -911,3 +1098,4 @@ const WrappedPage: React.FC = () => {
 };
 
 export default WrappedPage;
+
