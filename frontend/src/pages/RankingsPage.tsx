@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import OverallRankingsTable from "../components/OverallRankingsTable";
 import WaiverWireCheatSheet from "../components/WaiverWireCheatSheet";
 import RisersFallers from "../components/RisersFallers";

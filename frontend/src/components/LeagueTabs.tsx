@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import PlayerTable from "./PlayerTable";
 import LineupConfidence from "./LineupConfidence";
 import { useUUID } from "../context/UUIDContext";

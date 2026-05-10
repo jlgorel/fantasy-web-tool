@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Box, VStack, HStack, Image, Text, Spinner } from "@chakra-ui/react";
 import { useUUID } from "../context/UUIDContext";
 import DynamicTabs from "../components/LeagueTabs";
