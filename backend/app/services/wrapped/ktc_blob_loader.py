@@ -31,7 +31,12 @@ from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BLOB_NAME = "historical_KTC_rankings.json"
+# Canonical blob path in the ``fantasyjsons`` container. Mirrors
+# ``azure-functions/trade_eval/blob_layout.py::ktc_historical_blob()``
+# and the upload target in ``tools/upload_historical_ktc.py``. The
+# blob is NOT at the container root -- it lives under the trade_eval
+# prefix tree alongside the per-day KTC snapshots.
+DEFAULT_BLOB_NAME = "trade_eval/values/ktc/historical_KTC_rankings.json"
 
 # Per-format history keys inside the canonical blob shape.
 _FORMAT_HISTORY_KEYS: Dict[str, str] = {
