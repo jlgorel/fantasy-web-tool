@@ -16,6 +16,7 @@ import {
   WaiverWireResponse,
   WebsiteName,
   WrappedApiResponse,
+  WrappedInspectTrade,
 } from '../types/player';
 
 if (!process.env.REACT_APP_API_BASE_URL) {
@@ -94,6 +95,22 @@ export const api = {
   getWrappedSleeper(leagueId: string, year?: string): Promise<WrappedApiResponse> {
     const qs = year ? `?year=${encodeURIComponent(year)}` : '';
     return request<WrappedApiResponse>(`/wrapped/sleeper/${encodeURIComponent(leagueId)}${qs}`);
+  },
+
+  /**
+   * Single-trade inspector payload: verdict + race chart + per-asset
+   * sparkline series. The race chart's crossover dates are the dates on
+   * which the verdict actually flipped — render them as vertical guide
+   * lines so users can see *when* the trade went bad (or good).
+   */
+  getWrappedInspectTrade(
+    leagueId: string, transactionId: string, year?: string,
+  ): Promise<WrappedInspectTrade> {
+    const params = new URLSearchParams({ transaction_id: transactionId });
+    if (year) params.set('year', year);
+    return request<WrappedInspectTrade>(
+      `/wrapped/sleeper/${encodeURIComponent(leagueId)}/inspect_trade?${params.toString()}`,
+    );
   },
 
   getSleeperUserLeagues(username: string, year?: string): Promise<SleeperUserLeaguesResponse> {

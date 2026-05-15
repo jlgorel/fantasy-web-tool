@@ -185,6 +185,15 @@ tests/fixtures/blobs/
 # The sanitized siblings (without the .raw suffix) are safe to commit.
 tests/fixtures/api/**/*.raw.json
 
+# Per-slug KTC scrape outputs from tools/scrape_ktc_top500_history.py.
+# 500 JSONs + manifest + run log -- bulky and reproducible by re-running
+# the scraper, so we don't version-control them.
+tools/scraped_ktc_history/
+
+# Diagnostic HTML captures from tools/probe_ktc_player_page.py (one-shot
+# discovery; not a test fixture).
+tools/tests/fixtures/scraper/ktc_player_probe/
+
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore

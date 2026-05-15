@@ -1,0 +1,100 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on http://127.0.0.1:5000
+Press CTRL+C to quit
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+[2026-05-14 23:14:38,749] INFO in blob_store: Loading blob standard_player_rankings.json from container fantasyjsons
+127.0.0.1 - - [14/May/2026 23:14:39] "GET /overall-ranks HTTP/1.1" 200 -
+[2026-05-14 23:19:22,944] INFO in blob_store: Loading blob players.json from container fantasyjsons
+[2026-05-14 23:19:23,227] INFO in blob_store: Loading blob player_season_scoring_2024.json from container fantasyjsons
+[2026-05-14 23:19:23,351] INFO in blob_store: try_load_blob: player_season_scoring_2024.json unavailable (The specified blob does not exist.
+RequestId:e42b9374-801e-003f-0c19-e4cdd7000000
+Time:2026-05-15T03:19:23.3764265Z
+ErrorCode:BlobNotFound
+Content: <?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code><Message>The specified blob does not exist.
+RequestId:e42b9374-801e-003f-0c19-e4cdd7000000
+Time:2026-05-15T03:19:23.3764265Z</Message></Error>)
+[2026-05-14 23:19:23,352] INFO in blob_store: Loading blob owned_history_2024.json from container fantasyjsons
+[2026-05-14 23:19:23,464] INFO in blob_store: try_load_blob: owned_history_2024.json unavailable (The specified blob does not exist.
+RequestId:4719de5e-801e-0062-6719-e4c753000000
+Time:2026-05-15T03:19:23.4953975Z
+ErrorCode:BlobNotFound
+Content: <?xml version="1.0" encoding="utf-8"?><Error><Code>BlobNotFound</Code><Message>The specified blob does not exist.
+RequestId:4719de5e-801e-0062-6719-e4c753000000
+Time:2026-05-15T03:19:23.4953975Z</Message></Error>)
+[2026-05-14 23:19:24,621] INFO in pipeline: Wrapped: no season scoring available for 1048379430328041472/2024 — best_add / worst_drop will be empty
+[2026-05-14 23:19:24,631] INFO in pipeline: Wrapped: no season scoring for 1048379430328041472/2024 — draft accolades empty
+[2026-05-14 23:19:24,631] INFO in ktc_blob_loader: Loading KTC historical blob from override C:\Users\jlgor\Documents\fantasy-web-tool\tests\fixtures\blobs\historical_KTC_rankings.json
+127.0.0.1 - - [14/May/2026 23:19:25] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+[2026-05-14 23:19:37,297] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [14/May/2026 23:19:38] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1055748680919232512&year=2024 HTTP/1.1" 200 -
+[2026-05-14 23:26:22,157] INFO in blob_store: Loading blob runinfo.json from container fantasyjsons
+127.0.0.1 - - [14/May/2026 23:26:22] "GET /load-last-run-info HTTP/1.1" 200 -
+[2026-05-14 23:26:22,903] INFO in blob_store: Loading blob runinfo.json from container fantasyjsons
+127.0.0.1 - - [14/May/2026 23:26:23] "GET /load-last-run-info HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:27:33] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:27:33] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:27:33] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:27:33] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:32:29] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:32:29] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:32:30] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:32:30] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:33:12] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:33:12] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:33:13] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:33:13] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:38:23] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:38:23] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:38:23] "GET /sleeper/league/1048379430328041472/seasons HTTP/1.1" 200 -
+127.0.0.1 - - [14/May/2026 23:38:23] "GET /wrapped/sleeper/1048379430328041472?year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:27:59,638] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:28:00] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1127056571357437952&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:28:00] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1127056571357437952&year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:28:24,853] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:28:25] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1116981692520103936&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:28:25] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1116981692520103936&year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:28:36,020] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:28:36] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1101716206572199936&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:28:36] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1101716206572199936&year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:29:17,176] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:29:17] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1100506229601857536&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:29:17] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1100506229601857536&year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:29:26,663] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:29:27] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1100151122519519232&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:29:27] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1100151122519519232&year=2024 HTTP/1.1" 200 -
+[2026-05-15 15:30:45,525] INFO in blob_store: Loading blob players.json from container fantasyjsons
+127.0.0.1 - - [15/May/2026 15:30:45] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1049242191203307520&year=2024 HTTP/1.1" 200 -
+127.0.0.1 - - [15/May/2026 15:30:46] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1049242191203307520&year=2024 HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\trade_accolades.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\trade_accolades.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\trade_accolades.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\trade_accolades.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\pipeline.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+[2026-05-15 16:32:02,941] INFO in blob_store: Loading blob players.json from container fantasyjsons
+[2026-05-15 16:32:03,117] INFO in ktc_blob_loader: Loading KTC historical blob from override C:\Users\jlgor\Documents\fantasy-web-tool\tests\fixtures\blobs\historical_KTC_rankings.json
+127.0.0.1 - - [15/May/2026 16:32:05] "GET /wrapped/sleeper/1048379430328041472/inspect_trade?transaction_id=1049242191203307520&year=2024 HTTP/1.1" 200 -
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\services\\wrapped\\pipeline.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271
+ * Detected change in 'C:\\Users\\jlgor\\Documents\\fantasy-web-tool\\backend\\app\\config.py', reloading
+ * Restarting with stat
+ * Debugger is active!
+ * Debugger PIN: 101-365-271

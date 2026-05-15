@@ -1,6 +1,8 @@
 import azure.functions as func
 import os
 import json
+import re
+import unicodedata
 import requests
 from random import randint, choice
 from playwright.sync_api import sync_playwright
@@ -763,5 +765,326 @@ def sleeper_player_update(mytimer: func.TimerRequest) -> None:
     logging.info('Executing sleeper player update')
     get_sleeper_player_data()
     get_sleeper_owned_for_week()
+
+
+# ---------------------------------------------------------------------------
+# Trade-evaluator data pipeline
+# ---------------------------------------------------------------------------
+# Runs *separately* from the in-season DraftKings/Vegas/FantasyPros refresh
+# so it can operate year-round (dynasty values move all summer; PPG updates
+# only during the season). All blobs live under ``trade_eval/`` (see
+# ``trade_eval/blob_layout.py``). Pure parsing/aggregation lives in the
+# ``trade_eval`` package; this section is just IO + scheduling glue.
+from trade_eval import (  # noqa: E402  (intentionally below `app` definition)
+    sleeper_scoring as _trade_eval_sleeper_scoring,
+    fantasycalc_values as _trade_eval_fc,
+    ktc_scraper as _trade_eval_ktc,
+    ktc_top500_daily as _trade_eval_ktc_daily,
+)
+
+
+def _trade_eval_http_get_json(url: str):
+    """Adapter so the trade_eval modules can fetch JSON via our retry-aware
+    ``_http_get`` without importing requests directly."""
+    return _http_get(url, timeout=30).json()
+
+
+def _trade_eval_blob_upload(data, blob_name: str) -> None:
+    upload_to_azure_blob(data, blob_name, filename=blob_name)
+
+
+def _trade_eval_blob_load(blob_name: str):
+    return try_download_blob_json(blob_name)
+
+
+def _trade_eval_fetch_page(url: str) -> str:
+    """Render a JS-heavy page with Playwright and return the HTML.
+
+    KTC's playersArray is actually inline in the static HTML, but using
+    Playwright matches the existing pattern (boris_chen, fantasypros) and
+    keeps us resilient if KTC ever moves to client-side rendering.
+    """
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            # Small scroll to trigger any lazy chunks; cheap insurance.
+            for _ in range(3):
+                page.keyboard.press("End")
+                time.sleep(0.5)
+            return page.content()
+        finally:
+            browser.close()
+
+
+# Cached name->sleeper_id resolver for the KTC daily appender. Built lazily
+# from ``players.json`` so we only pay the load cost when a new KTC entrant
+# actually shows up. Resets per warm-instance, which is fine -- players.json
+# refreshes weekly anyway.
+_KTC_NAME_RESOLVER_CACHE: dict = {}
+
+
+def _trade_eval_build_ktc_name_resolver():
+    """Return a ``name -> sleeper_id | None`` resolver backed by players.json.
+
+    Uses a normalized-name lookup (strip suffixes / punctuation / case) over
+    the four offensive skill positions. Returns the first unambiguous hit.
+    """
+    cache = _KTC_NAME_RESOLVER_CACHE
+    if "index" not in cache:
+        try:
+            players = try_download_blob_json("players.json") or {}
+        except Exception:
+            logging.exception("KTC name resolver: players.json load failed")
+            players = {}
+
+        suffix_re = re.compile(r"\b(jr|sr|ii|iii|iv|v)\.?$", re.IGNORECASE)
+        nonalnum_re = re.compile(r"[^a-z0-9]")
+
+        def normalize(name: str) -> str:
+            s = unicodedata.normalize("NFKD", name or "")
+            s = s.encode("ascii", "ignore").decode("ascii")
+            s = suffix_re.sub("", s).lower()
+            return nonalnum_re.sub("", s)
+
+        index: dict = {}
+        for sid, meta in players.items():
+            full = meta.get("full_name") or ""
+            positions = meta.get("fantasy_positions") or []
+            if not any(p in {"QB", "RB", "WR", "TE"} for p in positions):
+                continue
+            norm = normalize(full)
+            if not norm:
+                continue
+            index.setdefault(norm, []).append(sid)
+        cache["index"] = index
+        cache["normalize"] = normalize
+
+    index = cache["index"]
+    normalize = cache["normalize"]
+
+    def resolver(name: str):
+        hits = index.get(normalize(name)) or []
+        return hits[0] if len(hits) == 1 else None
+
+    return resolver
+
+
+def trade_eval_run_weekly() -> dict:
+    """Weekly trade-evaluator refresh.
+
+    * Snapshots FantasyCalc and KTC for every format (year-round).
+    * If we're in fantasy season, also merges the current week's Sleeper
+      stats into the season-summary blob.
+
+    Returns a small status dict for logging / HTTP responses.
+    """
+    status: dict = {}
+    try:
+        status["fantasycalc"] = _trade_eval_fc.snapshot_all(
+            http_get_json=_trade_eval_http_get_json,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval: fantasycalc snapshot failed")
+        status["fantasycalc_error"] = str(e)
+
+    try:
+        status["ktc"] = _trade_eval_ktc.snapshot_all(
+            fetch_page=_trade_eval_fetch_page,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval: ktc snapshot failed")
+        status["ktc_error"] = str(e)
+
+    if is_in_fantasy_season():
+        try:
+            season = get_current_fantasy_year()
+            week = get_current_nfl_week()
+            updated = _trade_eval_sleeper_scoring.update_current_week(
+                season, week,
+                http_get_json=_trade_eval_http_get_json,
+                blob_load=_trade_eval_blob_load,
+                blob_upload=_trade_eval_blob_upload,
+            )
+            status["sleeper_scoring"] = {
+                "season": season, "week": week, "updated": updated,
+            }
+        except Exception as e:
+            logging.exception("trade_eval: sleeper scoring update failed")
+            status["sleeper_scoring_error"] = str(e)
+    else:
+        status["sleeper_scoring"] = "skipped (offseason)"
+
+    status["finished_at"] = format_eastern_runtime()
+    return status
+
+
+def trade_eval_run_daily() -> dict:
+    """Daily refresh -- FantasyCalc snapshot + KTC top-500 append."""
+    status = {}
+    try:
+        status["fantasycalc"] = _trade_eval_fc.snapshot_all(
+            http_get_json=_trade_eval_http_get_json,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval: fantasycalc daily snapshot failed")
+        status["fantasycalc_error"] = str(e)
+
+    try:
+        status["ktc_daily"] = _trade_eval_ktc_daily.append_daily(
+            fetch_page=_trade_eval_fetch_page,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+            name_resolver=_trade_eval_build_ktc_name_resolver(),
+        )
+    except Exception as e:
+        logging.exception("trade_eval: ktc daily append failed")
+        status["ktc_daily_error"] = str(e)
+
+    status["finished_at"] = format_eastern_runtime()
+    return status
+
+
+# ---- HTTP triggers (manual / one-shot) -----------------------------------
+@app.function_name(name="trade_eval_run")
+@app.route(route="trade_eval/run", auth_level=func.AuthLevel.FUNCTION)
+def trade_eval_run_http(req: func.HttpRequest) -> func.HttpResponse:
+    """Manually kick the full weekly trade-evaluator refresh."""
+    try:
+        status = trade_eval_run_weekly()
+    except Exception as e:
+        logging.exception("trade_eval_run failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500, mimetype="application/json",
+        )
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "result": status}, default=str),
+        status_code=200, mimetype="application/json",
+    )
+
+
+@app.function_name(name="trade_eval_bootstrap_scoring")
+@app.route(route="trade_eval/bootstrap_scoring", auth_level=func.AuthLevel.FUNCTION)
+def trade_eval_bootstrap_scoring_http(req: func.HttpRequest) -> func.HttpResponse:
+    """One-shot historical Sleeper scoring backfill.
+
+    Query params:
+      ``start`` (default 2020), ``end`` (default current fantasy year).
+    """
+    try:
+        start = int(req.params.get("start") or 2020)
+        end = int(req.params.get("end") or get_current_fantasy_year())
+        seasons = list(range(start, end + 1))
+        loaded = _trade_eval_sleeper_scoring.bootstrap_history(
+            seasons,
+            http_get_json=_trade_eval_http_get_json,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval_bootstrap_scoring failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500, mimetype="application/json",
+        )
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "weeks_loaded_per_season": loaded}),
+        status_code=200, mimetype="application/json",
+    )
+
+
+@app.function_name(name="trade_eval_snapshot_fantasycalc")
+@app.route(route="trade_eval/snapshot_fantasycalc", auth_level=func.AuthLevel.FUNCTION)
+def trade_eval_snapshot_fantasycalc_http(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        counts = _trade_eval_fc.snapshot_all(
+            http_get_json=_trade_eval_http_get_json,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval_snapshot_fantasycalc failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500, mimetype="application/json",
+        )
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "counts": counts}),
+        status_code=200, mimetype="application/json",
+    )
+
+
+@app.function_name(name="trade_eval_snapshot_ktc")
+@app.route(route="trade_eval/snapshot_ktc", auth_level=func.AuthLevel.FUNCTION)
+def trade_eval_snapshot_ktc_http(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        counts = _trade_eval_ktc.snapshot_all(
+            fetch_page=_trade_eval_fetch_page,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+        )
+    except Exception as e:
+        logging.exception("trade_eval_snapshot_ktc failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500, mimetype="application/json",
+        )
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "counts": counts}),
+        status_code=200, mimetype="application/json",
+    )
+
+
+@app.function_name(name="trade_eval_append_ktc_daily")
+@app.route(route="trade_eval/append_ktc_daily", auth_level=func.AuthLevel.FUNCTION)
+def trade_eval_append_ktc_daily_http(req: func.HttpRequest) -> func.HttpResponse:
+    """Manually trigger today's KTC top-500 append into the rolling
+    ``historical_KTC_rankings.json`` blob."""
+    try:
+        result = _trade_eval_ktc_daily.append_daily(
+            fetch_page=_trade_eval_fetch_page,
+            blob_upload=_trade_eval_blob_upload,
+            blob_load=_trade_eval_blob_load,
+            name_resolver=_trade_eval_build_ktc_name_resolver(),
+        )
+    except Exception as e:
+        logging.exception("trade_eval_append_ktc_daily failed")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500, mimetype="application/json",
+        )
+    return func.HttpResponse(
+        json.dumps({"status": "ok", "result": result}, default=str),
+        status_code=200, mimetype="application/json",
+    )
+
+
+# ---- Timer triggers ------------------------------------------------------
+# Daily FantasyCalc snapshot at 09:00 UTC (~5am ET) -- year-round.
+@app.function_name(name="trade_eval_daily")
+@app.timer_trigger(schedule="0 0 9 * * *", arg_name="mytimer")
+def trade_eval_daily_timer(mytimer: func.TimerRequest) -> None:
+    logging.info("Executing trade_eval daily refresh (FantasyCalc snapshot)...")
+    trade_eval_run_daily()
+
+
+# Weekly full refresh: Tuesday 10:00 UTC (~6am ET).
+# - Tue chosen so post-MNF stats are settled when in season.
+# - Year-round; the Sleeper scoring leg self-skips out-of-season.
+@app.function_name(name="trade_eval_weekly")
+@app.timer_trigger(schedule="0 0 10 * * Tue", arg_name="mytimer")
+def trade_eval_weekly_timer(mytimer: func.TimerRequest) -> None:
+    logging.info("Executing trade_eval weekly refresh (KTC + FC + Sleeper PPG)...")
+    trade_eval_run_weekly()
+
+
 
 

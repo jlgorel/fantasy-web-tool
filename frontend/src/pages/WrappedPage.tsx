@@ -47,6 +47,7 @@ import {
 } from '@chakra-ui/react';
 import { api } from '../api/client';
 import { LineChart, LineSeries } from '../components/LineChart';
+import { TradeInspector } from '../components/TradeInspector';
 import { SleeperLeagueSeason, WrappedApiResponse, WrappedAllTimeAccolades, WrappedAllTimeResponse, WrappedResponse, WrappedStreamersPayload } from '../types/player';
 
 
@@ -264,6 +265,10 @@ const StreamersSection: React.FC<{ data: WrappedStreamersPayload }> = ({
  * ``payload`` prop — no fetching, no router state.
  */
 const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
+  // Single-row expansion state for the trade ledger: only one expanded
+  // at a time per spec, so a string id (or null) is enough.
+  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null);
+
   const weeklySeries: LineSeries[] = useMemo(() => {
     const { weekly_scores } = payload.schedule;
     return Object.entries(weekly_scores).map(([user, byWeek], i) => ({
@@ -678,10 +683,11 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
             Trade ledger
           </Heading>
           <Text fontSize="xs" color="gray.500" mb={3}>
-            Player values are FantasyCalc trade values for this league
-            shape ({payload.meta.is_dynasty ? 'dynasty' : 'redraft'},{' '}
-            {payload.meta.num_qbs}-QB). Future draft picks use a flat
-            per-round value.
+            Trades are evaluated by integrating each side's KTC value over
+            the time it was held, so a trade that aged badly registers as
+            a loss even if it looked even at the deadline. Numbers are in{' '}
+            <strong>KTC equivalent points</strong> (familiar 0-9999 scale){' '}
+            — click any row to see the running value chart.
           </Text>
 
           <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3} mb={3}>
@@ -689,7 +695,7 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
               'Biggest fleecing',
               payload.trades.biggest_fleecing?.winner,
               payload.trades.biggest_fleecing
-                ? `+${payload.trades.biggest_fleecing.value_gap.toFixed(0)} value, Wk ${payload.trades.biggest_fleecing.week}`
+                ? `+${payload.trades.biggest_fleecing.ktc_edge_per_season.toFixed(0)} KTC/yr, Wk ${payload.trades.biggest_fleecing.week}`
                 : undefined,
             )}
             {accoladeCard(
@@ -701,7 +707,10 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
             )}
           </SimpleGrid>
 
-          {/* Per-trade list */}
+          {/* Per-trade list. Rows are clickable and only one trade
+              expands at a time — keeps the visual focus tight, the
+              page short, and the network calls cheap (one inspector
+              fetch per click, cached server-side for 24h). */}
           <TableContainer>
             <Table
               size="sm"
@@ -712,47 +721,68 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
                 <Tr>
                   <Th>Wk</Th>
                   <Th>Sides</Th>
-                  <Th isNumeric>Gap</Th>
+                  <Th isNumeric>KTC edge / yr</Th>
                 </Tr>
               </Thead>
               <Tbody>
-                {payload.trades.trades.map((trade) => (
-                  <Tr key={trade.transaction_id || `${trade.week}-${trade.winner}`}>
-                    <Td>{trade.week}</Td>
-                    <Td>
-                      <VStack align="stretch" gap={1}>
-                        {trade.sides.map((side) => (
-                          <Box key={side.username}>
-                            <Text
-                              fontWeight={
-                                side.username === trade.winner
-                                  ? 'semibold'
-                                  : 'normal'
-                              }
-                            >
-                              {side.username} got{' '}
-                              {[
-                                ...side.players.map((p) => p.name),
-                                ...side.picks.map(
-                                  (pk) =>
-                                    `${pk.season ?? '?'} R${pk.round ?? '?'} pick`,
-                                ),
-                              ].join(', ') || '—'}
-                            </Text>
-                            <Text fontSize="2xs" color="gray.500">
-                              Value {side.total_value.toFixed(0)}
-                            </Text>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </Td>
-                    <Td isNumeric>
-                      {trade.value_gap > 0
-                        ? `+${trade.value_gap.toFixed(0)}`
-                        : '—'}
-                    </Td>
-                  </Tr>
-                ))}
+                {payload.trades.trades.map((trade) => {
+                  const rowKey =
+                    trade.transaction_id || `${trade.week}-${trade.winner}`;
+                  const isOpen = expandedTradeId === rowKey;
+                  return (
+                    <React.Fragment key={rowKey}>
+                      <Tr
+                        onClick={() =>
+                          setExpandedTradeId(isOpen ? null : rowKey)
+                        }
+                        cursor="pointer"
+                        _hover={{ bg: 'gray.50' }}
+                        bg={isOpen ? 'blue.50' : undefined}
+                      >
+                        <Td>{trade.week}</Td>
+                        <Td>
+                          <VStack align="stretch" gap={1}>
+                            {trade.sides.map((side) => (
+                              <Box key={side.username}>
+                                <Text
+                                  fontWeight={
+                                    side.username === trade.winner
+                                      ? 'semibold'
+                                      : 'normal'
+                                  }
+                                >
+                                  {side.username} got{' '}
+                                  {side.assets
+                                    .map((a) => a.label)
+                                    .join(', ') || '—'}
+                                </Text>
+                                <Text fontSize="2xs" color="gray.500">
+                                  {side.ktc_equiv.toFixed(0)} KTC equiv
+                                </Text>
+                              </Box>
+                            ))}
+                          </VStack>
+                        </Td>
+                        <Td isNumeric>
+                          {trade.ktc_edge_per_season > 0
+                            ? `+${trade.ktc_edge_per_season.toFixed(0)}`
+                            : '—'}
+                        </Td>
+                      </Tr>
+                      {isOpen && (
+                        <Tr bg="blue.50">
+                          <Td colSpan={3} px={3} py={3}>
+                            <TradeInspector
+                              leagueId={payload.meta.league_id}
+                              transactionId={trade.transaction_id}
+                              year={payload.meta.year}
+                            />
+                          </Td>
+                        </Tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </Tbody>
             </Table>
           </TableContainer>

@@ -4,6 +4,10 @@ from app.services.waiver_wire import get_waiver_wire
 from app.services.risers_fallers import get_risers_fallers
 from app.services.wrapped import compute_wrapped
 from app.services.wrapped.all_time import build_all_time_payload
+from app.services.wrapped.league_context import load_league_context
+from app.services.wrapped.transactions import fetch_league_transactions
+from app.services.wrapped.trade_accolades import inspect_trade as inspect_trade_payload
+from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
 from app.services.sleeper_league_lookup import (
     get_league_season_chain,
@@ -220,6 +224,89 @@ def wrapped_sleeper(league_id):
         return jsonify(payload), 200
     except Exception as e:
         print("Exception in wrapped_sleeper: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/wrapped/sleeper/<league_id>/inspect_trade', methods=['GET'])
+def wrapped_inspect_trade(league_id):
+    """Return the full trade-inspector payload for a single trade.
+
+    Query params:
+        transaction_id: Sleeper transaction id (required).
+        year:           4-digit fantasy year the trade lives in (default "2024").
+
+    Returns ``{trade, race_chart, per_asset_series, k, evaluation_end}``.
+    Dynasty-only -- redraft leagues 400 since the KTC integral is the
+    wrong tool for short-window swap evaluation.
+    """
+    try:
+        transaction_id = request.args.get('transaction_id')
+        if not transaction_id:
+            return jsonify({'error': 'transaction_id is required'}), 400
+        year = request.args.get('year', '2024')
+
+        # Cache the payload per (league, year, transaction). Trades are
+        # immutable post-acceptance so a long TTL is safe; we just want
+        # to amortize the blob load + per-asset sampling cost.
+        cache_key = f"wrapped_inspect_v1_{league_id}_{year}_{transaction_id}"
+        redis_client = current_app.redis_client
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass  # fall through to recompute
+
+        ctx = load_league_context(league_id, year)
+        if not ctx.is_dynasty:
+            return jsonify({
+                'error': 'Trade inspector is dynasty-only',
+                'is_dynasty': False,
+            }), 400
+
+        transactions = fetch_league_transactions(ctx)
+        trade = next(
+            (t for t in transactions.trades if t.transaction_id == transaction_id),
+            None,
+        )
+        if trade is None:
+            return jsonify({
+                'error': f'Trade {transaction_id} not found in league {league_id}',
+            }), 404
+
+        players_meta = load_blob("players.json") or {}
+
+        try:
+            payload = inspect_trade_payload(
+                trade,
+                season=int(year),
+                num_qbs=ctx.num_qbs,
+                players_meta=players_meta,
+                league_id=league_id,
+            )
+        except Exception as exc:
+            # The KTC historical blob is the most common failure here;
+            # surface a 503 so the UI can show "value history unavailable"
+            # instead of a generic crash.
+            print(f"inspect_trade payload build failed: {exc}")
+            traceback.print_exc()
+            return jsonify({
+                'error': 'Trade value history unavailable',
+                'detail': str(exc),
+            }), 503
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=86400)  # 24h
+        except Exception as cache_err:
+            print(f"Inspect-trade cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in wrapped_inspect_trade: " + str(e))
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 

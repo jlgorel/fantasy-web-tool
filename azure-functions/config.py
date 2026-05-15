@@ -1,4 +1,4 @@
-﻿import os
+import os
 
 # Shared values (NFL teams, scoring multipliers) live in _fantasy_common.py
 # which is auto-generated from shared/fantasy_common.py via tools/sync_shared.py.

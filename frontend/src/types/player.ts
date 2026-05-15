@@ -455,36 +455,59 @@ export interface WrappedDraftPayload {
   mr_irrelevant_hero: WrappedDraftPick | null;
 }
 
-export interface WrappedTradePlayer {
-  player_id: string;
-  name: string;
-  value: number;
-}
-
-export interface WrappedTradePick {
-  season: string | null;
-  round: number | null;
-  value: number;
+export interface WrappedTradeAsset {
+  asset_id: string;
+  label: string;
+  sleeper_id: string | null;
+  is_pick: boolean;
+  // Average raw KTC value across the asset's active holding window.
+  // Lives on the familiar 0-9999 scale -- the per-row breakdown number.
+  avg_ktc: number;
+  active_days: number;
+  // The asset's contribution to its side's integral score. Mostly for
+  // debugging / tooltips -- the headline numbers are on the side + trade.
+  score: number;
 }
 
 export interface WrappedTradeSide {
   username: string;
-  players: WrappedTradePlayer[];
-  picks: WrappedTradePick[];
-  total_value: number;
+  assets: WrappedTradeAsset[];
+  // Side's integral score (concavity-transformed). Used to order sides
+  // within a trade; ktc_equiv is the UI-friendly version.
+  total_score: number;
+  // Side's KTC-equivalent total -- "what constant KTC value, held over
+  // the same window, would produce this same integral?". This is the
+  // number we render per side ("+8,124 KTC").
+  ktc_equiv: number;
 }
 
 export interface WrappedTrade {
   week: number;
   transaction_id: string;
+  // ISO date (YYYY-MM-DD) the integral window opens on.
+  trade_date: string;
+  // ISO date (YYYY-MM-DD) the integral window closes on.
+  evaluation_end: string;
   sides: WrappedTradeSide[];
   winner: string | null;
-  value_gap: number;
+  // Concavity exponent used. Stamped so the inspector can show the
+  // setting that produced this verdict.
+  k: number;
+  // Active days (non-offseason) inside the integral window. Both sides
+  // share this denominator, so comparisons stay apples-to-apples.
+  active_days: number;
+  // Winner's KTC-equivalent edge over runner-up, as a per-active-season
+  // rate (e.g. +3,127 KTC/yr). Headline number on the row.
+  ktc_edge_per_season: number;
+  // Same edge multiplied across the full active window (e.g. +5,200 KTC
+  // total over 1.7 seasons). Paired with the per-season rate.
+  ktc_edge_total: number;
 }
 
 export interface WrappedUserTrades {
   num_trades: number;
-  net_value_gained: number;
+  // Sum of ktc_edge_per_season gained as winner minus share of losses.
+  net_ktc_per_season: number;
 }
 
 export interface WrappedTradesPayload {
@@ -492,5 +515,61 @@ export interface WrappedTradesPayload {
   by_user: { [user: string]: WrappedUserTrades };
   biggest_fleecing: WrappedTrade | null;
   most_active_trader: { username: string; num_trades: number } | null;
+  // Concavity exponent and inclusive evaluation date the whole section
+  // was computed under (both inherited from the per-trade fields, but
+  // surfaced at the top so the UI can show a single "as of X" timestamp).
+  k?: number;
+  evaluation_end?: string;
+}
+
+
+// ---------------------------------------------------------------------------
+// Trade inspector (GET /wrapped/sleeper/<league>/inspect_trade)
+// ---------------------------------------------------------------------------
+/** One point on a side's cumulative-race curve. Both sides share the
+ *  same timeline (and the same ``active_days`` denominator), so any
+ *  visual line crossing equals a verdict flip. */
+export interface WrappedRaceChartPoint {
+  date: string;          // ISO YYYY-MM-DD
+  score: number;         // running integral score
+  raw_area: number;      // running raw KTC-day area (pre-concavity)
+  active_days: number;   // running active-day count
+  ktc_equiv: number;     // running KTC-equivalent value -- the line we plot
+}
+
+export interface WrappedRaceChartSide {
+  team_label: string;
+  points: WrappedRaceChartPoint[];
+}
+
+export interface WrappedRaceChart {
+  trade_date: string;
+  evaluation_end: string;
+  k: number;
+  sides: WrappedRaceChartSide[];
+  /** Every date the running first place changes hands. Render these as
+   *  vertical reference lines on the chart. */
+  crossover_dates: string[];
+}
+
+/** Per-asset raw-KTC sparkline series. One row per asset in the trade. */
+export interface WrappedPerAssetSeries {
+  team_label: string;
+  asset_id: string;
+  label: string;
+  is_pick: boolean;
+  sleeper_id: string | null;
+  points: Array<{ date: string; value: number }>;
+}
+
+/** Full payload for the trade inspector modal. ``trade`` mirrors the
+ *  row in ``WrappedTradesPayload.trades`` so the same row header can
+ *  render in both places. */
+export interface WrappedInspectTrade {
+  trade: WrappedTrade;
+  race_chart: WrappedRaceChart;
+  per_asset_series: WrappedPerAssetSeries[];
+  k: number;
+  evaluation_end: string;
 }
 

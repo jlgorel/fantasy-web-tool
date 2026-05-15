@@ -1,0 +1,70 @@
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+(node:96508) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:96508) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+ERROR in src/pages/WrappedPage.tsx:50:32
+TS2307: Cannot find module '../components/TradeInspector' or its corresponding type declarations.
+  [0m [90m 48 |[39m [36mimport[39m { api } [36mfrom[39m [32m'../api/client'[39m[33m;[39m
+   [90m 49 |[39m [36mimport[39m { [33mLineChart[39m[33m,[39m [33mLineSeries[39m } [36mfrom[39m [32m'../components/LineChart'[39m[33m;[39m
+  [31m[1m>[22m[39m[90m 50 |[39m [36mimport[39m { [33mTradeInspector[39m } [36mfrom[39m [32m'../components/TradeInspector'[39m[33m;[39m
+   [90m    |[39m                                [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 51 |[39m [36mimport[39m { [33mSleeperLeagueSeason[39m[33m,[39m [33mWrappedApiResponse[39m[33m,[39m [33mWrappedAllTimeAccolades[39m[33m,[39m [33mWrappedAllTimeResponse[39m[33m,[39m [33mWrappedResponse[39m[33m,[39m [33mWrappedStreamersPayload[39m } [36mfrom[39m [32m'../types/player'[39m[33m;[39m
+   [90m 52 |[39m
+   [90m 53 |[39m[0m
+
+ERROR in src/components/TradeInspector.tsx
+TS1208: 'TradeInspector.tsx' cannot be compiled under '--isolatedModules' because it is considered a global script file. Add an import, export, or an empty 'export {}' statement to make it a module.
+
+ERROR in src/pages/WrappedPage.tsx:50:32
+TS2307: Cannot find module '../components/TradeInspector' or its corresponding type declarations.
+  [0m [90m 48 |[39m [36mimport[39m { api } [36mfrom[39m [32m'../api/client'[39m[33m;[39m
+   [90m 49 |[39m [36mimport[39m { [33mLineChart[39m[33m,[39m [33mLineSeries[39m } [36mfrom[39m [32m'../components/LineChart'[39m[33m;[39m
+  [31m[1m>[22m[39m[90m 50 |[39m [36mimport[39m { [33mTradeInspector[39m } [36mfrom[39m [32m'../components/TradeInspector'[39m[33m;[39m
+   [90m    |[39m                                [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 51 |[39m [36mimport[39m { [33mSleeperLeagueSeason[39m[33m,[39m [33mWrappedApiResponse[39m[33m,[39m [33mWrappedAllTimeAccolades[39m[33m,[39m [33mWrappedAllTimeResponse[39m[33m,[39m [33mWrappedResponse[39m[33m,[39m [33mWrappedStreamersPayload[39m } [36mfrom[39m [32m'../types/player'[39m[33m;[39m
+   [90m 52 |[39m
+   [90m 53 |[39m[0m
+
+ERROR in src/components/TradeInspector.tsx:246:17
+TS2322: Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+  [0m [90m 244 |[39m                   [36mreturn[39m row [33m?[39m [32m`${row.date} (day ${day})`[39m [33m:[39m [32m`day ${day}`[39m[33m;[39m
+   [90m 245 |[39m                 }}
+  [31m[1m>[22m[39m[90m 246 |[39m                 formatter[33m=[39m{(v[33m:[39m number) [33m=>[39m v[33m.[39mtoLocaleString()}
+   [90m     |[39m                 [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 247 |[39m                 contentStyle[33m=[39m{{ fontSize[33m:[39m [35m11[39m }}
+   [90m 248 |[39m               [33m/[39m[33m>[39m
+   [90m 249 |[39m               [33m<[39m[33mLegend[39m wrapperStyle[33m=[39m{{ fontSize[33m:[39m [35m11[39m }} [33m/[39m[33m>[39m[0m
+
+ERROR in src/components/TradeInspector.tsx:346:29
+TS2322: Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+  [0m [90m 344 |[39m                               [36mreturn[39m row [33m?[39m row[33m.[39mdate [33m:[39m [32m`day ${day}`[39m[33m;[39m
+   [90m 345 |[39m                             }}
+  [31m[1m>[22m[39m[90m 346 |[39m                             formatter[33m=[39m{(v[33m:[39m number) [33m=>[39m v[33m.[39mtoLocaleString()}
+   [90m     |[39m                             [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 347 |[39m                             contentStyle[33m=[39m{{ fontSize[33m:[39m [35m10[39m[33m,[39m padding[33m:[39m [35m4[39m }}
+   [90m 348 |[39m                           [33m/[39m[33m>[39m
+   [90m 349 |[39m                           [33m<[39m[33mLine[39m[0m
+
+ERROR in src/components/TradeInspector.tsx:346:29
+TS2322: Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(v: number) => string' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'v' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.
+  [0m [90m 344 |[39m                               [36mreturn[39m row [33m?[39m row[33m.[39mdate [33m:[39m [32m`day ${day}`[39m[33m;[39m
+   [90m 345 |[39m                             }}
+  [31m[1m>[22m[39m[90m 346 |[39m                             formatter[33m=[39m{(v[33m:[39m number) [33m=>[39m v[33m.[39mtoLocaleString()}
+   [90m     |[39m                             [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+   [90m 347 |[39m                             contentStyle[33m=[39m{{ fontSize[33m:[39m [35m10[39m[33m,[39m padding[33m:[39m [35m4[39m }}
+   [90m 348 |[39m                           [33m/[39m[33m>[39m
+   [90m 349 |[39m                           [33m<[39m[33mLine[39m[0m
+

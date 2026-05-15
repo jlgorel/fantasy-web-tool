@@ -1,4 +1,4 @@
-﻿"""Backwards-compatible facade for the legacy sleeper_service module.
+"""Backwards-compatible facade for the legacy sleeper_service module.
 
 The original monolithic file has been split into focused modules under
 app.services (blob_store, scoring, lineup_optimizer, free_agents, etc.).

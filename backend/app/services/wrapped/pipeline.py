@@ -15,12 +15,12 @@ Currently wired:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from app.services.blob_store import load_blob, try_load_blob
 from app.services.season import get_current_fantasy_year
 from app.services.wrapped.draft import fetch_and_compute_draft
-from app.services.wrapped.fantasy_calc import get_player_values
 from app.services.wrapped.league_context import LeagueContext, load_league_context
 from app.services.wrapped.replacement_value import compute_baseline_player_scoring
 from app.services.wrapped.roster_accolades import (
@@ -183,22 +183,38 @@ def _build_trades_section(
     transactions: LeagueTransactions,
     players_meta: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """Phase-3 trade accolades. FantasyCalc-valued trades + winners.
+    """Phase-3 trade accolades. KTC value-integral lookback for dynasty
+    leagues only.
 
-    Empty section when the league had no completed trades. FantasyCalc
-    failure degrades to "every player worth 0" — the trade list still
-    renders so the user can see who traded with whom even without values.
+    Redraft leagues get an empty section here -- their trades will be
+    evaluated by a separate post-trade PPG lookback (planned: a sleeper
+    scoring-data comparison, not a value-curve integral, because redraft
+    trades have a hard ~14-week valuation horizon).
+
+    Empty section also when the league had no completed trades.
     """
+    if not ctx.is_dynasty:
+        return {"trades": [], "by_user": {}, "biggest_fleecing": None,
+                "most_active_trader": None}
     if not transactions.trades:
         return {"trades": [], "by_user": {}, "biggest_fleecing": None,
                 "most_active_trader": None}
 
-    player_values = get_player_values(
-        is_dynasty=ctx.is_dynasty,
+    # KTC integral evaluator. FantasyCalc lookups are no longer needed
+    # for the trade ledger -- the historical KTC blob carries everything,
+    # and the value-time integral handles the "trade looked great then,
+    # looks bad now" reality that the static FC sum can't.
+    try:
+        season_int = int(ctx.year)
+    except (TypeError, ValueError):
+        season_int = datetime.now(timezone.utc).year
+    return calculate_trade_accolades(
+        transactions,
+        season=season_int,
         num_qbs=ctx.num_qbs,
-        skill_score_key=ctx.skill_score_key,
+        players_meta=players_meta,
+        league_id=ctx.league_id,
     )
-    return calculate_trade_accolades(transactions, player_values, players_meta)
 
 
 def _build_streamers_section(

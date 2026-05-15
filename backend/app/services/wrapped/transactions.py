@@ -53,11 +53,19 @@ class Trade:
     Sleeper's transaction shape is a flat ``adds``/``drops`` dict keyed on
     pid -> roster_id. We invert that into a ``sides`` map so the trade
     valuation pipeline can score each manager's haul independently.
+
+    ``status_updated_ms`` is Sleeper's epoch-millis timestamp for when
+    the trade completed. The KTC value-integral evaluator needs a real
+    calendar date for ``trade_date``, so plumbing this through lets us
+    avoid week-number heuristics. May be ``None`` for trades whose
+    Sleeper transaction predates that field; the integral evaluator
+    falls back on a week-derived approximation in that case.
     """
 
     week: int
     transaction_id: str
     sides: Dict[str, TradeSide] = field(default_factory=dict)
+    status_updated_ms: Optional[int] = None
 
 
 @dataclass
@@ -149,10 +157,21 @@ def _build_trade(
     if not any(s.received_player_ids or s.received_picks for s in sides.values()):
         return None
 
+    # Sleeper's status_updated is epoch ms; preserve it for the
+    # KTC integral evaluator (which needs a real calendar date).
+    status_updated_ms_raw = tx.get("status_updated")
+    try:
+        status_updated_ms: Optional[int] = (
+            int(status_updated_ms_raw) if status_updated_ms_raw is not None else None
+        )
+    except (TypeError, ValueError):
+        status_updated_ms = None
+
     return Trade(
         week=week,
         transaction_id=str(tx.get("transaction_id") or ""),
         sides=sides,
+        status_updated_ms=status_updated_ms,
     )
 
 

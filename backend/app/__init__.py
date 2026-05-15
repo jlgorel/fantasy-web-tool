@@ -40,7 +40,24 @@ def create_app():
 
     # Create a Redis client
     if redis_connection_string:
-        app.redis_client = redis.from_url(redis_connection_string)
+        client = redis.from_url(redis_connection_string)
+        # Probe so we fall back to an in-process fake when there's no
+        # local redis-server running -- the dev loop shouldn't require
+        # users to install Redis just to click around the Wrapped page.
+        try:
+            client.ping()
+            app.redis_client = client
+        except Exception as exc:
+            print(f"Redis at {redis_connection_string} unreachable ({exc!r}); "
+                  f"falling back to in-process fakeredis.")
+            try:
+                import fakeredis
+                app.redis_client = fakeredis.FakeRedis()
+            except ImportError:
+                raise ValueError(
+                    "Redis is unreachable and fakeredis is not installed. "
+                    "Install fakeredis or start a local redis-server."
+                ) from exc
         # Optionally set a timeout for your Redis operations
         app.redis_client.timeout = 5  # Timeout in seconds
     else:
