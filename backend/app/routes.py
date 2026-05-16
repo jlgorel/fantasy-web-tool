@@ -7,6 +7,7 @@ from app.services.wrapped.all_time import build_all_time_payload
 from app.services.wrapped.league_context import load_league_context
 from app.services.wrapped.transactions import fetch_league_transactions
 from app.services.wrapped.trade_accolades import inspect_trade as inspect_trade_payload
+from app.services.wrapped.redraft_trade_inspector import inspect_redraft_trade
 from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
 from app.services.sleeper_league_lookup import (
@@ -307,6 +308,89 @@ def wrapped_inspect_trade(league_id):
         return jsonify(payload), 200
     except Exception as e:
         print("Exception in wrapped_inspect_trade: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/wrapped/sleeper/<league_id>/inspect_trade_redraft', methods=['GET'])
+def wrapped_inspect_trade_redraft(league_id):
+    """Retrospective redraft trade evaluation.
+
+    Query params:
+        transaction_id: Sleeper transaction id (required).
+        year:           4-digit fantasy year the trade lives in (default "2024").
+
+    Returns ``{transaction_id, trade_week, evaluation, baseline_total_points}``.
+    Redraft-only -- dynasty leagues 400 since they should use the KTC
+    value-integral ``inspect_trade`` endpoint instead.
+
+    503 when ``player_season_scoring_{year}.json`` is missing from blob
+    storage (run ``tools/bootstrap_historical_sleeper.py`` to backfill).
+    """
+    try:
+        transaction_id = request.args.get('transaction_id')
+        if not transaction_id:
+            return jsonify({'error': 'transaction_id is required'}), 400
+        year = request.args.get('year', '2024')
+
+        cache_key = f"wrapped_inspect_redraft_v1_{league_id}_{year}_{transaction_id}"
+        redis_client = current_app.redis_client
+        try:
+            cached = redis_client.get(cache_key)
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                return jsonify(json.loads(cached)), 200
+            except Exception:
+                pass
+
+        ctx = load_league_context(league_id, year)
+        if ctx.is_dynasty:
+            return jsonify({
+                'error': 'Redraft inspector is for redraft leagues only; '
+                         'use /inspect_trade for dynasty.',
+                'is_dynasty': True,
+            }), 400
+
+        transactions = fetch_league_transactions(ctx)
+        trade = next(
+            (t for t in transactions.trades if t.transaction_id == transaction_id),
+            None,
+        )
+        if trade is None:
+            return jsonify({
+                'error': f'Trade {transaction_id} not found in league {league_id}',
+            }), 404
+
+        season_scoring = load_blob(f"player_season_scoring_{year}.json") or {}
+        if not season_scoring:
+            return jsonify({
+                'error': 'Season scoring data unavailable for redraft inspector',
+                'detail': f'player_season_scoring_{year}.json is missing or empty',
+            }), 503
+
+        try:
+            payload = inspect_redraft_trade(
+                trade,
+                ctx=ctx,
+                season=int(year),
+                season_scoring=season_scoring,
+            )
+        except RuntimeError as exc:
+            return jsonify({
+                'error': 'Redraft inspector failed',
+                'detail': str(exc),
+            }), 503
+
+        try:
+            redis_client.set(cache_key, json.dumps(payload), ex=86400)  # 24h
+        except Exception as cache_err:
+            print(f"Inspect-trade-redraft cache set failed: {cache_err}")
+
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in wrapped_inspect_trade_redraft: " + str(e))
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 

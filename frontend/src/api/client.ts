@@ -16,6 +16,7 @@ import {
   WaiverWireResponse,
   WebsiteName,
   WrappedApiResponse,
+  WrappedInspectRedraftTrade,
   WrappedInspectTrade,
 } from '../types/player';
 
@@ -110,6 +111,22 @@ export const api = {
     if (year) params.set('year', year);
     return request<WrappedInspectTrade>(
       `/wrapped/sleeper/${encodeURIComponent(leagueId)}/inspect_trade?${params.toString()}`,
+    );
+  },
+
+  /**
+   * Redraft retrospective trade evaluator: scores who won a completed
+   * redraft trade based on the rest-of-season VORP each side produced.
+   * Backend 400s for dynasty leagues; the parent must dispatch on
+   * `is_dynasty` before calling.
+   */
+  getWrappedInspectTradeRedraft(
+    leagueId: string, transactionId: string, year?: string,
+  ): Promise<WrappedInspectRedraftTrade> {
+    const params = new URLSearchParams({ transaction_id: transactionId });
+    if (year) params.set('year', year);
+    return request<WrappedInspectRedraftTrade>(
+      `/wrapped/sleeper/${encodeURIComponent(leagueId)}/inspect_trade_redraft?${params.toString()}`,
     );
   },
 
