@@ -184,10 +184,6 @@ export const TradeInspectorRedraft: React.FC<TradeInspectorRedraftProps> = ({
   }
 
   const { evaluation } = data;
-  const winnerSide =
-    evaluation.verdict === 'wash'
-      ? null
-      : evaluation.sides.find((s) => s.username === evaluation.verdict);
   const verdictText =
     evaluation.verdict === 'wash'
       ? 'Wash'
