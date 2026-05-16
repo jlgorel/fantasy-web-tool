@@ -261,10 +261,21 @@ export interface WrappedResponse {
 // Phase 4 / TODO #5: all-time aggregator (year=all). Each accolade is a
 // crown winner across the full league_chain history. ``user_id`` is the
 // stable Sleeper id (null for legacy buckets keyed by display name only).
-export interface WrappedAllTimeCrown {
+export interface WrappedAllTimeLuckiest {
   username: string;
   user_id: string | null;
-  years_won: number;
+  /** Total raw lucky-win count summed across all seasons. */
+  lucky_wins: number;
+  /** Number of seasons the user contributed at least one lucky win. */
+  seasons: number;
+}
+
+export interface WrappedAllTimeUnluckiest {
+  username: string;
+  user_id: string | null;
+  /** Total raw unlucky-loss count summed across all seasons. */
+  unlucky_losses: number;
+  seasons: number;
 }
 
 export interface WrappedAllTimeTroll {
@@ -290,12 +301,13 @@ export interface WrappedAllTimeTrades {
 export interface WrappedAllTimeNetValue {
   username: string;
   user_id: string | null;
-  net_value_gained: number;
+  /** Net KTC value gained per season, summed across all seasons. */
+  net_ktc_per_season: number;
 }
 
 export interface WrappedAllTimeAccolades {
-  luckiest: WrappedAllTimeCrown | null;
-  unluckiest: WrappedAllTimeCrown | null;
+  luckiest: WrappedAllTimeLuckiest | null;
+  unluckiest: WrappedAllTimeUnluckiest | null;
   worst_start_sit: WrappedAllTimeTroll | null;
   most_efficient: WrappedAllTimeEfficiency | null;
   least_efficient: WrappedAllTimeEfficiency | null;
@@ -439,6 +451,7 @@ export interface WrappedDraftPick {
   drafted_pos_rank: number;
   actual_pos_rank: number;
   value_over_slot: number;
+  bust_score?: number;
   username?: string;
 }
 
@@ -550,6 +563,19 @@ export interface WrappedRaceChart {
   /** Every date the running first place changes hands. Render these as
    *  vertical reference lines on the chart. */
   crossover_dates: string[];
+  /** Pick-resolution markers: for each pick asset whose draft has
+   *  completed inside the holding window, a labelled vertical line at
+   *  the date the pick became a specific player. Picks whose drafts
+   *  haven't happened yet are silently omitted. */
+  pick_resolutions?: WrappedPickResolution[];
+}
+
+export interface WrappedPickResolution {
+  date: string;       // ISO YYYY-MM-DD
+  label: string;      // drafted player's full name (e.g. "Jalen Milroe")
+  pick_label?: string; // pick descriptor (e.g. "2024 R2"); optional for back-compat
+  asset_id: string;
+  team_label: string;
 }
 
 /** Per-asset raw-KTC sparkline series. One row per asset in the trade. */
@@ -569,6 +595,7 @@ export interface WrappedInspectTrade {
   trade: WrappedTrade;
   race_chart: WrappedRaceChart;
   per_asset_series: WrappedPerAssetSeries[];
+  pick_resolutions?: WrappedPickResolution[];
   k: number;
   evaluation_end: string;
 }

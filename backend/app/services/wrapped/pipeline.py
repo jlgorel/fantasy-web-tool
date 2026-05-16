@@ -142,7 +142,11 @@ def _build_draft_section(
     effective_scoring = season_scoring or (
         players_meta if str(ctx.year) == str(get_current_fantasy_year()) else {}
     )
-    if not effective_scoring:
+    # Dynasty leagues score the draft against current KTC values rather
+    # than season points (see ``draft.compute_dynasty_value_over_slot``),
+    # so an empty season-scoring blob is fine for them. Redraft leagues
+    # still need season points to compute anything meaningful.
+    if not effective_scoring and not getattr(ctx, "is_dynasty", False):
         logger.info(
             "Wrapped: no season scoring for %s/%s — draft accolades empty",
             ctx.league_id,

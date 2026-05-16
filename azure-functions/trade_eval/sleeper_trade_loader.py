@@ -65,6 +65,69 @@ class SeasonContext:
     trades: List[Dict[str, Any]]
 
 
+def find_head_league_id(
+    starting_league_id: str,
+    *,
+    http: HttpGetJson,
+    max_years_forward: int = 5,
+) -> str:
+    """Walk forward in time from ``starting_league_id`` to find the newest
+    league in the same dynasty chain.
+
+    Sleeper exposes ``previous_league_id`` on each league but no
+    ``next_league_id`` pointer. To walk forward we pick one of the
+    starting league's roster owners, list that user's leagues in the
+    next NFL season, and look for a league whose ``previous_league_id``
+    matches our current head. We then advance and repeat.
+
+    Returns ``starting_league_id`` unchanged when:
+      * The starting league has no owners (orphan / broken data)
+      * No future-season league claims us as ``previous_league_id``
+        (typical for the current season's head)
+      * Any HTTP call fails (best-effort; we'd rather render with
+        backwards-only chain than 500 the wrapped page)
+    """
+    try:
+        starting = fetch_league(http, starting_league_id)
+        if not starting:
+            return starting_league_id
+        try:
+            starting_season = int(starting.get("season") or 0)
+        except (TypeError, ValueError):
+            return starting_league_id
+        if starting_season <= 0:
+            return starting_league_id
+
+        rosters = fetch_rosters(http, starting_league_id)
+        owner_id: Optional[str] = None
+        for r in rosters:
+            oid = r.get("owner_id")
+            if oid:
+                owner_id = str(oid)
+                break
+        if not owner_id:
+            return starting_league_id
+
+        head = starting_league_id
+        for yr in range(starting_season + 1, starting_season + 1 + max_years_forward):
+            try:
+                leagues = http(f"{_BASE}/user/{owner_id}/leagues/nfl/{yr}") or []
+            except Exception:
+                break
+            advanced = False
+            for lg in leagues:
+                prev = lg.get("previous_league_id")
+                if prev and str(prev) == str(head):
+                    head = str(lg.get("league_id"))
+                    advanced = True
+                    break
+            if not advanced:
+                break
+        return head
+    except Exception:
+        return starting_league_id
+
+
 def load_league_chain(
     starting_league_id: str,
     *,

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.services.sleeper_league_lookup import get_league_season_chain
@@ -83,8 +84,13 @@ def _empty_aggregates() -> Dict[str, Any]:
 def _aggregate(years: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Roll cross-year accolades. ``years`` is the newest-first list of
     ``{"year": ..., "league_id": ..., "payload": ...}`` entries."""
-    luckiest_crowns: Dict[str, int] = defaultdict(int)
-    unluckiest_crowns: Dict[str, int] = defaultdict(int)
+    # Luck: sum raw lucky-win / unlucky-loss counts across seasons.
+    # ``_seasons`` tracks how many seasons each user appears in so the
+    # display can read "23 lucky wins (3 seasons)".
+    lucky_total: Dict[str, int] = defaultdict(int)
+    lucky_seasons: Dict[str, int] = defaultdict(int)
+    unlucky_total: Dict[str, int] = defaultdict(int)
+    unlucky_seasons: Dict[str, int] = defaultdict(int)
     troll_total: Dict[str, float] = defaultdict(float)
     troll_years: Dict[str, int] = defaultdict(int)
     eff_sum: Dict[str, float] = defaultdict(float)
@@ -102,19 +108,38 @@ def _aggregate(years: List[Dict[str, Any]]) -> Dict[str, Any]:
     for entry in years:
         payload = entry.get("payload") or {}
 
-        # --- Luck crowns (winner-only per year) -----------------------
+        # --- Luck: sum raw per-user counts (new shape) with graceful
+        #     fallback to crown-counting for legacy cached payloads ----
         luck = (payload.get("schedule") or {}).get("luck") or {}
-        for slot, dest in (
-            ("luckiest", luckiest_crowns),
-            ("unluckiest", unluckiest_crowns),
-        ):
-            winner = luck.get(slot) or {}
-            uname = winner.get("username")
-            count = winner.get("count") or 0
-            if uname and count > 0:
+        luck_by_user = luck.get("by_user") or {}
+        if luck_by_user:
+            for uname, stats in luck_by_user.items():
                 key, name = _user_key_and_name(payload, uname)
-                dest[key] += 1
-                _remember(key, name)
+                lw = int((stats or {}).get("lucky_wins") or 0)
+                ul = int((stats or {}).get("unlucky_losses") or 0)
+                if lw > 0:
+                    lucky_total[key] += lw
+                    lucky_seasons[key] += 1
+                if ul > 0:
+                    unlucky_total[key] += ul
+                    unlucky_seasons[key] += 1
+                if lw > 0 or ul > 0:
+                    _remember(key, name)
+        else:
+            # Legacy payload: only the crown winners are exposed. Fall
+            # back to attributing the winner's full count to them.
+            for slot, total_dest, seasons_dest in (
+                ("luckiest", lucky_total, lucky_seasons),
+                ("unluckiest", unlucky_total, unlucky_seasons),
+            ):
+                winner = luck.get(slot) or {}
+                uname = winner.get("username")
+                count = int(winner.get("count") or 0)
+                if uname and count > 0:
+                    key, name = _user_key_and_name(payload, uname)
+                    total_dest[key] += count
+                    seasons_dest[key] += 1
+                    _remember(key, name)
 
         # --- Manager efficiency (per-user pct, avg over years) --------
         eff_by_user = (
@@ -156,33 +181,46 @@ def _aggregate(years: List[Dict[str, Any]]) -> Dict[str, Any]:
             except (TypeError, ValueError):
                 pass
             try:
-                trade_net[key] += float(t.get("net_value_gained") or 0.0)
+                # Per-year aggregators emit ``net_ktc_per_season`` (dynasty:
+                # trade_accolades.py; redraft: redraft_trades_section.py).
+                # Read with a fallback to the historical (incorrect) name
+                # in case a legacy cached payload is still around.
+                net = t.get("net_ktc_per_season")
+                if net is None:
+                    net = t.get("net_value_gained")
+                trade_net[key] += float(net or 0.0)
             except (TypeError, ValueError):
                 pass
             _remember(key, name)
 
     out: Dict[str, Any] = _empty_aggregates()
 
-    def _crown_winner(counts: Dict[str, int], field_name: str) -> Optional[Dict[str, Any]]:
-        if not counts:
+    def _sum_winner(
+        totals: Dict[str, int],
+        seasons: Dict[str, int],
+        total_field: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Pick the user with the highest summed raw count. Returns
+        ``{username, user_id, <total_field>, seasons}`` or ``None``."""
+        if not totals:
             return None
-        # max count, ties broken by display-name alphabetical for determinism
-        max_n = max(counts.values())
-        if max_n <= 0:
+        max_total = max(totals.values())
+        if max_total <= 0:
             return None
         candidates = sorted(
-            (k for k, v in counts.items() if v == max_n),
+            (k for k, v in totals.items() if v == max_total),
             key=lambda k: display_for_key.get(k, k),
         )
         winner = candidates[0]
         return {
             "username": display_for_key.get(winner, winner),
             "user_id": _resolved_user_id(winner),
-            field_name: int(counts[winner]),
+            total_field: int(totals[winner]),
+            "seasons": int(seasons.get(winner, 0)),
         }
 
-    out["luckiest"] = _crown_winner(luckiest_crowns, "years_won")
-    out["unluckiest"] = _crown_winner(unluckiest_crowns, "years_won")
+    out["luckiest"] = _sum_winner(lucky_total, lucky_seasons, "lucky_wins")
+    out["unluckiest"] = _sum_winner(unlucky_total, unlucky_seasons, "unlucky_losses")
 
     if troll_total:
         max_total = max(troll_total.values())
@@ -231,13 +269,13 @@ def _aggregate(years: List[Dict[str, Any]]) -> Dict[str, Any]:
             out["biggest_net_gainer"] = {
                 "username": display_for_key.get(gain_key, gain_key),
                 "user_id": _resolved_user_id(gain_key),
-                "net_value_gained": round(trade_net[gain_key], 1),
+                "net_ktc_per_season": round(trade_net[gain_key], 1),
             }
         if trade_net[loss_key] < 0:
             out["biggest_net_loser"] = {
                 "username": display_for_key.get(loss_key, loss_key),
                 "user_id": _resolved_user_id(loss_key),
-                "net_value_gained": round(trade_net[loss_key], 1),
+                "net_ktc_per_season": round(trade_net[loss_key], 1),
             }
 
     return out
@@ -263,23 +301,51 @@ def build_all_time_payload(league_id: str) -> Dict[str, Any]:
     if not chain:
         return {"mode": "all_time", "all_time": _empty_aggregates(), "years": []}
 
-    years_payloads: List[Dict[str, Any]] = []
+    # Per-year fetches are independently Redis-cached upstream, but cold
+    # paths still pay the full IO cost (Sleeper transactions, weekly
+    # scores, KTC blob load). Fan out in a thread pool so an 8-season
+    # dynasty cold-load isn't 8 × 8s serial = 60s+.
+    tasks: List[Tuple[str, str]] = []
     for entry in chain:
         season = str(entry.get("season"))
         lid = str(entry.get("league_id"))
         if not season or not lid:
             continue
-        try:
-            payload = compute_wrapped(lid, season)
-        except Exception as e:
-            # One bad season shouldn't kill the whole all-time view —
-            # log and move on. Aggregates over the remaining seasons
-            # remain valid.
-            logger.warning(
-                "all_time: compute_wrapped failed for %s/%s: %s", lid, season, e
-            )
+        tasks.append((season, lid))
+
+    if not tasks:
+        return {"mode": "all_time", "all_time": _empty_aggregates(), "years": []}
+
+    # Cap workers to avoid hammering Sleeper / blob storage on huge
+    # chains. 8 is plenty for typical 6-10 season dynasty histories.
+    max_workers = min(8, len(tasks))
+    results: Dict[str, Dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        future_to_key = {
+            ex.submit(compute_wrapped, lid, season): (season, lid)
+            for season, lid in tasks
+        }
+        for fut in as_completed(future_to_key):
+            season, lid = future_to_key[fut]
+            try:
+                results[season] = fut.result()
+            except Exception as e:
+                # One bad season shouldn't kill the all-time view.
+                logger.warning(
+                    "all_time: compute_wrapped failed for %s/%s: %s",
+                    lid, season, e,
+                )
+
+    # Re-order back to chain order (newest-first) so the UI dropdown
+    # and aggregator both see seasons in the canonical sequence.
+    years_payloads: List[Dict[str, Any]] = []
+    for season, lid in tasks:
+        payload = results.get(season)
+        if payload is None:
             continue
-        years_payloads.append({"year": season, "league_id": lid, "payload": payload})
+        years_payloads.append(
+            {"year": season, "league_id": lid, "payload": payload}
+        )
 
     return {
         "mode": "all_time",

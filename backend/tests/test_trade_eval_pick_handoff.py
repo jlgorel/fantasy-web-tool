@@ -436,3 +436,53 @@ class TestEvaluateRealTrade:
         if len(result.sides) == 2:
             ms = list(result.margins.values())
             assert abs(ms[0] + ms[1]) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Forward chain walk
+# ---------------------------------------------------------------------------
+class TestFindHeadLeagueId:
+    def test_walks_forward_until_no_match(self, te):
+        # Synthetic 3-season chain: 2023 -> 2024 -> 2025. Caller passes
+        # the 2023 league_id; we should advance to 2025.
+        leagues = {
+            "L23": {"league_id": "L23", "season": 2023},
+            "L24": {"league_id": "L24", "season": 2024, "previous_league_id": "L23"},
+            "L25": {"league_id": "L25", "season": 2025, "previous_league_id": "L24"},
+        }
+
+        def fake_http(url):
+            if url.endswith("/league/L23"):
+                return leagues["L23"]
+            if url.endswith("/league/L23/rosters"):
+                return [{"roster_id": 1, "owner_id": "U1"}]
+            if "/user/U1/leagues/nfl/2024" in url:
+                return [leagues["L24"]]
+            if "/user/U1/leagues/nfl/2025" in url:
+                return [leagues["L25"]]
+            if "/user/U1/leagues/nfl/" in url:
+                return []
+            return None
+
+        head = te["stl"].find_head_league_id("L23", http=fake_http)
+        assert head == "L25"
+
+    def test_returns_starting_when_no_future_league(self, te):
+        def fake_http(url):
+            if url.endswith("/league/L"):
+                return {"league_id": "L", "season": 2025}
+            if url.endswith("/league/L/rosters"):
+                return [{"roster_id": 1, "owner_id": "U1"}]
+            return []  # no future leagues for user
+
+        assert te["stl"].find_head_league_id("L", http=fake_http) == "L"
+
+    def test_returns_starting_when_no_owner_id(self, te):
+        def fake_http(url):
+            if url.endswith("/league/L"):
+                return {"league_id": "L", "season": 2024}
+            if url.endswith("/league/L/rosters"):
+                return [{"roster_id": 1, "owner_id": None}]
+            return []
+
+        assert te["stl"].find_head_league_id("L", http=fake_http) == "L"

@@ -193,9 +193,10 @@ def wrapped_sleeper(league_id):
             payload = build_all_time_payload(league_id)
 
             try:
-                # Shorter TTL than per-year — small payload-of-payloads but
-                # we want changes to per-year caches to propagate quickly.
-                redis_client.set(cache_key, json.dumps(payload), ex=3600)  # 1h
+                # Per-year cache is 24h; aggregating from already-cached
+                # per-year payloads is cheap, so we can hold the all-time
+                # roll-up for a while too.
+                redis_client.set(cache_key, json.dumps(payload), ex=21600)  # 6h
             except Exception as cache_err:
                 print(f"Wrapped all-time cache set failed: {cache_err}")
 

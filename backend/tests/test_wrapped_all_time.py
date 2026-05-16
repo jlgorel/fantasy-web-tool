@@ -23,10 +23,25 @@ def _payload(
     user_id_to_username: Dict[str, str],
     luckiest: tuple | None = None,        # (username, count)
     unluckiest: tuple | None = None,
+    luck_by_user: Dict[str, Dict[str, int]] | None = None,
     eff_by_user: Dict[str, float] | None = None,
     troll: Dict[str, Dict[str, Any]] | None = None,  # username -> entry
     trades_by_user: Dict[str, Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
+    """Build a synthetic per-year payload.
+
+    ``luck_by_user`` is the new shape (per-user raw counts the
+    aggregator sums across seasons). When omitted, the helper derives a
+    sensible default from ``luckiest`` / ``unluckiest`` so the existing
+    tests still exercise the new code path.
+    """
+    if luck_by_user is None:
+        derived: Dict[str, Dict[str, int]] = {}
+        if luckiest:
+            derived.setdefault(luckiest[0], {})["lucky_wins"] = int(luckiest[1])
+        if unluckiest:
+            derived.setdefault(unluckiest[0], {})["unlucky_losses"] = int(unluckiest[1])
+        luck_by_user = derived
     return {
         "meta": {"user_id_to_username": dict(user_id_to_username)},
         "schedule": {
@@ -39,6 +54,13 @@ def _payload(
                     {"username": unluckiest[0], "count": unluckiest[1]}
                     if unluckiest else {"username": None, "count": 0}
                 ),
+                "by_user": {
+                    user: {
+                        "lucky_wins": int(stats.get("lucky_wins", 0)),
+                        "unlucky_losses": int(stats.get("unlucky_losses", 0)),
+                    }
+                    for user, stats in luck_by_user.items()
+                },
             },
             "manager_efficiency": {
                 "by_user": dict(eff_by_user or {}),
@@ -71,17 +93,19 @@ def test_single_year_chain_collapses_to_that_year():
             "bob": None,
         },
         trades_by_user={
-            "alice": {"num_trades": 2, "net_value_gained": 10.0},
-            "bob": {"num_trades": 1, "net_value_gained": -10.0},
+            "alice": {"num_trades": 2, "net_ktc_per_season": 10.0},
+            "bob": {"num_trades": 1, "net_ktc_per_season": -10.0},
         },
     )
     result = all_time._aggregate([_entry("2025", "L1", payload)])
 
     assert result["luckiest"] == {
-        "username": "alice", "user_id": "u1", "years_won": 1
+        "username": "alice", "user_id": "u1",
+        "lucky_wins": 3, "seasons": 1,
     }
     assert result["unluckiest"] == {
-        "username": "bob", "user_id": "u2", "years_won": 1
+        "username": "bob", "user_id": "u2",
+        "unlucky_losses": 2, "seasons": 1,
     }
     assert result["worst_start_sit"]["username"] == "alice"
     assert result["worst_start_sit"]["user_id"] == "u1"
@@ -96,9 +120,9 @@ def test_single_year_chain_collapses_to_that_year():
     assert result["most_active_trader"]["username"] == "alice"
     assert result["most_active_trader"]["total_trades"] == 2
     assert result["biggest_net_gainer"]["username"] == "alice"
-    assert result["biggest_net_gainer"]["net_value_gained"] == 10.0
+    assert result["biggest_net_gainer"]["net_ktc_per_season"] == 10.0
     assert result["biggest_net_loser"]["username"] == "bob"
-    assert result["biggest_net_loser"]["net_value_gained"] == -10.0
+    assert result["biggest_net_loser"]["net_ktc_per_season"] == -10.0
 
 
 def test_multi_year_aggregation_sums_correctly():
@@ -113,8 +137,8 @@ def test_multi_year_aggregation_sums_correctly():
                          "num_start": 5, "num_bench": 2,
                          "start_avg": 1, "bench_avg": 1}},
         trades_by_user={
-            "alice": {"num_trades": 1, "net_value_gained": 5.0},
-            "bob": {"num_trades": 2, "net_value_gained": -3.0},
+            "alice": {"num_trades": 1, "net_ktc_per_season": 5.0},
+            "bob": {"num_trades": 2, "net_ktc_per_season": -3.0},
         },
     )
     y2024 = _payload(
@@ -131,19 +155,21 @@ def test_multi_year_aggregation_sums_correctly():
                       "start_avg": 1, "bench_avg": 1},
         },
         trades_by_user={
-            "alice": {"num_trades": 2, "net_value_gained": 1.0},
-            "bob": {"num_trades": 2, "net_value_gained": 4.0},
+            "alice": {"num_trades": 2, "net_ktc_per_season": 1.0},
+            "bob": {"num_trades": 2, "net_ktc_per_season": 4.0},
         },
     )
     result = all_time._aggregate([_entry("2025", "L2", y2025),
                                   _entry("2024", "L1", y2024)])
 
-    # Luck crowns: alice 1, bob 1 (tie); deterministic alphabetical → alice
+    # Luck: alice 4 lucky wins (1 season), bob 2 (1 season) -> alice
     assert result["luckiest"]["username"] == "alice"
-    assert result["luckiest"]["years_won"] == 1
-    # Bob took both unluckiest crowns
+    assert result["luckiest"]["lucky_wins"] == 4
+    assert result["luckiest"]["seasons"] == 1
+    # Bob: 1 + 3 = 4 unlucky losses across 2 seasons
     assert result["unluckiest"]["username"] == "bob"
-    assert result["unluckiest"]["years_won"] == 2
+    assert result["unluckiest"]["unlucky_losses"] == 4
+    assert result["unluckiest"]["seasons"] == 2
 
     # worst_start_sit: alice 5+4=9, bob 2 → alice
     assert result["worst_start_sit"]["username"] == "alice"
@@ -162,7 +188,7 @@ def test_multi_year_aggregation_sums_correctly():
 
     # net: alice 5+1=6, bob -3+4=1 → alice gainer, no loser (no negative net)
     assert result["biggest_net_gainer"]["username"] == "alice"
-    assert result["biggest_net_gainer"]["net_value_gained"] == 6.0
+    assert result["biggest_net_gainer"]["net_ktc_per_season"] == 6.0
     assert result["biggest_net_loser"] is None
 
 
@@ -178,7 +204,7 @@ def test_user_id_buckets_across_display_name_change():
         troll={"alicia": {"troll_value": 3.0, "player_id": "p", "name": "p",
                           "num_start": 5, "num_bench": 2,
                           "start_avg": 1, "bench_avg": 1}},
-        trades_by_user={"alicia": {"num_trades": 2, "net_value_gained": 5.0}},
+        trades_by_user={"alicia": {"num_trades": 2, "net_ktc_per_season": 5.0}},
     )
     y2024 = _payload(  # older
         user_id_to_username={"u1": "alice", "u2": "bob"},
@@ -187,15 +213,16 @@ def test_user_id_buckets_across_display_name_change():
         troll={"alice": {"troll_value": 2.0, "player_id": "p", "name": "p",
                          "num_start": 5, "num_bench": 2,
                          "start_avg": 1, "bench_avg": 1}},
-        trades_by_user={"alice": {"num_trades": 1, "net_value_gained": 3.0}},
+        trades_by_user={"alice": {"num_trades": 1, "net_ktc_per_season": 3.0}},
     )
     result = all_time._aggregate([_entry("2025", "L2", y2025),
                                   _entry("2024", "L1", y2024)])
 
-    # Two crowns merged under user_id u1, rendered with newest display_name
+    # Two seasons merged under user_id u1, rendered with newest display_name
     assert result["luckiest"]["user_id"] == "u1"
     assert result["luckiest"]["username"] == "alicia"
-    assert result["luckiest"]["years_won"] == 2
+    assert result["luckiest"]["lucky_wins"] == 2
+    assert result["luckiest"]["seasons"] == 2
 
     # Troll values summed across the rename
     assert result["worst_start_sit"]["user_id"] == "u1"

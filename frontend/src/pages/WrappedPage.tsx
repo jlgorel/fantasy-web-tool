@@ -842,12 +842,16 @@ const AllTimeAccolades: React.FC<{ data: WrappedAllTimeAccolades }> = ({ data })
       {accoladeCard(
         '👑 All-time luckiest',
         data.luckiest?.username,
-        data.luckiest ? `${yearLabel(data.luckiest.years_won)} crowned` : undefined,
+        data.luckiest
+          ? `${data.luckiest.lucky_wins} lucky win${data.luckiest.lucky_wins === 1 ? '' : 's'} over ${yearLabel(data.luckiest.seasons)}`
+          : undefined,
       )}
       {accoladeCard(
         '💀 All-time unluckiest',
         data.unluckiest?.username,
-        data.unluckiest ? `${yearLabel(data.unluckiest.years_won)} crowned` : undefined,
+        data.unluckiest
+          ? `${data.unluckiest.unlucky_losses} unlucky loss${data.unluckiest.unlucky_losses === 1 ? '' : 'es'} over ${yearLabel(data.unluckiest.seasons)}`
+          : undefined,
       )}
       {accoladeCard(
         '🤡 Worst start/sit',
@@ -881,14 +885,14 @@ const AllTimeAccolades: React.FC<{ data: WrappedAllTimeAccolades }> = ({ data })
         '📈 Biggest net gainer',
         data.biggest_net_gainer?.username,
         data.biggest_net_gainer
-          ? `+${data.biggest_net_gainer.net_value_gained.toFixed(0)} value`
+          ? `+${data.biggest_net_gainer.net_ktc_per_season.toFixed(0)} KTC/yr`
           : undefined,
       )}
       {accoladeCard(
         '📉 Biggest net loser',
         data.biggest_net_loser?.username,
         data.biggest_net_loser
-          ? `${data.biggest_net_loser.net_value_gained.toFixed(0)} value`
+          ? `${data.biggest_net_loser.net_ktc_per_season.toFixed(0)} KTC/yr`
           : undefined,
       )}
     </SimpleGrid>

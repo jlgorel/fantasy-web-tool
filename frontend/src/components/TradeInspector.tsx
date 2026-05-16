@@ -216,6 +216,31 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
     daysSince(iso, anchor),
   );
 
+  // Pick-resolution markers: each pick that became a specific player
+  // gets a labelled vertical line at the draft date on both the race
+  // chart and the matching per-asset sparkline.
+  const pickResolutions =
+    data.race_chart.pick_resolutions ?? data.pick_resolutions ?? [];
+  const pickResolutionDays = pickResolutions.map((r) => ({
+    ...r,
+    day: daysSince(r.date, anchor),
+    // Render "2024 R2 → Jalen Milroe" when the backend supplies a pick
+    // descriptor; otherwise fall back to just the player name.
+    display: r.pick_label ? `${r.pick_label} → ${r.label}` : r.label,
+  }));
+  const pickResolutionsByAsset: Record<
+    string,
+    { date: string; label: string; display: string; day: number }
+  > = {};
+  pickResolutionDays.forEach((r) => {
+    pickResolutionsByAsset[r.asset_id] = {
+      date: r.date,
+      label: r.label,
+      display: r.display,
+      day: r.day,
+    };
+  });
+
   return (
     <Box>
       {/* Race chart: running KTC-equivalent value per side */}
@@ -274,6 +299,22 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
                   }}
                 />
               ))}
+              {pickResolutionDays.map((r) => (
+                <ReferenceLine
+                  key={`pr-${r.asset_id}`}
+                  x={r.day}
+                  stroke="#805ad5"
+                  strokeDasharray="2 3"
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: r.display,
+                    fontSize: 9,
+                    fill: '#553c9a',
+                    position: 'insideBottom',
+                    offset: 12,
+                  }}
+                />
+              ))}
               {data.race_chart.sides.map((side, i) => (
                 <Line
                   key={side.team_label}
@@ -328,6 +369,7 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
                 const avg =
                   side.assets.find((a) => a.asset_id === asset.asset_id)
                     ?.avg_ktc ?? 0;
+                const resolution = pickResolutionsByAsset[asset.asset_id];
                 return (
                   <Box
                     key={asset.asset_id}
@@ -349,7 +391,12 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
                           data={sparkData}
                           margin={{ top: 2, right: 4, left: 0, bottom: 2 }}
                         >
-                          <XAxis dataKey="day" hide />
+                          <XAxis
+                            dataKey="day"
+                            type="number"
+                            domain={['dataMin', 'dataMax']}
+                            hide
+                          />
                           <YAxis hide domain={['auto', 'auto']} />
                           <Tooltip
                             labelFormatter={(day) => {
@@ -359,6 +406,21 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
                             formatter={(v) => Number(v).toLocaleString()}
                             contentStyle={{ fontSize: 10, padding: 4 }}
                           />
+                          {resolution && (
+                            <ReferenceLine
+                              x={resolution.day}
+                              stroke="#805ad5"
+                              strokeDasharray="2 3"
+                              ifOverflow="extendDomain"
+                              label={{
+                                value: resolution.display,
+                                fontSize: 8,
+                                fill: '#553c9a',
+                                position: 'insideBottom',
+                                offset: 2,
+                              }}
+                            />
+                          )}
                           <Line
                             type="monotone"
                             dataKey="value"
@@ -370,6 +432,11 @@ export const TradeInspector: React.FC<TradeInspectorProps> = ({
                         </LineChart>
                       </ResponsiveContainer>
                     </Box>
+                    {resolution && (
+                      <Text fontSize="2xs" color="purple.600" mt={1}>
+                        {resolution.date} — {resolution.display}
+                      </Text>
+                    )}
                   </Box>
                 );
               })}

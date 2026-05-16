@@ -37,7 +37,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional
 
-from app.services.trade_eval.pick_handoff import encode_pick_key, pick_blob_id
+from app.services.trade_eval.pick_handoff import encode_pick_key, pick_blob_id, parse_pick_key
 from app.services.trade_eval.trade_evaluator import (
     Trade as IntegralTrade,
     TradeAsset,
@@ -110,7 +110,10 @@ def _build_asset_for_player(
     )
 
 
-def _build_asset_for_pick(pick: Mapping[str, Any]) -> TradeAsset:
+def _build_asset_for_pick(
+    pick: Mapping[str, Any],
+    pick_table: Optional[Mapping[Tuple[str, int, int], Mapping[str, Any]]] = None,
+) -> TradeAsset:
     """Build a TradeAsset for a draft pick.
 
     The blob keys picks by ``pick:YYYY_tier_round`` (tier inferred from
@@ -120,6 +123,10 @@ def _build_asset_for_pick(pick: Mapping[str, Any]) -> TradeAsset:
     slot is supplied. Picks for seasons not in the blob will evaluate
     as zero value, which is fine: the per-asset line still shows the
     pick by name in the UI.
+
+    When ``pick_table`` is supplied and the pick has already been
+    realized into a player, the label is enriched with the drafted
+    player's name (e.g. ``"2024 R1 (JJ McCarthy)"``).
     """
     season = str(pick.get("season") or "")
     rnd = int(pick.get("round") or 0)
@@ -130,11 +137,20 @@ def _build_asset_for_pick(pick: Mapping[str, Any]) -> TradeAsset:
             sleeper_id=None, is_pick=True,
         )
     blob_id = pick_blob_id(season, rnd, slot=None)  # tier="mid"
+    orig_rid = pick.get("original_roster_id") or 0
     label = f"{season} R{rnd} pick"
+    if pick_table:
+        info = pick_table.get((season, rnd, int(orig_rid) if orig_rid else 0))
+        if info:
+            first = (info.get("drafted_first") or "").strip()
+            last = (info.get("drafted_last") or "").strip()
+            full = " ".join(p for p in (first, last) if p)
+            if full:
+                label = f"{season} R{rnd} ({full})"
     return TradeAsset(
         asset_id=blob_id,
         label=label,
-        sleeper_id=encode_pick_key(season, rnd, pick.get("original_roster_id") or 0),
+        sleeper_id=encode_pick_key(season, rnd, orig_rid),
         is_pick=True,
     )
 
@@ -146,6 +162,7 @@ def _to_integral_trade(
     evaluation_end: date,
     blob_meta: Mapping[str, Mapping[str, Any]],
     players_meta: Mapping[str, Mapping[str, Any]],
+    pick_table: Optional[Mapping[Tuple[str, int, int], Mapping[str, Any]]] = None,
 ) -> IntegralTrade:
     """Convert a wrapped-pipeline Trade into the evaluator's Trade."""
     trade_date = _trade_date_from_status(
@@ -157,7 +174,7 @@ def _to_integral_trade(
         for pid in side.received_player_ids:
             assets.append(_build_asset_for_player(pid, blob_meta, players_meta))
         for pick in side.received_picks:
-            assets.append(_build_asset_for_pick(pick))
+            assets.append(_build_asset_for_pick(pick, pick_table))
         sides.append(IntegralSide(team_label=username, received_assets=assets))
     return IntegralTrade(
         trade_date=trade_date,
@@ -191,8 +208,17 @@ def _build_pick_handoff_table(
         # live league_id, which tests don't supply).
         from app.services.trade_eval.sleeper_trade_loader import (
             build_pick_to_player,
+            find_head_league_id,
             load_league_chain,
         )
+
+        # Walk forward first so picks traded in older seasons (e.g.
+        # 2023) that resolve in future drafts (e.g. 2025) are present
+        # in the table. ``load_league_chain`` only walks backward via
+        # ``previous_league_id``, so without this step a 2023 wrapped
+        # view would never see the drafted-player labels for 2024/2025
+        # picks.
+        head_id = find_head_league_id(starting_league_id, http=fetch_json)
 
         # ``weeks_to_scan=range(0, 1)`` keeps the chain walk cheap: we
         # only need league + draft + draft_picks per season, not the
@@ -200,7 +226,7 @@ def _build_pick_handoff_table(
         # Sleeper transactions). One transactions call per season is
         # negligible.
         chain = load_league_chain(
-            starting_league_id,
+            head_id,
             http=fetch_json,
             weeks_to_scan=range(0, 1),
         )
@@ -226,11 +252,13 @@ def _summarize_trade(
     blob_meta: Mapping[str, Mapping[str, Any]],
     players_meta: Mapping[str, Mapping[str, Any]],
     k: float,
+    pick_table: Optional[Mapping[Tuple[str, int, int], Mapping[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Render one trade with per-side KTC-integral results + winner."""
     integral_trade = _to_integral_trade(
         trade, season=season, evaluation_end=evaluation_end,
         blob_meta=blob_meta, players_meta=players_meta,
+        pick_table=pick_table,
     )
     result = evaluate_trade(integral_trade, value_resolver=resolver, k=k)
 
@@ -333,6 +361,7 @@ def calculate_trade_accolades(
     # in a Feb 2024 trade evaluates as Marvin Harrison Jr. from April
     # 2024 forward, not as a generic R1 pick. Tests don't supply
     # league_id so this is a no-op there.
+    pick_table: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
     if league_id:
         pick_table = _build_pick_handoff_table(league_id)
         if pick_table:
@@ -345,6 +374,7 @@ def calculate_trade_accolades(
             t, season=season, evaluation_end=eval_end,
             resolver=resolver, blob_meta=blob_meta,
             players_meta=players_meta, k=k,
+            pick_table=pick_table,
         )
         for t in transactions.trades
     ]
@@ -423,6 +453,68 @@ __all__ = ["calculate_trade_accolades", "inspect_trade"]
 # Matches the race chart's default step so the front-end can stack both
 # charts on a common x-axis without aligning timestamps server-side.
 _INSPECT_STEP_DAYS: int = 7
+
+
+def _build_pick_resolutions(
+    integral_trade: IntegralTrade,
+    *,
+    pick_table: Mapping[Tuple[str, int, int], Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Return ``[{date, label, asset_id, team_label}]`` markers for any
+    pick asset in the trade that has already been realized into a
+    player. Used by the frontend to draw a labelled vertical line at
+    the moment the pick became a real player.
+
+    Picks whose drafts haven't happened yet (or that aren't in
+    ``pick_table``) are silently omitted -- there's no resolution date
+    to anchor a marker to.
+    """
+    out: List[Dict[str, Any]] = []
+    if not pick_table:
+        return out
+    seen: set[Tuple[str, str]] = set()
+    for side in integral_trade.sides:
+        for asset in side.received_assets:
+            if not asset.is_pick:
+                continue
+            parsed = parse_pick_key(asset.sleeper_id)
+            if not parsed:
+                continue
+            info = pick_table.get(parsed)
+            if not info:
+                continue
+            draft_dt = info.get("draft_date")
+            if draft_dt is None:
+                continue
+            try:
+                draft_date = (
+                    draft_dt.date() if isinstance(draft_dt, datetime) else draft_dt
+                )
+            except Exception:
+                continue
+            # Cap to evaluation window so the marker doesn't render off-axis.
+            if draft_date < integral_trade.trade_date:
+                continue
+            if draft_date > integral_trade.evaluation_end:
+                continue
+            first = (info.get("drafted_first") or "").strip()
+            last = (info.get("drafted_last") or "").strip()
+            full = " ".join(p for p in (first, last) if p) or "drafted player"
+            season_str, round_int, _orig_rid = parsed
+            pick_label = f"{season_str} R{round_int}"
+            key = (side.team_label, asset.asset_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({
+                "date": draft_date.isoformat(),
+                "label": full,
+                "pick_label": pick_label,
+                "asset_id": asset.asset_id,
+                "team_label": side.team_label,
+            })
+    out.sort(key=lambda r: r["date"])
+    return out
 
 
 def _per_asset_series(
@@ -514,6 +606,7 @@ def inspect_trade(
     # Same pick handoff wrapping as the bulk endpoint -- the inspector
     # must agree with the trade ledger or the inline chart will tell a
     # different story than the verdict above it.
+    pick_table: Dict[Tuple[str, int, int], Dict[str, Any]] = {}
     if league_id:
         pick_table = _build_pick_handoff_table(league_id)
         if pick_table:
@@ -528,6 +621,7 @@ def inspect_trade(
         trade, season=season, evaluation_end=eval_end,
         resolver=resolver, blob_meta=blob_meta,
         players_meta=players_meta, k=k,
+        pick_table=pick_table,
     )
 
     # Race chart -- same evaluator the verdict came from, so any visible
@@ -535,6 +629,7 @@ def inspect_trade(
     integral_trade = _to_integral_trade(
         trade, season=season, evaluation_end=eval_end,
         blob_meta=blob_meta, players_meta=players_meta,
+        pick_table=pick_table,
     )
     race = build_race_chart(
         integral_trade, value_resolver=resolver, k=k, step_days=step_days,
@@ -544,10 +639,24 @@ def inspect_trade(
         integral_trade, resolver=resolver, step_days=step_days,
     )
 
+    # Pick-resolution markers: for each pick asset whose draft has
+    # completed inside the trade's holding window, emit
+    # ``{date, label, asset_id, team_label}`` so the frontend can
+    # render a labelled vertical line at the moment the pick became
+    # a real player. Picks whose drafts haven't happened yet are
+    # silently omitted.
+    pick_resolutions = _build_pick_resolutions(
+        integral_trade, pick_table=pick_table,
+    )
+
+    race_payload = race.to_dict()
+    race_payload["pick_resolutions"] = pick_resolutions
+
     return {
         "trade": summary,
-        "race_chart": race.to_dict(),
+        "race_chart": race_payload,
         "per_asset_series": per_asset,
+        "pick_resolutions": pick_resolutions,
         "k": k,
         "evaluation_end": eval_end.isoformat(),
     }

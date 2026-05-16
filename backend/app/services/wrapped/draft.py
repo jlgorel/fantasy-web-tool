@@ -17,14 +17,108 @@ hand-craft the picks/scoring fixture.
 from __future__ import annotations
 
 import logging
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.services.http_utils import fetch_json
 from app.services.wrapped.league_context import LeagueContext
 
 logger = logging.getLogger(__name__)
+
+
+# A pick only qualifies as a bust if its actual positional rank slipped
+# at least this many spots below the drafted positional rank. Stops
+# top-of-position picks (RB1 -> RB3, WR2 -> WR4) from getting flagged
+# as busts when they're really just elite seasons with a little
+# variance noise on top.
+_BUST_MIN_RANK_DELTA = 3
+
+
+# Positions excluded from draft steal/bust accolades. Kickers and
+# defenses score on a fundamentally different (and noisier) curve;
+# nobody cares that you picked DST3 and got DST22. They still appear
+# in the draft pick list and contribute to roster context, just not
+# to "biggest steal" / "biggest bust" rankings.
+_EXCLUDED_FROM_DRAFT_ACCOLADES = {"K", "DEF", "DST"}
+
+
+# Startable-tier thresholds per fantasy position, sized for a typical
+# 12-team 1QB league. A pick is a "real" bust only when its final
+# positional rank lands outside this tier (i.e. unstartable on any
+# roster). A pick is a "real" steal only when it was drafted outside
+# this tier but finished inside it. This is what filters out the
+# Chase WR1->WR4 false-positive bust: WR4 is still elite, not a bust.
+# These thresholds intentionally err on the generous side -- a player
+# at rank ``threshold + 1`` already counts as a bust candidate.
+_STARTABLE_TIER: Dict[str, int] = {
+    "QB": 18,
+    "RB": 30,
+    "WR": 40,
+    "TE": 18,
+}
+
+# Per-position override for steal qualification: a pick only counts as
+# a steal if it finished within this rank at its position. Defaults to
+# ``_STARTABLE_TIER`` when the position is absent. TE is gated harder
+# because mid-tier TEs ("Hunter Henry as TE10") are not real steals --
+# only an outright top-3 finish at the position is fleece-worthy.
+_STEAL_FINISH_CAP: Dict[str, int] = {
+    "TE": 3,
+}
+
+
+def _bust_qualifies(p: "DraftPick") -> bool:
+    """A pick qualifies as a bust when it was drafted as a startable
+    asset at its position but finished outside the startable tier.
+
+    The "Jeudy/Brian Thomas test": drafted with the expectation of
+    weekly starts, became unrosterable. Avoids penalising elite top
+    finishes that happen to slip a few ranks below their draft slot
+    (Chase WR1->WR4 is not a bust).
+    """
+    if p.position in _EXCLUDED_FROM_DRAFT_ACCOLADES:
+        return False
+    threshold = _STARTABLE_TIER.get(p.position)
+    if threshold is None:
+        return False
+    if p.drafted_pos_rank <= 0 or p.actual_pos_rank <= 0:
+        return False
+    # Must have been drafted within the startable tier.
+    if p.drafted_pos_rank > threshold:
+        return False
+    # Must have finished outside the startable tier.
+    if p.actual_pos_rank <= threshold:
+        return False
+    # Must have actually slipped (not climbed past the threshold).
+    if p.actual_pos_rank <= p.drafted_pos_rank:
+        return False
+    return True
+
+
+def _steal_qualifies(p: "DraftPick") -> bool:
+    """A pick qualifies as a steal when it was drafted outside the
+    startable tier but finished inside it (or at least closer to the
+    top of its position). Excludes K/DEF for the same reason as busts.
+    """
+    if p.position in _EXCLUDED_FROM_DRAFT_ACCOLADES:
+        return False
+    threshold = _STARTABLE_TIER.get(p.position)
+    if threshold is None:
+        return False
+    if p.drafted_pos_rank <= 0 or p.actual_pos_rank <= 0:
+        return False
+    # Must have been drafted outside the startable tier (i.e. as a
+    # bench-or-worse pick) but finished inside it.
+    if p.drafted_pos_rank <= threshold:
+        return False
+    finish_cap = _STEAL_FINISH_CAP.get(p.position, threshold)
+    if p.actual_pos_rank > finish_cap:
+        return False
+    if p.actual_pos_rank >= p.drafted_pos_rank:
+        return False
+    return True
 
 
 @dataclass
@@ -39,7 +133,14 @@ class DraftPick:
     # picks at each position by actual production.
     actual_pos_rank: int = 0
     drafted_pos_rank: int = 0
+    # Positional-VOR delta: 1/sqrt(actual_rank) - 1/sqrt(drafted_rank),
+    # scaled ×100 for readability. Positive = steal (RB18 -> RB5 is much
+    # bigger than WR90 -> WR40, which the old linear delta got backwards).
     value_over_slot: float = 0.0
+    # For busts only: |value_over_slot| weighted by 1/sqrt(pick_no) so
+    # an RB1 bust at overall pick #1 outranks the same bust at #50.
+    # Positive number; 0 when the pick isn't a bust.
+    bust_score: float = 0.0
 
 
 @dataclass
@@ -155,11 +256,32 @@ def build_picks(
 
 def compute_value_over_slot(picks: List[DraftPick]) -> None:
     """Annotate each pick with ``actual_pos_rank``, ``drafted_pos_rank``,
-    and ``value_over_slot`` (positive = steal, negative = bust).
+    ``value_over_slot``, and ``bust_score``. Mutates in place.
 
-    Mutates in place. Players who scored 0 (didn't play) get a large
-    negative VOS that scales with how early they were taken.
+    Scoring model
+    -------------
+    Positional value follows an inverse-sqrt curve: moving from rank-N
+    to rank-M at a position is worth ``1/sqrt(M) - 1/sqrt(N)``. This
+    captures the intuition that rank 18 -> rank 5 (backup-tier to elite)
+    is a way bigger swing than rank 90 -> rank 40 (both bench tier),
+    even though the raw rank delta is smaller.
+
+    Concretely, ``value_over_slot = (1/sqrt(actual) - 1/sqrt(drafted))
+    * 100`` so the numbers are eyeball-readable (Cook RB18 -> RB5
+    ≈ +20.4; WR90 -> WR40 ≈ +5.3).
+
+    Busts (negative ``value_over_slot``) carry an additional penalty
+    weight by overall pick number: ``bust_score = |value_over_slot| *
+    1/sqrt(pick_no)`` so blowing the #1 overall pick hurts more than
+    blowing the #50 overall pick. The "Biggest bust" leaderboard ranks
+    by ``bust_score``; the "Biggest steal" leaderboard ranks by raw
+    ``value_over_slot``.
     """
+    def _positional_value(rank: int) -> float:
+        # rank is 1-indexed and always >= 1 because we build it from
+        # enumerate(..., start=1) below.
+        return 1.0 / math.sqrt(rank) if rank > 0 else 0.0
+
     by_pos: Dict[str, List[DraftPick]] = defaultdict(list)
     for p in picks:
         by_pos[p.position].append(p)
@@ -178,8 +300,21 @@ def compute_value_over_slot(picks: List[DraftPick]) -> None:
             p.actual_pos_rank = i
 
         for p in pos_picks:
-            # Positive number = drafted later than they finished = steal.
-            p.value_over_slot = float(p.drafted_pos_rank - p.actual_pos_rank)
+            delta = _positional_value(p.actual_pos_rank) - _positional_value(p.drafted_pos_rank)
+            p.value_over_slot = delta * 100.0
+            # Bust qualification: must clear the startable-tier filter
+            # so we don't flag Chase WR1->WR4 as a bust just because
+            # the inverse-sqrt curve is steep at the top. See
+            # ``_bust_qualifies`` for the criteria. When it qualifies,
+            # bust_score weights how far below the startable threshold
+            # the player landed, scaled by overall draft cost so an
+            # early-round bust outranks a late-round one.
+            if _bust_qualifies(p) and p.pick_no > 0:
+                threshold = _STARTABLE_TIER[p.position]
+                drop_below_startable = p.actual_pos_rank - threshold
+                p.bust_score = drop_below_startable / math.sqrt(p.pick_no)
+            else:
+                p.bust_score = 0.0
 
 
 def calculate_draft_accolades(
@@ -205,26 +340,59 @@ def calculate_draft_accolades(
             "drafted_pos_rank": p.drafted_pos_rank,
             "actual_pos_rank": p.actual_pos_rank,
             "value_over_slot": round(p.value_over_slot, 2),
+            "bust_score": round(p.bust_score, 2),
         }
 
-    # Per-user best/worst.
+    # Per-user best/worst. Both are filtered by the same K/DEF
+    # exclusion + startable-tier qualifiers used at the overall level
+    # so a user's "best pick" can't be their kicker who finished K1,
+    # and their "worst pick" can't be Chase finishing WR4.
     for user, user_picks in by_user.items():
-        best = max(user_picks, key=lambda p: p.value_over_slot)
-        worst = min(user_picks, key=lambda p: p.value_over_slot)
+        steal_candidates = [p for p in user_picks if _steal_qualifies(p)]
+        if steal_candidates:
+            best = max(steal_candidates, key=lambda p: p.value_over_slot)
+            best_payload = _pick_payload(best)
+        else:
+            best_payload = None
+        bust_candidates = [p for p in user_picks if p.bust_score > 0]
+        if bust_candidates:
+            worst = max(
+                bust_candidates,
+                key=lambda p: (p.bust_score, -p.value_over_slot),
+            )
+            worst_payload = _pick_payload(worst)
+        else:
+            worst_payload = None
         out.by_user[user] = {
-            "best_pick": _pick_payload(best),
-            "worst_pick": _pick_payload(worst),
+            "best_pick": best_payload,
+            "worst_pick": worst_payload,
             "num_picks": len(user_picks),
         }
 
-    # Overall biggest steal / bust.
-    out.biggest_steal = _pick_payload(max(picks, key=lambda p: p.value_over_slot))
-    out.biggest_bust = _pick_payload(min(picks, key=lambda p: p.value_over_slot))
+    # Overall biggest steal -- only qualifying picks (drafted bench
+    # tier, finished startable tier) are considered. K/DEF excluded.
+    steal_candidates_overall = [p for p in picks if _steal_qualifies(p)]
+    if steal_candidates_overall:
+        out.biggest_steal = _pick_payload(
+            max(steal_candidates_overall, key=lambda p: p.value_over_slot)
+        )
+    # Overall biggest bust -- only picks that finished outside their
+    # position's startable tier after being drafted as a starter.
+    # K/DEF excluded.
+    bust_candidates_overall = [p for p in picks if p.bust_score > 0]
+    if bust_candidates_overall:
+        out.biggest_bust = _pick_payload(
+            max(bust_candidates_overall, key=lambda p: (p.bust_score, -p.value_over_slot))
+        )
 
     # "Mr. Irrelevant" — latest pick (highest pick_no) who finished as a
     # top-N producer at their position. Captures the late-round dart that
-    # actually hit. Only emit if such a player exists.
-    candidates = [p for p in picks if p.actual_pos_rank <= irrelevant_top_n]
+    # actually hit. K/DEF excluded -- a top-N kicker isn't a story.
+    candidates = [
+        p for p in picks
+        if p.actual_pos_rank <= irrelevant_top_n
+        and p.position not in _EXCLUDED_FROM_DRAFT_ACCOLADES
+    ]
     if candidates:
         latest = max(candidates, key=lambda p: p.pick_no)
         out.mr_irrelevant_hero = {
@@ -233,6 +401,96 @@ def calculate_draft_accolades(
         }
 
     return out
+
+
+def compute_dynasty_value_over_slot(
+    picks: List[DraftPick],
+    ktc_value_by_pid: Dict[str, float],
+) -> None:
+    """Dynasty variant of :func:`compute_value_over_slot` keyed off
+    current KTC value instead of single-season fantasy points.
+
+    Season finish is the wrong yardstick for dynasty drafts: a rookie
+    WR who only sees 6 games in year 1 can still be a league-altering
+    asset. What matters is the long-term value, which the KTC ranking
+    proxies for. Concretely:
+
+    * Rank all drafted players by their current (latest-known) KTC
+      value, descending. That ranking is the pick's "actual" position
+      among its draft class.
+    * The "drafted" position is just ``pick_no`` (1-indexed overall
+      draft slot) since dynasty drafts are typically rookie drafts
+      where position-vs-position comparisons are noisier than overall
+      asset ranking.
+    * ``value_over_slot = (1/sqrt(ktc_rank) - 1/sqrt(pick_no)) * 100``.
+      Positive = picked later than current value (steal). Negative =
+      picked earlier than current value (bust).
+    * Bust qualification mirrors the redraft path: requires
+      ``ktc_rank - pick_no >= _BUST_MIN_RANK_DELTA``.
+
+    The DraftPick fields are re-used: ``drafted_pos_rank`` stores
+    pick_no and ``actual_pos_rank`` stores the KTC rank, so the same
+    downstream accolade builder can consume both paths.
+    """
+    def _positional_value(rank: int) -> float:
+        return 1.0 / math.sqrt(rank) if rank > 0 else 0.0
+
+    # Rank all picks by current KTC value, descending. Picks with no
+    # KTC record (rare: orphan ids) get pushed to the bottom.
+    pids_with_value: List[Tuple[float, DraftPick]] = []
+    for p in picks:
+        val = float(ktc_value_by_pid.get(p.player_id, 0.0) or 0.0)
+        pids_with_value.append((val, p))
+    pids_with_value.sort(key=lambda tup: tup[0], reverse=True)
+    for i, (_v, p) in enumerate(pids_with_value, start=1):
+        p.actual_pos_rank = i
+        p.drafted_pos_rank = p.pick_no  # 1:1 mapping in dynasty mode
+
+    for p in picks:
+        delta = _positional_value(p.actual_pos_rank) - _positional_value(p.drafted_pos_rank)
+        p.value_over_slot = delta * 100.0
+        rank_delta = p.actual_pos_rank - p.drafted_pos_rank
+        if rank_delta >= _BUST_MIN_RANK_DELTA and p.value_over_slot < 0 and p.pick_no > 0:
+            p.bust_score = abs(p.value_over_slot) / math.sqrt(p.pick_no)
+        else:
+            p.bust_score = 0.0
+
+
+def _load_ktc_values_for_pids(
+    pids: List[str],
+    *,
+    fmt: str,
+) -> Dict[str, float]:
+    """Look up the latest (most-recent date) KTC value for each Sleeper id.
+
+    Returns ``{player_id: value}`` for ids that have any KTC history.
+    Missing ids are simply absent from the result (caller treats them as
+    zero), so callers can safely use ``dict.get(pid, 0.0)``.
+
+    All errors are swallowed -- if the blob is missing the page still
+    renders, just without KTC-driven dynasty scoring.
+    """
+    try:
+        from app.services.wrapped.ktc_blob_loader import get_flat_blob
+
+        flat, _meta = get_flat_blob(fmt)
+        out: Dict[str, float] = {}
+        for pid in pids:
+            history = flat.get(pid)
+            if not history:
+                continue
+            latest_date = max(history.keys())
+            try:
+                out[pid] = float(history[latest_date])
+            except (TypeError, ValueError):
+                continue
+        return out
+    except Exception as exc:  # noqa: BLE001 -- best-effort enrichment
+        logger.warning(
+            "KTC dynasty value lookup failed (%s); dynasty draft "
+            "accolades will fall back to redraft scoring.", exc,
+        )
+        return {}
 
 
 def fetch_and_compute_draft(
@@ -245,5 +503,21 @@ def fetch_and_compute_draft(
     if not raw_picks:
         return DraftAccolades()
     picks = build_picks(raw_picks, ctx, season_scoring, players_meta)
+
+    if getattr(ctx, "is_dynasty", False):
+        fmt = "superflex" if int(getattr(ctx, "num_qbs", 1) or 1) >= 2 else "1qb"
+        pids = [p.player_id for p in picks]
+        ktc_by_pid = _load_ktc_values_for_pids(pids, fmt=fmt)
+        if ktc_by_pid:
+            compute_dynasty_value_over_slot(picks, ktc_by_pid)
+            return calculate_draft_accolades(picks)
+        # KTC blob unavailable -- fall back to redraft scoring so the
+        # section isn't blank.
+        logger.info(
+            "Dynasty league %s/%s: KTC values unavailable, falling back "
+            "to season-points draft scoring.",
+            ctx.league_id, ctx.year,
+        )
+
     compute_value_over_slot(picks)
     return calculate_draft_accolades(picks)

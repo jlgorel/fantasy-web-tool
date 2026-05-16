@@ -157,7 +157,20 @@ def calculate_luckiest_and_unluckiest(scores: WeeklyScores) -> Dict[str, Any]:
         username = sorted(u for u, c in counts.items() if c == max_count)[0]
         return {"username": username, "count": int(max_count)}
 
-    return {"luckiest": _pick_top(lucky_counts), "unluckiest": _pick_top(unlucky_counts)}
+    # ``by_user`` exposes the per-user raw counts so the all-time
+    # aggregator can sum them across seasons (instead of just counting
+    # how many seasons each user wore the crown).
+    return {
+        "luckiest": _pick_top(lucky_counts),
+        "unluckiest": _pick_top(unlucky_counts),
+        "by_user": {
+            user: {
+                "lucky_wins": int(lucky_counts.get(user, 0)),
+                "unlucky_losses": int(unlucky_counts.get(user, 0)),
+            }
+            for user in set(lucky_counts) | set(unlucky_counts)
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
