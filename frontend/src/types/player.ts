@@ -573,3 +573,44 @@ export interface WrappedInspectTrade {
   evaluation_end: string;
 }
 
+
+// ---------------------------------------------------------------------------
+// Redraft trade inspector (GET /wrapped/sleeper/<league>/inspect_trade_redraft)
+// ---------------------------------------------------------------------------
+/** One acquired player's contribution to a side. */
+export interface WrappedRedraftAsset {
+  player_id: string;
+  name: string;
+  position: string;
+  ros_points: number;
+  games_played: number;
+  ros_ppg: number;
+  baseline_points: number;
+  vorp: number;
+}
+
+export interface WrappedRedraftSide {
+  username: string;
+  assets: WrappedRedraftAsset[];
+  total_ros_points: number;
+  total_vorp: number;
+}
+
+export interface WrappedRedraftEvaluation {
+  sides: WrappedRedraftSide[];
+  /** "wash" or the winning user's username. */
+  verdict: string;
+  /** "wash" | "close" | "decisive" */
+  margin_label: string;
+  margin_vorp: number;
+  window: { start_week: number; end_week: number; season: number };
+  scoring: { qb_score_key: string; skill_score_key: string };
+}
+
+export interface WrappedInspectRedraftTrade {
+  transaction_id: string;
+  trade_week: number;
+  evaluation: WrappedRedraftEvaluation;
+  baseline_total_points: { [position: string]: number };
+}
+

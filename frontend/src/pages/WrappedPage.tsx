@@ -48,6 +48,7 @@ import {
 import { api } from '../api/client';
 import { LineChart, LineSeries } from '../components/LineChart';
 import { TradeInspector } from '../components/TradeInspector';
+import { TradeInspectorRedraft } from '../components/TradeInspectorRedraft';
 import { SleeperLeagueSeason, WrappedApiResponse, WrappedAllTimeAccolades, WrappedAllTimeResponse, WrappedResponse, WrappedStreamersPayload } from '../types/player';
 
 
@@ -683,19 +684,34 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
             Trade ledger
           </Heading>
           <Text fontSize="xs" color="gray.500" mb={3}>
-            Trades are evaluated by integrating each side's KTC value over
-            the time it was held, so a trade that aged badly registers as
-            a loss even if it looked even at the deadline. Numbers are in{' '}
-            <strong>KTC equivalent points</strong> (familiar 0-9999 scale){' '}
-            — click any row to see the running value chart.
+            {payload.meta.is_dynasty ? (
+              <>
+                Trades are evaluated by integrating each side's KTC value
+                over the time it was held, so a trade that aged badly
+                registers as a loss even if it looked even at the deadline.
+                Numbers are in <strong>KTC equivalent points</strong>{' '}
+                (familiar 0-9999 scale) — click any row to see the running
+                value chart.
+              </>
+            ) : (
+              <>
+                Trades are retro-scored over the rest of the season using{' '}
+                <strong>VORP</strong> (value over replacement): each player's
+                points after the trade minus what a replacement-level starter
+                would have produced. Click any row to see the per-asset
+                breakdown.
+              </>
+            )}
           </Text>
 
           <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3} mb={3}>
             {accoladeCard(
-              'Biggest fleecing',
+              payload.meta.is_dynasty ? 'Biggest fleecing' : 'Biggest steal',
               payload.trades.biggest_fleecing?.winner,
               payload.trades.biggest_fleecing
-                ? `+${payload.trades.biggest_fleecing.ktc_edge_per_season.toFixed(0)} KTC/yr, Wk ${payload.trades.biggest_fleecing.week}`
+                ? payload.meta.is_dynasty
+                  ? `+${payload.trades.biggest_fleecing.ktc_edge_per_season.toFixed(0)} KTC/yr, Wk ${payload.trades.biggest_fleecing.week}`
+                  : `+${payload.trades.biggest_fleecing.ktc_edge_per_season.toFixed(1)} VORP, Wk ${payload.trades.biggest_fleecing.week}`
                 : undefined,
             )}
             {accoladeCard(
@@ -721,7 +737,9 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
                 <Tr>
                   <Th>Wk</Th>
                   <Th>Sides</Th>
-                  <Th isNumeric>KTC edge / yr</Th>
+                  <Th isNumeric>
+                    {payload.meta.is_dynasty ? 'KTC edge / yr' : 'VORP edge'}
+                  </Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -757,7 +775,9 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
                                     .join(', ') || '—'}
                                 </Text>
                                 <Text fontSize="2xs" color="gray.500">
-                                  {side.ktc_equiv.toFixed(0)} KTC equiv
+                                  {payload.meta.is_dynasty
+                                    ? `${side.ktc_equiv.toFixed(0)} KTC equiv`
+                                    : `${side.ktc_equiv.toFixed(1)} VORP`}
                                 </Text>
                               </Box>
                             ))}
@@ -765,18 +785,28 @@ const YearSections: React.FC<{ payload: WrappedResponse }> = ({ payload }) => {
                         </Td>
                         <Td isNumeric>
                           {trade.ktc_edge_per_season > 0
-                            ? `+${trade.ktc_edge_per_season.toFixed(0)}`
+                            ? payload.meta.is_dynasty
+                              ? `+${trade.ktc_edge_per_season.toFixed(0)}`
+                              : `+${trade.ktc_edge_per_season.toFixed(1)}`
                             : '—'}
                         </Td>
                       </Tr>
                       {isOpen && (
                         <Tr bg="blue.50">
                           <Td colSpan={3} px={3} py={3}>
-                            <TradeInspector
-                              leagueId={payload.meta.league_id}
-                              transactionId={trade.transaction_id}
-                              year={payload.meta.year}
-                            />
+                            {payload.meta.is_dynasty ? (
+                              <TradeInspector
+                                leagueId={payload.meta.league_id}
+                                transactionId={trade.transaction_id}
+                                year={payload.meta.year}
+                              />
+                            ) : (
+                              <TradeInspectorRedraft
+                                leagueId={payload.meta.league_id}
+                                transactionId={trade.transaction_id}
+                                year={payload.meta.year}
+                              />
+                            )}
                           </Td>
                         </Tr>
                       )}

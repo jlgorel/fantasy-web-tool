@@ -155,6 +155,11 @@ def get_sleeper_owned_for_week():
     return True
 
 def get_sleeper_player_data():
+    from trade_eval.legacy_season_scoring import (
+        build_player_scoring_data,
+        attach_six_pt_passing_td_rank,
+    )
+
     url = "https://api.sleeper.app/v1/players/nfl"
     resp = _http_get(url, timeout=60)  # ~5MB payload, allow extra time
     data = resp.json()
@@ -168,100 +173,21 @@ def get_sleeper_player_data():
             if key not in Config.relevant_sleeper_keys:
                 del data[pid][key]
 
-    # update with positional rankings, scoring data, etc
-
     players_dict = data
-
-    positions = {
-        "QB": (50,32),
-        "WR": (150,70),
-        "TE": (50, 50),
-        "RB": (150,70),
-        "DEF": (32, 32),
-        "K": (50,32)
-    }
-    playoff_start_week = 14
     year = get_current_fantasy_year()
 
-    season_scoring = defaultdict(dict)
-    weekly_scoring = defaultdict(lambda: defaultdict(dict))
+    # Pull per-position season + weekly scoring from Sleeper. Pure builder
+    # lives in trade_eval/legacy_season_scoring.py so the historical
+    # backfill tool can reuse it.
+    player_scoring = build_player_scoring_data(year, http_get_json=load_json_from_url)
+    attach_six_pt_passing_td_rank(player_scoring, players_dict)
 
-    # Parallelize season-level fetches (one per position).
-    def _fetch_season(position: str):
-        url = f"https://api.sleeper.com/stats/nfl/{year}?season_type=regular&position={position}&order_by=pts_half_ppr"
-        return position, load_json_from_url(url)
-
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        for position, payload in pool.map(_fetch_season, positions.keys()):
-            num_desired_season = positions[position][0]
-            season_scoring.update({
-                temp_dict["player_id"]: temp_dict["stats"]
-                for temp_dict in payload[:num_desired_season]
-            })
-
-    # Parallelize weekly fetches (78 calls = 13 weeks * 6 positions).
-    week_position_pairs = [
-        (week, position)
-        for week in range(1, playoff_start_week)
-        for position in positions.keys()
-    ]
-
-    def _fetch_week(args):
-        week, position = args
-        url = f"https://api.sleeper.com/stats/nfl/{year}/{week}?season_type=regular&position={position}&order_by=pts_half_ppr"
-        return week, position, load_json_from_url(url)
-
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        for week, position, payload in pool.map(_fetch_week, week_position_pairs):
-            num_desired_week = positions[position][1]
-            for stats in payload[:num_desired_week]:
-                weekly_scoring[stats["player_id"]][week] = stats["stats"]
-
-    for player, player_data in players_dict.items():
-        if player not in weekly_scoring and player not in season_scoring:
+    # Merge scoring data back onto the full players_dict (drives players.json).
+    for pid, scoring in player_scoring.items():
+        if pid not in players_dict:
             continue
-        player_weekly_scoring = weekly_scoring[player]
-        player_season_scoring = season_scoring[player]
-        temp_scoring_dict = {}
-        for week, scoring_data in player_weekly_scoring.items():
-            temp_scoring_dict[week] = {
-                "half_ppr": scoring_data["pts_half_ppr"] if "pts_half_ppr" in scoring_data else 0,
-                "ppr": scoring_data["pts_ppr"] if "pts_ppr" in scoring_data else 0,
-                "std": scoring_data["pts_std"] if "pts_std" in scoring_data else 0,
-                "receptions": scoring_data["rec"] if "rec" in scoring_data else 0,
-                "pass_td": scoring_data["pass_td"] if "pass_td" in scoring_data else 0
-            }
-        temp_season_scoring_dict = {
-            "half_ppr_rank": player_season_scoring["pos_rank_half_ppr"] if "pos_rank_half_ppr" in player_season_scoring else 999,
-            "ppr_rank": player_season_scoring["pos_rank_ppr"] if "pos_rank_ppr" in player_season_scoring else 999,
-            "std_rank": player_season_scoring["pos_rank_std"] if "pos_rank_std" in player_season_scoring else 999,
-            "half_ppr_points": player_season_scoring["pts_half_ppr"] if "pts_half_ppr" in player_season_scoring else 0,
-            "ppr_points": player_season_scoring["pts_ppr"] if "pts_ppr" in player_season_scoring else 0,
-            "std_points": player_season_scoring["pts_std"] if "pts_std" in player_season_scoring else 0,
-            "receptions": player_season_scoring["rec"] if "rec" in player_season_scoring else 0
-        }
-        if player_data["fantasy_positions"] != None and "QB" in player_data["fantasy_positions"]:
-            passing_td_bonus = player_season_scoring["pass_td"] * 2 if "pass_td" in player_season_scoring else 0
-            temp_season_scoring_dict["6pt_pass_td_points"] = temp_season_scoring_dict["std_points"] + passing_td_bonus
-
-        players_dict[player]["scoring_data_weekly"] = temp_scoring_dict
-        players_dict[player]["scoring_data_season"] = temp_season_scoring_dict
-
-    # go through and get ranks for 6 pt passing td
-
-    qb_list_6_pt = []
-    for player, info in players_dict.items():
-        if info["fantasy_positions"] is None or "QB" not in info["fantasy_positions"] or "scoring_data_season" not in info:
-            continue
-        qb_list_6_pt.append((player, info["scoring_data_season"]["6pt_pass_td_points"]))
-
-    qb_list_6_pt.sort(key= lambda x: x[1], reverse=True)
-    print(qb_list_6_pt)
-    for num, qb in enumerate(qb_list_6_pt):
-        players_dict[qb[0]]["scoring_data_season"].update({
-            "6pt_pass_td_rank": num,
-            "6pt_pass_td_points": qb[1]
-        })
+        players_dict[pid]["scoring_data_weekly"] = scoring["scoring_data_weekly"]
+        players_dict[pid]["scoring_data_season"] = scoring["scoring_data_season"]
 
     upload_to_azure_blob(players_dict, "players.json")
 

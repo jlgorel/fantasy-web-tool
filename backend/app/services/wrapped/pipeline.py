@@ -39,6 +39,7 @@ from app.services.wrapped.schedule_accolades import (
 )
 from app.services.wrapped.transactions import LeagueTransactions, fetch_league_transactions
 from app.services.wrapped.trade_accolades import calculate_trade_accolades
+from app.services.wrapped.redraft_trades_section import build_redraft_trades_section
 from app.services.wrapped.streamers_accolades import calculate_streamer_accolades
 
 logger = logging.getLogger(__name__)
@@ -182,20 +183,21 @@ def _build_trades_section(
     ctx: LeagueContext,
     transactions: LeagueTransactions,
     players_meta: Dict[str, Dict[str, Any]],
+    season_scoring: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """Phase-3 trade accolades. KTC value-integral lookback for dynasty
-    leagues only.
+    """Phase-3 trade accolades.
 
-    Redraft leagues get an empty section here -- their trades will be
-    evaluated by a separate post-trade PPG lookback (planned: a sleeper
-    scoring-data comparison, not a value-curve integral, because redraft
-    trades have a hard ~14-week valuation horizon).
+    * Dynasty leagues: KTC value-integral lookback via
+      :func:`calculate_trade_accolades`.
+    * Redraft leagues: rest-of-season VORP via
+      :func:`build_redraft_trades_section`.
 
-    Empty section also when the league had no completed trades.
+    Returns an empty section when the league had no completed trades.
     """
     if not ctx.is_dynasty:
-        return {"trades": [], "by_user": {}, "biggest_fleecing": None,
-                "most_active_trader": None}
+        return build_redraft_trades_section(
+            ctx, transactions, season_scoring, players_meta,
+        )
     if not transactions.trades:
         return {"trades": [], "by_user": {}, "biggest_fleecing": None,
                 "most_active_trader": None}
@@ -279,7 +281,7 @@ def _build_payload(league_id: str, year: str) -> Dict[str, Any]:
             transactions,
         ),
         "draft": _build_draft_section(ctx, season_scoring, players_meta),
-        "trades": _build_trades_section(ctx, transactions, players_meta),
+        "trades": _build_trades_section(ctx, transactions, players_meta, season_scoring),
         "streamers": _build_streamers_section(ctx, weekly_scores),
     }
 

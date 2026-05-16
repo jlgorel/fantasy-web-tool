@@ -327,23 +327,38 @@ class TestTradesSectionRedraftSkip:
             is_dynasty=is_dynasty,
             num_qbs="1",
             skill_score_key=None,
+            qb_score_key=None,
+            year="2024",
+            league_id="L1",
+            last_regular_season_week=14,
+            roster_positions_groups={},
         )
 
-    def test_redraft_skips_trades(self):
+    def test_redraft_no_trades_is_empty(self):
+        from app.services.wrapped.pipeline import _build_trades_section
+        ctx = self._ctx_stub(is_dynasty=False)
+        tx = LeagueTransactions(trades=[])
+        out = _build_trades_section(ctx, tx, {}, {})
+        assert out["trades"] == []
+        assert out["biggest_fleecing"] is None
+        assert out["most_active_trader"] is None
+
+    def test_redraft_with_trades_no_scoring_emits_ledger(self):
+        """Without season scoring the ledger still surfaces trades (with
+        zero-VORP placeholders); empty-section short-circuit only fires
+        when there are no trades at all."""
         from app.services.wrapped.pipeline import _build_trades_section
         ctx = self._ctx_stub(is_dynasty=False)
         tx = LeagueTransactions(trades=[_trade(2, ["P1"], ["P2"])])
-        out = _build_trades_section(ctx, tx, {})
-        assert out == {
-            "trades": [], "by_user": {},
-            "biggest_fleecing": None, "most_active_trader": None,
-        }
+        out = _build_trades_section(ctx, tx, {}, {})
+        assert len(out["trades"]) == 1
+        assert out["most_active_trader"] is not None
 
     def test_dynasty_with_no_trades_is_also_empty(self):
         from app.services.wrapped.pipeline import _build_trades_section
         ctx = self._ctx_stub(is_dynasty=True)
         tx = LeagueTransactions(trades=[])
-        out = _build_trades_section(ctx, tx, {})
+        out = _build_trades_section(ctx, tx, {}, {})
         assert out["trades"] == []
         assert out["biggest_fleecing"] is None
 
