@@ -8,6 +8,9 @@ from app.services.wrapped.league_context import load_league_context
 from app.services.wrapped.transactions import fetch_league_transactions
 from app.services.wrapped.trade_accolades import inspect_trade as inspect_trade_payload
 from app.services.wrapped.redraft_trade_inspector import inspect_redraft_trade
+from app.services.draft_help import summaries as draft_help_summaries
+from app.services.draft_help import sim as draft_help_sim
+from app.services.draft_help.sim import sim_players_from_config_players
 from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
 from app.services.sleeper_league_lookup import (
@@ -230,6 +233,179 @@ def wrapped_sleeper(league_id):
         return jsonify({'error': str(e)}), 500
 
 
+def _cached_json(cache_key, builder, ttl_seconds):
+    """Return a cached JSON payload or build+cache it. Mirrors the wrapped
+    route's redis pattern; degrades gracefully when redis is unavailable."""
+    redis_client = current_app.redis_client
+    try:
+        cached = redis_client.get(cache_key)
+    except Exception:
+        cached = None
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass  # fall through to rebuild
+    payload = builder()
+    try:
+        redis_client.set(cache_key, json.dumps(payload), ex=ttl_seconds)
+    except Exception as cache_err:
+        print(f"draft-help cache set failed for {cache_key}: {cache_err}")
+    return payload
+
+
+@main.route('/draft-help/user/<username>/habits', methods=['GET'])
+def draft_help_user_habits(username):
+    """Feature 1: a user's draft tendencies across all their leagues."""
+    try:
+        seasons = max(1, min(int(request.args.get('seasons', 3)), 6))
+        cache_key = f"drafthelp_user_v2_{username}_{seasons}"
+        payload = _cached_json(
+            cache_key,
+            lambda: draft_help_summaries.user_habits(username, seasons),
+            86400,  # 24h -- completed drafts are immutable
+        )
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in draft_help_user_habits: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/draft-help/league/<league_id>/habits', methods=['GET'])
+def draft_help_league_habits(league_id):
+    """Feature 2: a league's managers' draft tendencies (this league)."""
+    try:
+        seasons = max(1, min(int(request.args.get('seasons', 3)), 6))
+        cache_key = f"drafthelp_league_v2_{league_id}_{seasons}"
+        payload = _cached_json(
+            cache_key,
+            lambda: draft_help_summaries.league_habits(league_id, seasons),
+            86400,
+        )
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in draft_help_league_habits: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/draft-help/league/<league_id>/opponents', methods=['GET'])
+def draft_help_opponents(league_id):
+    """Feature 3: league-mates' tendencies in their OTHER leagues (slow)."""
+    try:
+        seasons = max(1, min(int(request.args.get('seasons', 3)), 6))
+        max_leagues = max(1, min(int(request.args.get('max_leagues', 5)), 10))
+        cache_key = f"drafthelp_opp_v2_{league_id}_{seasons}_{max_leagues}"
+        payload = _cached_json(
+            cache_key,
+            lambda: draft_help_summaries.opponents_habits(league_id, seasons, max_leagues),
+            86400,
+        )
+        return jsonify(payload), 200
+    except Exception as e:
+        print("Exception in draft_help_opponents: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+def _parse_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).lower() in ('1', 'true', 'yes', 'sf', 'on')
+
+
+def _parse_sim_slots(raw, superflex):
+    """Sanitize a client-supplied starting-slot map for the draft sim.
+
+    Accepts ``{POS: count}`` (e.g. ``{"RB": 2, "WR": 3, "FLEX": 2}``) keeping
+    only known dedicated/flex slots with positive counts (capped). Falls back to
+    the superflex-aware default when nothing usable is provided. A superflex
+    league always gets a SUPER_FLEX slot so QB value is modeled correctly.
+    """
+    default = draft_help_sim.default_starting_slots(superflex)
+    if not isinstance(raw, dict) or not raw:
+        return default
+    allowed = set(draft_help_sim.FLEX_GROUPS) | {"QB", "RB", "WR", "TE"}
+    slots = {}
+    for key, val in raw.items():
+        pos = str(key).upper()
+        if pos not in allowed:
+            continue
+        try:
+            count = int(val)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            slots[pos] = min(count, 10)
+    if not slots:
+        return default
+    if superflex and "SUPER_FLEX" not in slots:
+        slots["SUPER_FLEX"] = 1
+    return slots
+
+
+@main.route('/draft-help/rankings', methods=['GET'])
+def draft_help_rankings():
+    """Player value board for a league config (year/teams/ppr/superflex).
+
+    Drives the mock draft board + the sim. ADP == overall_rank, proj == fpts.
+    """
+    try:
+        year = request.args.get('year', '2024')
+        teams = int(request.args.get('teams', 12))
+        ppr = float(request.args.get('ppr', 0.5))
+        superflex = _parse_bool(request.args.get('sf'))
+        players = draft_help_summaries.rankings_config_players(year, teams, ppr, superflex)
+        return jsonify({
+            'year': str(year),
+            'config': {'teams': teams, 'ppr': ppr, 'superflex': superflex},
+            'players': players,
+        }), 200
+    except Exception as e:
+        print("Exception in draft_help_rankings: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/draft-help/sim', methods=['POST'])
+def draft_help_sim_route():
+    """Monte-Carlo 'who should I draft now?' for a snake mock/live draft.
+
+    Body: {year, teams, rounds, my_slot, ppr, superflex, drafted_ids[],
+    my_roster_ids[], slots?{POS:count}, current_pick?, n_sims?, top_k?, seed?}.
+    """
+    try:
+        body = request.get_json(force=True, silent=True) or {}
+        year = body.get('year', '2024')
+        teams = int(body.get('teams', 12))
+        rounds = int(body.get('rounds', 15))
+        my_slot = int(body.get('my_slot', 1))
+        ppr = float(body.get('ppr', 0.5))
+        superflex = bool(body.get('superflex', False))
+        players = sim_players_from_config_players(
+            draft_help_summaries.rankings_config_players(year, teams, ppr, superflex)
+        )
+        if not players:
+            return jsonify({'error': 'no rankings for that config/year'}), 503
+        slots = _parse_sim_slots(body.get('slots'), superflex)
+        result = draft_help_sim.recommend_pick(
+            players,
+            drafted_ids=body.get('drafted_ids', []),
+            my_roster_ids=body.get('my_roster_ids', []),
+            teams=teams, rounds=rounds, my_slot=my_slot, slots=slots,
+            current_pick=body.get('current_pick'),
+            n_sims=max(10, min(int(body.get('n_sims', 150)), 400)),
+            top_k=max(1, min(int(body.get('top_k', 6)), 12)),
+            seed=body.get('seed'),
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        print("Exception in draft_help_sim_route: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @main.route('/wrapped/sleeper/<league_id>/inspect_trade', methods=['GET'])
 def wrapped_inspect_trade(league_id):
     """Return the full trade-inspector payload for a single trade.
@@ -439,8 +615,9 @@ def sleeper_user_leagues(username):
     try:
         from app.services.season import get_current_fantasy_year
         year = request.args.get('year') or get_current_fantasy_year()
+        exclude_dynasty = _parse_bool(request.args.get('exclude_dynasty'))
 
-        cache_key = f"sleeper_user_leagues_{username}_{year}"
+        cache_key = f"sleeper_user_leagues_{username}_{year}_{int(exclude_dynasty)}"
         redis_client = current_app.redis_client
         try:
             cached = redis_client.get(cache_key)
@@ -452,7 +629,7 @@ def sleeper_user_leagues(username):
             except Exception:
                 pass
 
-        leagues = get_user_leagues(username, str(year))
+        leagues = get_user_leagues(username, str(year), exclude_dynasty=exclude_dynasty)
         payload = {'username': username, 'year': str(year), 'leagues': leagues}
 
         try:

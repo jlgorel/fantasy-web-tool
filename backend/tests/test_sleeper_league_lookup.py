@@ -64,8 +64,32 @@ class TestGetUserLeagues:
             "previous_league_id": "L_2024_A",
             "total_rosters": 12,
             "status": "in_season",
+            "dynasty": False,
         }
         assert "extra_field" not in leagues[0]
+
+    def test_exclude_dynasty_filters_type_2_leagues(self, monkeypatch):
+        routes = {
+            "https://api.sleeper.app/v1/user/jlgorel": {"user_id": "U1"},
+            "https://api.sleeper.app/v1/user/U1/leagues/nfl/2025": [
+                {"league_id": "REDRAFT", "name": "Redraft", "season": "2025",
+                 "settings": {"type": 0}},
+                {"league_id": "KEEPER", "name": "Keeper", "season": "2025",
+                 "settings": {"type": 1}},
+                {"league_id": "DYNASTY", "name": "Dynasty", "season": "2025",
+                 "settings": {"type": 2}},
+            ],
+        }
+        monkeypatch.setattr(sll, "fetch_json", _make_router(routes))
+
+        # Default: all leagues returned, each flagged with its dynasty status.
+        all_leagues = sll.get_user_leagues("jlgorel", "2025")
+        assert {lg["league_id"]: lg["dynasty"] for lg in all_leagues} == {
+            "REDRAFT": False, "KEEPER": False, "DYNASTY": True,
+        }
+        # exclude_dynasty drops only the dynasty league.
+        kept = sll.get_user_leagues("jlgorel", "2025", exclude_dynasty=True)
+        assert [lg["league_id"] for lg in kept] == ["REDRAFT", "KEEPER"]
 
     def test_unknown_username_returns_empty(self, monkeypatch):
         routes = {"https://api.sleeper.app/v1/user/ghost": None}

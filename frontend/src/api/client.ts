@@ -19,6 +19,14 @@ import {
   WrappedInspectRedraftTrade,
   WrappedInspectTrade,
 } from '../types/player';
+import {
+  LeagueHabitsResponse,
+  OpponentsHabitsResponse,
+  RankingsResponse,
+  SimRequest,
+  SimResponse,
+  UserHabitsResponse,
+} from '../types/draft';
 
 if (!process.env.REACT_APP_API_BASE_URL) {
   throw new Error('REACT_APP_API_BASE_URL is not set!');
@@ -130,8 +138,13 @@ export const api = {
     );
   },
 
-  getSleeperUserLeagues(username: string, year?: string): Promise<SleeperUserLeaguesResponse> {
-    const qs = year ? `?year=${encodeURIComponent(year)}` : '';
+  getSleeperUserLeagues(
+    username: string, year?: string, excludeDynasty?: boolean,
+  ): Promise<SleeperUserLeaguesResponse> {
+    const params = new URLSearchParams();
+    if (year) params.set('year', year);
+    if (excludeDynasty) params.set('exclude_dynasty', '1');
+    const qs = params.toString() ? `?${params.toString()}` : '';
     return request<SleeperUserLeaguesResponse>(
       `/sleeper/user/${encodeURIComponent(username)}/leagues${qs}`
     );
@@ -147,6 +160,50 @@ export const api = {
     return request<SleeperLeagueSeasonsResponse>(
       `/sleeper/league/${encodeURIComponent(leagueId)}/seasons`
     );
+  },
+
+  // --- Draft Help -----------------------------------------------------
+  getDraftHelpUserHabits(username: string, seasons?: number): Promise<UserHabitsResponse> {
+    const qs = seasons != null ? `?seasons=${seasons}` : '';
+    return request<UserHabitsResponse>(
+      `/draft-help/user/${encodeURIComponent(username)}/habits${qs}`
+    );
+  },
+
+  getDraftHelpLeagueHabits(leagueId: string, seasons?: number): Promise<LeagueHabitsResponse> {
+    const qs = seasons != null ? `?seasons=${seasons}` : '';
+    return request<LeagueHabitsResponse>(
+      `/draft-help/league/${encodeURIComponent(leagueId)}/habits${qs}`
+    );
+  },
+
+  getDraftHelpOpponents(
+    leagueId: string, seasons?: number, maxLeagues?: number,
+  ): Promise<OpponentsHabitsResponse> {
+    const params = new URLSearchParams();
+    if (seasons != null) params.set('seasons', String(seasons));
+    if (maxLeagues != null) params.set('max_leagues', String(maxLeagues));
+    const qs = params.toString();
+    return request<OpponentsHabitsResponse>(
+      `/draft-help/league/${encodeURIComponent(leagueId)}/opponents${qs ? `?${qs}` : ''}`
+    );
+  },
+
+  getDraftHelpRankings(
+    year: string, teams: number, ppr: number, superflex: boolean,
+  ): Promise<RankingsResponse> {
+    const params = new URLSearchParams({
+      year, teams: String(teams), ppr: String(ppr), sf: superflex ? '1' : '0',
+    });
+    return request<RankingsResponse>(`/draft-help/rankings?${params.toString()}`);
+  },
+
+  postDraftHelpSim(body: SimRequest): Promise<SimResponse> {
+    return request<SimResponse>('/draft-help/sim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
   },
 };
 

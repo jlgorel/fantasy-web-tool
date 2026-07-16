@@ -414,6 +414,7 @@ export interface SleeperLeagueSummary {
   previous_league_id: string | null;
   total_rosters: number | null;
   status: string | null;
+  dynasty?: boolean;
 }
 
 export interface SleeperUserLeaguesResponse {

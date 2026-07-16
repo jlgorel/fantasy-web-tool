@@ -26,12 +26,17 @@ logger = logging.getLogger(__name__)
 _MAX_PREVIOUS_HOPS = 10
 
 
-def get_user_leagues(username: str, year: str) -> List[Dict[str, Any]]:
+def get_user_leagues(
+    username: str, year: str, *, exclude_dynasty: bool = False
+) -> List[Dict[str, Any]]:
     """List the user's Sleeper leagues for a given year.
 
     Returns ``[]`` if the user doesn't exist or has no leagues that year.
     Output rows are projected down to the fields the dropdown actually
-    needs — keeps the JSON payload small over the wire.
+    needs -- keeps the JSON payload small over the wire. Each row carries a
+    ``dynasty`` flag (Sleeper ``settings.type == 2``); pass
+    ``exclude_dynasty=True`` to drop dynasty leagues entirely (Draft Help is
+    redraft/keeper only).
     """
     if not username:
         return []
@@ -43,18 +48,23 @@ def get_user_leagues(username: str, year: str) -> List[Dict[str, Any]]:
     leagues = fetch_json(
         f"https://api.sleeper.app/v1/user/{user_id}/leagues/nfl/{year}"
     ) or []
-    return [
-        {
+    rows: List[Dict[str, Any]] = []
+    for lg in leagues:
+        if not lg.get("league_id"):
+            continue
+        is_dynasty = (lg.get("settings") or {}).get("type") == 2
+        if exclude_dynasty and is_dynasty:
+            continue
+        rows.append({
             "league_id": lg.get("league_id"),
             "name": lg.get("name"),
             "season": lg.get("season"),
             "previous_league_id": lg.get("previous_league_id"),
             "total_rosters": lg.get("total_rosters"),
             "status": lg.get("status"),
-        }
-        for lg in leagues
-        if lg.get("league_id")
-    ]
+            "dynasty": is_dynasty,
+        })
+    return rows
 
 
 def resolve_league_for_year(league_id: str, target_year: str) -> Optional[str]:
