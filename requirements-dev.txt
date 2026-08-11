@@ -7,6 +7,12 @@
 
 -r backend/requirements.txt
 
+# --- Draft-approach proof harness (tools/draft_proof.py) --------------------
+# Emits the committed CSV/JSON + a chart proving the Monte-Carlo drafter beats
+# greedy-VBD / pure-ADP. matplotlib is only needed for the PNG; the harness
+# degrades gracefully (CSV/JSON still written) when it's absent.
+matplotlib>=3.7
+
 # --- Test runner + in-process redis stand-in -------------------------------
 # app/__init__.create_app() falls back to fakeredis when no local redis-server
 # is reachable; the backend test suite (conftest) also relies on pytest.

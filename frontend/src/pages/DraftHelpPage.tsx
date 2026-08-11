@@ -41,7 +41,8 @@ import {
 } from '@chakra-ui/react';
 
 import { api } from '../api/client';
-import MockDraftView from '../components/MockDraftView';
+import LiveDraftView from '../components/LiveDraftView';
+import DraftProofView from '../components/DraftProofView';
 import { SleeperLeagueSummary } from '../types/player';
 import {
   AuctionSummary,
@@ -337,6 +338,7 @@ const LeagueWideView: React.FC<{ lw: LeagueWide }> = ({ lw }) => {
 // Page
 // ---------------------------------------------------------------------------
 const DraftHelpPage: React.FC = () => {
+  const [sectionIndex, setSectionIndex] = useState(0);
   const [username, setUsername] = useState('');
   const [leagues, setLeagues] = useState<SleeperLeagueSummary[] | null>(null);
   const [leagueId, setLeagueId] = useState('');
@@ -409,13 +411,17 @@ const DraftHelpPage: React.FC = () => {
   };
 
   return (
-    <Box maxW="1000px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
+    <Box maxW="1400px" mx="auto" px={{ base: 3, md: 6 }} py={6}>
       <Heading size="lg" mb={1}>Draft Help</Heading>
       <Text color="gray.600" mb={4}>
-        Summarize draft habits for snake &amp; auction leagues. Enter your Sleeper username to begin.
+        {sectionIndex === 0
+          ? 'Connect a Sleeper draft or create a custom room for live, probabilistic pick help.'
+          : sectionIndex === 1
+            ? 'Analyze snake and auction draft tendencies across your Sleeper leagues.'
+            : 'Review the historical evidence behind the recommendation approach.'}
       </Text>
 
-      <VStack align="stretch" spacing={3} mb={6}>
+      {sectionIndex === 1 && <VStack align="stretch" spacing={3} mb={6}>
         <HStack>
           <Input
             placeholder="Sleeper username"
@@ -443,20 +449,31 @@ const DraftHelpPage: React.FC = () => {
             </Select>
           </HStack>
         )}
-      </VStack>
+      </VStack>}
 
-      {tabError && (
+      {sectionIndex === 1 && tabError && (
         <Alert status="error" borderRadius="md" mb={3}><AlertIcon />{tabError}</Alert>
       )}
 
-      <Tabs colorScheme="blue" variant="enclosed">
+      <Tabs colorScheme="blue" variant="enclosed" index={sectionIndex} onChange={setSectionIndex}>
         <TabList>
-          <Tab>Your Habits</Tab>
-          <Tab>This League</Tab>
-          <Tab>Opponents</Tab>
-          <Tab>Mock Draft</Tab>
+          <Tab>Draft Room</Tab>
+          <Tab>Draft Tendencies</Tab>
+          <Tab>Proof</Tab>
         </TabList>
         <TabPanels>
+          <TabPanel px={0}>
+            <LiveDraftView />
+          </TabPanel>
+
+          <TabPanel px={0}>
+            <Tabs colorScheme="blue" variant="soft-rounded" size="sm">
+              <TabList mb={3} flexWrap="wrap">
+                <Tab>Your Habits</Tab>
+                <Tab>This League</Tab>
+                <Tab>Opponents</Tab>
+              </TabList>
+              <TabPanels>
           {/* Your habits */}
           <TabPanel px={0}>
             <Button onClick={runUser} colorScheme="blue" isLoading={userLoading}
@@ -523,10 +540,13 @@ const DraftHelpPage: React.FC = () => {
               </SimpleGrid>
             )}
           </TabPanel>
+              </TabPanels>
+            </Tabs>
+          </TabPanel>
 
-          {/* Mock draft + Monte-Carlo recommender */}
+          {/* Draft-approach proof (MC vs greedy-VBD vs ADP) */}
           <TabPanel px={0}>
-            <MockDraftView />
+            <DraftProofView />
           </TabPanel>
         </TabPanels>
       </Tabs>

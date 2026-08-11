@@ -189,6 +189,16 @@ def test_recommend_pick_no_upcoming_returns_empty():
     assert out["candidates"] == []
 
 
+def test_recommend_pick_uses_explicit_future_pick_schedule():
+    players = _universe(40)
+    out = recommend_pick(
+        players, drafted_ids=[], my_roster_ids=[],
+        teams=12, rounds=4, my_slot=2, current_pick=8,
+        my_future_pick_numbers=[22, 46], n_sims=5, top_k=4, seed=1,
+    )
+    assert out["my_upcoming_picks"] == [22, 46]
+
+
 def test_recommend_pick_excludes_drafted():
     players = _universe()
     drafted = {"1", "2", "3"}
@@ -196,6 +206,39 @@ def test_recommend_pick_excludes_drafted():
                         teams=12, rounds=14, my_slot=1, n_sims=10, top_k=5, seed=1)
     cand_ids = {c["player_id"] for c in out["candidates"]}
     assert cand_ids.isdisjoint(drafted)
+
+
+def test_recommend_pick_excludes_avoided_from_user_candidates():
+    players = _universe()
+    out = recommend_pick(
+        players, drafted_ids=[], my_roster_ids=[],
+        teams=12, rounds=14, my_slot=1, n_sims=10, top_k=5, seed=1,
+        avoid_ids=["1", "2", "3"],
+    )
+    candidate_ids = {c["player_id"] for c in out["candidates"]}
+    assert candidate_ids.isdisjoint({"1", "2", "3"})
+    assert out["recommendation"]["player_id"] not in {"1", "2", "3"}
+
+
+def test_avoided_player_remains_available_to_opponents(monkeypatch):
+    players = _universe(12)
+    saw_avoided_available = []
+    original = sim._draw_opponent_order
+
+    def recording_board(available, rng):
+        if any(p.player_id == "2" for p in available):
+            saw_avoided_available.append(True)
+        return original(available, rng)
+
+    monkeypatch.setattr(sim, "_draw_opponent_order", recording_board)
+    recommend_pick(
+        players, drafted_ids=[], my_roster_ids=[],
+        teams=4, rounds=3, my_slot=1, slots={"RB": 1},
+        n_sims=2, top_k=2, show_top=2, seed=2, avoid_ids=["2"],
+    )
+    # Avoid is a user preference, not a claim that the player vanished from
+    # the real board. Opponents must still be able to select that player.
+    assert saw_avoided_available
 
 
 def test_recommend_pick_considers_each_position_but_caps_display():
@@ -214,6 +257,20 @@ def test_recommend_pick_considers_each_position_but_caps_display():
     # Displayed: the default caps shown candidates to the top 5 by value.
     shown = recommend_pick(players, **base)
     assert len(shown["candidates"]) <= 5
+
+
+def test_manual_priority_player_is_evaluated_even_when_deep_by_adp():
+    players = _universe(40)
+    target = players[-1]
+    target.proj = 180.0
+    out = recommend_pick(
+        players, drafted_ids=[], my_roster_ids=[],
+        teams=12, rounds=14, my_slot=1, n_sims=10, top_k=4,
+        show_top=5, seed=1, priority_candidate_ids=[target.player_id],
+    )
+    assert target.player_id in {
+        row["player_id"] for row in out["priority_candidates"]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +299,8 @@ def test_recommend_pick_returns_likely_next_and_depth():
                          teams=12, rounds=14, my_slot=1, n_sims=20, top_k=4, seed=3)
     top = out["candidates"][0]
     assert "avg_depth" in top
+    assert top["lineup_stdev"] >= 0
+    assert top["lineup_p25"] <= top["lineup_p75"]
     assert isinstance(top["likely_next"], list) and top["likely_next"]
     # likely_next is per upcoming pick slot, in pick order, each the modal player there.
     pick_nos = [lp["pick_no"] for lp in top["likely_next"]]
@@ -250,6 +309,10 @@ def test_recommend_pick_returns_likely_next_and_depth():
     for lp in top["likely_next"]:
         assert {"pick_no", "player_id", "name", "pos", "pct"} <= set(lp)
         assert 0.0 <= lp["pct"] <= 1.0
+    confidence = out["recommendation_confidence"]
+    assert confidence["label"] in {"near_tie", "slight_edge", "strong_edge"}
+    assert 0.0 <= confidence["win_pct"] <= 1.0
+    assert confidence["sims"] == 20
 
 
 def test_recommend_pick_respects_custom_slots():
@@ -279,6 +342,21 @@ def test_sim_players_from_config_players():
     assert sps[0].adp == 3.0 and sps[0].proj == pytest.approx(360.5)
 
 
+def test_sim_players_custom_value_overrides_vbd_and_flex_value():
+    rows = [
+        _row("te1", "TE", 150.0, 40.0, adp=8.0),
+        _row("rb1", "RB", 180.0, 60.0, adp=9.0),
+        _row("wr1", "WR", 170.0, 50.0, adp=10.0),
+    ]
+    players = {
+        p.player_id: p
+        for p in sim_players_from_config_players(rows, {"te1": 77.5})
+    }
+    assert players["te1"].proj == pytest.approx(77.5)
+    assert players["te1"].flex_proj == pytest.approx(77.5)
+    assert players["rb1"].proj == pytest.approx(60.0)
+
+
 def test_sim_players_prefers_vbd_as_value_currency():
     sps = sim_players_from_config_players([
         {"player_id": "1", "name": "A", "pos": "RB", "overall_rank": 1, "fpts": 300, "vbd": 120},
@@ -300,14 +378,41 @@ def test_sim_players_uses_real_adp_with_modeled_stdev_fallback():
     assert by_id["2"].adp == pytest.approx(20.0) and by_id["2"].adp_stdev > 0
 
 
-def test_opponent_pick_follows_adp():
+def test_opponent_order_draws_every_player_once_and_is_deterministic():
     import random as _random
-    board = sorted([
-        SimPlayer("a", "A", "RB", adp=1.0, adp_stdev=0.5),
-        SimPlayer("b", "B", "WR", adp=25.0, adp_stdev=3.0),
-        SimPlayer("c", "C", "QB", adp=40.0, adp_stdev=4.0),
-    ], key=lambda p: p.adp)
-    rng = _random.Random(0)
-    picks = [sim._opponent_pick(board, rng).player_id for _ in range(60)]
-    assert picks.count("a") > 45   # the ADP-1 player dominates early picks
-    assert picks.count("c") == 0   # the ADP-40 player never goes first here
+    board = _universe(25)
+
+    class CountingRandom:
+        def __init__(self):
+            self.calls = []
+
+        def gauss(self, mean, stdev):
+            self.calls.append((mean, stdev))
+            return mean
+
+    counting = CountingRandom()
+    ordered = sim._draw_opponent_order(board, counting)
+    assert len(counting.calls) == len(board)
+    assert [p.player_id for p in ordered] == [p.player_id for p in sorted(board, key=lambda p: p.adp)]
+
+    first = sim._draw_opponent_order(board, _random.Random(7))
+    second = sim._draw_opponent_order(board, _random.Random(7))
+    assert [p.player_id for p in first] == [p.player_id for p in second]
+
+
+def test_recommend_pick_draws_shared_boards_once_per_sim(monkeypatch):
+    players = _universe(30)
+    calls = []
+    original = sim._draw_opponent_order
+
+    def recording_board(available, rng):
+        calls.append(len(available))
+        return original(available, rng)
+
+    monkeypatch.setattr(sim, "_draw_opponent_order", recording_board)
+    out = recommend_pick(
+        players, drafted_ids=[], my_roster_ids=[],
+        teams=10, rounds=8, my_slot=1, n_sims=12, top_k=5, seed=3,
+    )
+    assert len(calls) == 12  # not 12 multiplied by candidate count
+    assert out["recommendation_confidence"]["sims"] == 12

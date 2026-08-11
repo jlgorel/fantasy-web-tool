@@ -160,12 +160,55 @@ export interface RankingsPlayerRow {
   overall_rank?: number | null;
   adp?: number | null;
   adp_stdev?: number | null;
+  adp_stdev_source?: 'observed' | 'modeled' | 'missing' | null;
+  adp_sample_size?: number | null;
+  adp_high?: number | null;
+  adp_low?: number | null;
 }
 
 export interface RankingsResponse {
   year: string;
   config: { teams: number; ppr: number; superflex: boolean };
+  sources?: {
+    values?: { source?: string | null };
+    adp?: {
+      source?: string | null;
+      generated_at_utc?: string | null;
+      format?: string | null;
+      total_drafts?: number | null;
+      matched?: number | null;
+      total?: number | null;
+    };
+  };
   players: RankingsPlayerRow[];
+}
+
+export interface CustomValueEntry {
+  value?: number;
+  avoid?: boolean;
+  source: 'upload' | 'manual';
+}
+
+export interface CustomDraftSettings {
+  version: 1;
+  updated_at: string;
+  entries: Record<string, CustomValueEntry>;
+}
+
+export interface CustomCsvMatch {
+  row: number;
+  input_name?: string;
+  input_position?: string;
+  input_player_id?: string;
+  value?: number;
+  player_id?: string;
+  matched_name?: string;
+  error?: string;
+}
+
+export interface CustomCsvPreview {
+  matches: CustomCsvMatch[];
+  errors: string[];
 }
 
 export interface LikelyPick {
@@ -184,7 +227,20 @@ export interface SimCandidate {
   proj: number;
   avg_lineup: number;
   avg_depth?: number;
+  lineup_stdev?: number;
+  lineup_p25?: number;
+  lineup_p75?: number;
   likely_next?: LikelyPick[];
+  sims: number;
+}
+
+export interface SimRecommendationConfidence {
+  label: 'near_tie' | 'slight_edge' | 'strong_edge' | 'only_option';
+  gap: number | null;
+  win_pct: number;
+  difference_stdev: number;
+  standard_error: number;
+  runner_up_player_id: string | null;
   sims: number;
 }
 
@@ -193,6 +249,9 @@ export interface SimResponse {
   my_upcoming_picks?: number[];
   candidates: SimCandidate[];
   recommendation: SimCandidate | null;
+  priority_candidates?: SimCandidate[];
+  recommendation_confidence?: SimRecommendationConfidence;
+  cache_hit?: boolean;
 }
 
 export interface SimRequest {
@@ -209,4 +268,64 @@ export interface SimRequest {
   n_sims?: number;
   top_k?: number;
   seed?: number;
+  value_overrides?: Record<string, number>;
+  avoid_ids?: string[];
+  priority_candidate_ids?: string[];
+  my_future_pick_numbers?: number[];
+}
+
+// --- Read-only Sleeper live draft lobby -----------------------------------
+export interface LiveDraftConfig {
+  teams: number;
+  rounds: number;
+  ppr: number;
+  superflex: boolean;
+  slots: Record<string, number>;
+}
+
+export interface LiveDraftPick {
+  pick_no: number;
+  round: number;
+  draft_slot: number;
+  player_id: string;
+  name: string;
+  pos?: string | null;
+  team?: string | null;
+  picked_by?: string | null;
+  is_keeper: boolean;
+  optimistic?: boolean;
+  optimistic_owner_is_user?: boolean;
+}
+
+export interface LiveDraftState {
+  changed: boolean;
+  draft_id: string;
+  league_id?: string | null;
+  name?: string;
+  season?: string;
+  status: string;
+  last_picked?: number | null;
+  pick_timer_seconds?: number | null;
+  config?: LiveDraftConfig;
+  available_slots?: number[];
+  needs_slot?: boolean;
+  user_slot?: number | null;
+  current_pick?: number;
+  total_picks?: number;
+  on_clock_slot?: number | null;
+  is_user_pick?: boolean;
+  picks_until_user?: number | null;
+  my_upcoming_picks?: number[];
+  drafted_ids?: string[];
+  my_roster_ids?: string[];
+  picks?: LiveDraftPick[];
+  poll_interval_ms?: number | null;
+  username_warning?: string;
+}
+
+export interface LiveDraftPollOptions {
+  username?: string;
+  slot?: number;
+  knownLastPicked?: number | null;
+  knownStatus?: string;
 }

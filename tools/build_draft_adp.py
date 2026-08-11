@@ -1,13 +1,16 @@
-"""Build per-season ADP blobs from FantasyFootballCalculator (FFC).
+"""Build per-season ADP blobs for draft simulation.
 
-FFC exposes a clean, documented JSON ADP API -- historical (back to 2007),
-per-format, per-team-size, and including a real standard deviation:
+The current season uses format/team-size-specific FantasyPros DraftWizard mock
+ADP (including observed standard deviation). Historical backfills retain the
+FantasyFootballCalculator API, which reaches back to 2007:
 
     https://fantasyfootballcalculator.com/api/v1/adp/{format}?teams=N&year=YYYY
 
-We pair that ADP onto the *existing* ``draft_rankings_{year}.json`` player
-universe (matched by normalized name + position, so the ``player_id`` keys line
-up with the rankings/sim by construction) and write ``draft_adp_{year}.json``.
+Current draftable players resolve against ``players.json`` and produce an
+ADP-only pool; users can attach uploaded Value/VORP numbers without inheriting
+stale prior-year projections. Historical ADP pairs onto each existing
+``draft_rankings_{year}.json`` universe. Both paths write
+``draft_adp_{year}.json``.
 The draft sim then drives opponents off real ADP (with variance) instead of
 VBD order, which is what stops the recommender from being "chalk".
 
@@ -54,27 +57,29 @@ normalize_player_name = rankings_source.normalize_player_name
 rankings_blob_name = rankings_source.rankings_blob_name
 adp_blob_name = rankings_source.adp_blob_name
 
+# The production Azure Function and this local CLI share one pure builder.
+_ADP_CORE_PATH = REPO / "azure-functions" / "draft_adp.py"
+_adp_spec = _ilu.spec_from_file_location("draft_adp_core", _ADP_CORE_PATH)
+draft_adp_core = _ilu.module_from_spec(_adp_spec)
+sys.modules[_adp_spec.name] = draft_adp_core
+_adp_spec.loader.exec_module(draft_adp_core)
+sys.modules.setdefault("draft_adp", draft_adp_core)
+
+_FP_ADP_PATH = REPO / "azure-functions" / "fantasypros_adp.py"
+_fp_spec = _ilu.spec_from_file_location("fantasypros_adp_core", _FP_ADP_PATH)
+fantasypros_adp_core = _ilu.module_from_spec(_fp_spec)
+sys.modules[_fp_spec.name] = fantasypros_adp_core
+_fp_spec.loader.exec_module(fantasypros_adp_core)
+
 DEFAULT_BLOB_DIR = REPO / "tests" / "fixtures" / "blobs"
-DEFAULT_YEARS = ("2022", "2023", "2024", "2025")
+DEFAULT_YEARS = ("2022", "2023", "2024", "2025", "2026")
 
-FFC_URL = "https://fantasyfootballcalculator.com/api/v1/adp/{fmt}?teams={teams}&year={year}&position=all"
-_SKIP_POS = {"PK", "DEF", "K", "DST", "D/ST"}
-# FFC ADP is published from ~12-team drafts; smaller/larger pools fall back to it.
-_FALLBACK_TEAMS = 12
-
-
-def ffc_format(ppr: float, superflex: bool) -> str:
-    if superflex:
-        return "2qb"
-    if ppr >= 1.0:
-        return "ppr"
-    if ppr <= 0.0:
-        return "standard"
-    return "half-ppr"
+ffc_format = draft_adp_core.ffc_format
+ffc_name_map = draft_adp_core.ffc_name_map
 
 
 def fetch_ffc(fmt: str, teams: int, year: str) -> Optional[Dict[str, Any]]:
-    url = FFC_URL.format(fmt=fmt, teams=teams, year=year)
+    url = draft_adp_core.ffc_url(fmt, teams, year)
     req = urllib.request.Request(url, headers={"User-Agent": "fantasy-web-tool/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -87,79 +92,76 @@ def fetch_ffc(fmt: str, teams: int, year: str) -> Optional[Dict[str, Any]]:
     return data
 
 
-def ffc_name_map(data: Dict[str, Any]) -> Dict[Any, Dict[str, float]]:
-    """Build ``{(norm_name, pos): {adp, stdev}}`` + name-only fallback keys."""
-    out: Dict[Any, Dict[str, float]] = {}
-    for pl in data.get("players", []):
-        pos = (pl.get("position") or "").upper()
-        if pos in _SKIP_POS:
-            continue
-        nm = normalize_player_name(pl.get("name"))
-        if not nm:
-            continue
-        entry = {"adp": round(float(pl["adp"]), 2), "stdev": round(float(pl.get("stdev") or 0.0), 2)}
-        out.setdefault((nm, pos), entry)
-        out.setdefault((nm, None), entry)  # name-only fallback (different pos labels)
-    return out
-
-
 def build_year(year: str, blob_dir: Path) -> Optional[Dict[str, Any]]:
     rankings_path = blob_dir / rankings_blob_name(year)
-    if not rankings_path.exists():
-        print(f"  SKIP {year}: {rankings_path.name} not found")
-        return None
-    rankings = json.loads(rankings_path.read_text(encoding="utf-8"))
+    rankings = (
+        json.loads(rankings_path.read_text(encoding="utf-8"))
+        if rankings_path.exists() else None
+    )
 
-    ffc_cache: Dict[Any, Optional[Dict[str, Any]]] = {}
-    configs_out: Dict[str, Any] = {}
-
-    for cfg_key, cfg in rankings.get("configs", {}).items():
-        teams = int(cfg.get("teams") or _FALLBACK_TEAMS)
-        ppr = float(cfg.get("ppr") or 0.0)
-        superflex = bool(cfg.get("superflex"))
-        fmt = ffc_format(ppr, superflex)
-
-        cache_key = (fmt, teams)
-        if cache_key not in ffc_cache:
-            data = fetch_ffc(fmt, teams, year)
-            if data is None and teams != _FALLBACK_TEAMS:
-                data = fetch_ffc(fmt, _FALLBACK_TEAMS, year)
-            ffc_cache[cache_key] = data
+    def fetch_url(url: str) -> Optional[Dict[str, Any]]:
+        req = urllib.request.Request(url, headers={"User-Agent": "fantasy-web-tool/1.0"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.load(resp)
+        except Exception as exc:  # noqa: BLE001
+            print(f"      fetch failed ({url}): {exc}")
+            return None
+        finally:
             time.sleep(0.4)  # be polite to FFC
-        data = ffc_cache[cache_key]
+        return data
 
-        name_map = ffc_name_map(data) if data else {}
-        players_out: Dict[str, Dict[str, float]] = {}
-        for p in cfg.get("players", []):
-            pid = p.get("player_id")
-            if not pid:
-                continue
-            nm = normalize_player_name(p.get("name"))
-            pos = (p.get("pos") or "").upper()
-            hit = name_map.get((nm, pos)) or name_map.get((nm, None))
-            if hit:
-                players_out[str(pid)] = hit
+    is_current_year = str(year) == str(_dt.datetime.now().year)
+    if is_current_year:
+        players_path = blob_dir / "players.json"
+        if not players_path.exists():
+            print(f"  SKIP {year}: players.json not found")
+            return None
+        players = json.loads(players_path.read_text(encoding="utf-8"))
 
-        total = len(cfg.get("players", []))
-        configs_out[cfg_key] = {
-            "teams": teams,
-            "ppr": ppr,
-            "superflex": superflex,
-            "format": fmt,
-            "total_drafts": (data or {}).get("meta", {}).get("total_drafts"),
-            "matched": len(players_out),
-            "total": total,
-            "players": players_out,
-        }
-        print(f"    {cfg_key:<10} fmt={fmt:<9} matched {len(players_out):>3}/{total}")
+        def fetch_fp(url: str) -> Optional[str]:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": "fantasy-web-tool/1.0"}
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    return resp.read().decode("utf-8", errors="replace")
+            except Exception as exc:  # noqa: BLE001
+                print(f"      fetch failed ({url}): {exc}")
+                return None
+            finally:
+                time.sleep(0.4)
 
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "year": str(year),
-        "source": "fantasyfootballcalculator",
-        "generated_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
-        "configs": configs_out,
-    }
+        print("  current season: using FantasyPros DraftWizard ADP")
+        blob = fantasypros_adp_core.build_fantasypros_adp_blob(
+            str(year), players, fetch_text=fetch_fp,
+        )
+    elif rankings is not None:
+        blob = draft_adp_core.build_adp_blob(
+            str(year), rankings, fetch_json=fetch_url,
+        )
+    else:
+        players_path = blob_dir / "players.json"
+        if not players_path.exists():
+            print(
+                f"  SKIP {year}: neither {rankings_path.name} nor players.json found"
+            )
+            return None
+        print(f"  {rankings_path.name} absent; building ADP-only player pool")
+        players = json.loads(players_path.read_text(encoding="utf-8"))
+        blob = draft_adp_core.build_adp_blob_from_players(
+            str(year), players, fetch_json=fetch_url,
+        )
+    errors = draft_adp_core.validate_adp_blob(blob)
+    if errors:
+        print("  REJECTED: " + "; ".join(errors[:10]))
+        return None
+    for cfg_key, cfg in blob["configs"].items():
+        print(
+            f"    {cfg_key:<10} fmt={cfg['format']:<9} "
+            f"matched {cfg['matched']:>3}/{cfg['total']}"
+        )
+    return blob
 
 
 def main() -> int:

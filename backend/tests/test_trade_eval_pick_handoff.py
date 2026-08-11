@@ -142,18 +142,35 @@ class TestSpliceSeries:
         # Before cutoff -> pick value.
         assert spliced.value_on(date(2024, 4, 1)) == 7000.0
         assert spliced.value_on(date(2024, 4, 24)) == 7000.0
-        # On/after cutoff -> drafted-player value.
-        assert spliced.value_on(date(2024, 4, 25)) == 9000.0
+        # The player first appears on Apr 26, so retain the pick's last value
+        # at the Apr 25 handoff rather than backdating the future 9000 value.
+        assert spliced.value_on(date(2024, 4, 25)) == 7000.0
         assert spliced.value_on(date(2024, 4, 26)) == 9000.0
         assert spliced.value_on(date(2024, 6, 15)) == 9500.0
 
-    def test_post_has_no_data_yet_uses_first_known(self, te):
+    def test_post_first_seen_after_draft_keeps_pick_value_until_then(self, te):
         VS = te["vi"].ValueSeries
         pre = VS.from_mapping({"2024-04-01": 7000.0})
         post = VS.from_mapping({"2024-04-27": 8800.0})
         spliced = te["ph"].splice_series(pre, post, date(2024, 4, 25))
-        assert spliced.value_on(date(2024, 4, 25)) == 8800.0
-        assert spliced.value_on(date(2024, 4, 26)) == 8800.0
+        # KTC did not yet track the rookie at draft time. Don't backdate the
+        # Apr 27 value to Apr 25; preserve the pick line until KTC has data.
+        assert spliced.value_on(date(2024, 4, 25)) == 7000.0
+        assert spliced.value_on(date(2024, 4, 26)) == 7000.0
+        assert spliced.value_on(date(2024, 4, 27)) == 8800.0
+
+    def test_post_history_before_draft_forward_fills_at_handoff(self, te):
+        VS = te["vi"].ValueSeries
+        pre = VS.from_mapping({"2024-04-01": 7000.0})
+        post = VS.from_mapping({
+            "2024-04-20": 8500.0,
+            "2024-04-27": 8800.0,
+        })
+        spliced = te["ph"].splice_series(pre, post, date(2024, 4, 25))
+        # When KTC did know the player's value at draft time, use that actual
+        # forward-filled value rather than the pick line or a future value.
+        assert spliced.value_on(date(2024, 4, 25)) == 8500.0
+        assert spliced.value_on(date(2024, 4, 26)) == 8500.0
         assert spliced.value_on(date(2024, 4, 27)) == 8800.0
 
     def test_post_empty_uses_last_pre_value(self, te):
@@ -306,6 +323,41 @@ class TestPickHandoffTable:
 # Pick-aware resolver: splice vs. raw pick
 # ---------------------------------------------------------------------------
 class TestPickAwareResolver:
+    def test_same_tier_picks_resolve_to_their_own_players(self, te):
+        """Two 2023 mid-second picks must not share a cached player series."""
+        VS = te["vi"].ValueSeries
+        TA = te["ev"].TradeAsset
+        cutoff = date(2023, 4, 28)
+        values = {
+            "pick:2023_mid_2nd": {"2023-04-01": 3000.0},
+            "achane": {"2023-04-28": 6000.0},
+            "charbonnet": {"2023-04-28": 4000.0},
+        }
+
+        def base_resolver(asset):
+            return VS.from_mapping(values.get(asset.asset_id, {}))
+
+        pick_table = {
+            ("2023", 2, 1): {"player_id": "achane", "draft_date": cutoff},
+            ("2023", 2, 2): {"player_id": "charbonnet", "draft_date": cutoff},
+        }
+        resolver = te["ph"].make_pick_aware_resolver(base_resolver, pick_table)
+        achane_pick = TA(
+            asset_id="pick:2023_mid_2nd",
+            sleeper_id=te["ph"].encode_pick_key("2023", 2, 1),
+            is_pick=True,
+        )
+        charbonnet_pick = TA(
+            asset_id="pick:2023_mid_2nd",
+            sleeper_id=te["ph"].encode_pick_key("2023", 2, 2),
+            is_pick=True,
+        )
+
+        # Resolve in the problematic order: the old asset-id-only cache made
+        # the Charbonnet pick return the Achane series here.
+        assert resolver(achane_pick).value_on(cutoff) == 6000.0
+        assert resolver(charbonnet_pick).value_on(cutoff) == 4000.0
+
     def test_unused_pick_falls_through(self, te, chain, base_resolver):
         table = te["stl"].build_pick_to_player(chain)
         wrapped = te["ph"].make_pick_aware_resolver(base_resolver, table)

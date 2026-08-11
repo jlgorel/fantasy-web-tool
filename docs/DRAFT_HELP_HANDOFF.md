@@ -1,5 +1,10 @@
 # Handoff — Draft Help & Season Accountability
 
+> **Superseded on 2026-08-10 by `docs/DRAFT_HELP_CURRENT_HANDOFF.md`.** This
+> document is retained as historical context; do not use its phase status,
+> sources, algorithm details, proof numbers, test counts, or next steps as the
+> current project state.
+
 > Created 2026-07-16. Branch: `dev/jgorel/draftstatsandhelp`.
 > Scope: the **Draft Help** system (Monte-Carlo draft recommender + habit
 > "Wrapped"-style accolades) and the plan for **in-season accountability /

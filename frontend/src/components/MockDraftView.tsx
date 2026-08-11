@@ -7,7 +7,7 @@
  * (/draft-help/sim) — it predicts who'll be available at your later picks via
  * ADP and scores the starting lineup you'd end up with for each candidate.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
   AccordionButton,
@@ -36,10 +36,34 @@ import {
 } from '@chakra-ui/react';
 
 import { api } from '../api/client';
-import { RankingsPlayerRow, SimResponse } from '../types/draft';
+import DraftPlayerAvatar from './DraftPlayerAvatar';
+import PlayerCombobox from './PlayerCombobox';
+import {
+  CustomCsvPreview,
+  CustomDraftSettings,
+  RankingsPlayerRow,
+  RankingsResponse,
+  SimResponse,
+} from '../types/draft';
+import {
+  avoidedPlayerIds,
+  customDraftStorageKey,
+  customValueMap,
+  emptyCustomDraftSettings,
+  loadCustomDraftSettings,
+  previewCustomValuesCsv,
+  saveCustomDraftSettings,
+} from '../utils/customDraftValues';
+import {
+  buildRosterSlots,
+  POS_COLOR,
+  SLOT_COLOR,
+} from '../utils/draftRoster';
+import { confidencePresentation } from '../utils/simConfidence';
 
-const YEARS = ['2024', '2023', '2022', '2025'];
+const YEARS = ['2026', '2025', '2024', '2023', '2022'];
 const TEAM_SIZES = [8, 10, 12, 14];
+const MIN_ADP_ONLY_VALUES = 50;
 const PPRS = [
   { label: '0 PPR', value: 0 },
   { label: '0.5 PPR', value: 0.5 },
@@ -56,83 +80,6 @@ const SLOT_KEYS: Array<{ key: string; label: string }> = [
   { key: 'FLEX', label: 'FLEX' },
 ];
 
-// Roster-slot rendering: flex eligibility, colors, and slot assignment.
-const FLEX_ELIGIBLE: Record<string, string[]> = {
-  FLEX: ['RB', 'WR', 'TE'],
-  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
-};
-const POS_COLOR: Record<string, string> = { QB: 'purple', RB: 'green', WR: 'blue', TE: 'orange' };
-const SLOT_COLOR: Record<string, string> = {
-  QB: 'purple', RB: 'green', WR: 'blue', TE: 'orange',
-  FLEX: 'teal', SUPER_FLEX: 'pink', BN: 'gray',
-};
-
-interface RosterSlot { type: string; label: string; player?: RankingsPlayerRow; }
-
-/**
- * Lay out a full roster (starters in lineup order, then bench) and slot each
- * drafted player into their best-fit spot the way a real draft board would:
- * dedicated position first, then FLEX, then SUPER_FLEX, leftovers to the bench.
- */
-function buildRosterSlots(
-  myRoster: string[],
-  byId: Record<string, RankingsPlayerRow>,
-  starterSlots: Record<string, number>,
-  superflex: boolean,
-  rounds: number,
-): RosterSlot[] {
-  const byPos: Record<string, RankingsPlayerRow[]> = {};
-  myRoster.forEach((pid) => {
-    const p = byId[pid];
-    if (!p) return;
-    if (!byPos[p.pos]) byPos[p.pos] = [];
-    byPos[p.pos].push(p);
-  });
-  Object.values(byPos).forEach((arr) =>
-    arr.sort((a, b) => (a.overall_rank ?? 9999) - (b.overall_rank ?? 9999)));
-
-  const used = new Set<string>();
-  const take = (positions: string[]): RankingsPlayerRow | undefined => {
-    let best: RankingsPlayerRow | undefined;
-    for (const pos of positions) {
-      const cand = (byPos[pos] || []).find((p) => !used.has(p.player_id));
-      if (cand && (!best || (cand.overall_rank ?? 9999) < (best.overall_rank ?? 9999))) {
-        best = cand;
-      }
-    }
-    if (best) used.add(best.player_id);
-    return best;
-  };
-
-  const order: Array<{ type: string; count: number }> = [
-    { type: 'QB', count: starterSlots.QB ?? 0 },
-    { type: 'RB', count: starterSlots.RB ?? 0 },
-    { type: 'WR', count: starterSlots.WR ?? 0 },
-    { type: 'TE', count: starterSlots.TE ?? 0 },
-    { type: 'FLEX', count: starterSlots.FLEX ?? 0 },
-    { type: 'SUPER_FLEX', count: superflex ? 1 : 0 },
-  ];
-  const slots: RosterSlot[] = [];
-  let starterCount = 0;
-  order.forEach(({ type, count }) => {
-    for (let i = 0; i < count; i += 1) {
-      starterCount += 1;
-      const label = type === 'SUPER_FLEX' ? 'SF' : type;
-      slots.push({ type, label, player: take(FLEX_ELIGIBLE[type] ?? [type]) });
-    }
-  });
-
-  // Bench: drafted-but-unslotted players (draft order), then empty BN spots.
-  const leftovers = myRoster
-    .map((pid) => byId[pid])
-    .filter((p): p is RankingsPlayerRow => !!p && !used.has(p.player_id));
-  const benchCount = Math.max(rounds - starterCount, leftovers.length);
-  for (let i = 0; i < benchCount; i += 1) {
-    slots.push({ type: 'BN', label: 'BN', player: leftovers[i] });
-  }
-  return slots;
-}
-
 function snakeSlot(pick: number, teams: number): number {
   const rnd = Math.floor((pick - 1) / teams);
   const idx = (pick - 1) % teams;
@@ -143,7 +90,7 @@ interface HistoryEntry { pick: number; pid: string; slot: number; mine: boolean;
 
 const MockDraftView: React.FC = () => {
   // Config
-  const [year, setYear] = useState('2024');
+  const [year, setYear] = useState('2026');
   const [teams, setTeams] = useState(12);
   const [rounds, setRounds] = useState(15);
   const [mySlot, setMySlot] = useState(1);
@@ -155,6 +102,7 @@ const MockDraftView: React.FC = () => {
 
   // Board + draft state
   const [players, setPlayers] = useState<RankingsPlayerRow[] | null>(null);
+  const [sources, setSources] = useState<RankingsResponse['sources']>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drafted, setDrafted] = useState<Record<string, number>>({}); // pid -> slot
@@ -162,6 +110,16 @@ const MockDraftView: React.FC = () => {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [posFilter, setPosFilter] = useState('ALL');
   const [boardSort, setBoardSort] = useState<'adp' | 'vbd'>('adp');
+
+  // Browser-local custom values. They are scoped to season/config because a
+  // VORP number is only meaningful under the league settings that produced it.
+  const [customSettings, setCustomSettings] = useState<CustomDraftSettings>(
+    emptyCustomDraftSettings(),
+  );
+  const [csvPreview, setCsvPreview] = useState<CustomCsvPreview | null>(null);
+  const [manualPlayerId, setManualPlayerId] = useState('');
+  const [manualValue, setManualValue] = useState('');
+  const [customMessage, setCustomMessage] = useState<string | null>(null);
 
   // Sim
   const [sim, setSim] = useState<SimResponse | null>(null);
@@ -173,28 +131,83 @@ const MockDraftView: React.FC = () => {
   const isMyPick = onClock === mySlot;
   const draftOver = currentPick > totalPicks;
 
+  const storageKey = useMemo(
+    () => customDraftStorageKey(year, teams, ppr, superflex),
+    [year, teams, ppr, superflex],
+  );
+
+  useEffect(() => {
+    const loaded = typeof window === 'undefined'
+      ? emptyCustomDraftSettings()
+      : loadCustomDraftSettings(window.localStorage, storageKey);
+    setCustomSettings(loaded);
+    setCsvPreview(null);
+    setCustomMessage(null);
+    setSim(null);
+  }, [storageKey]);
+
+  const persistCustomSettings = (settings: CustomDraftSettings) => {
+    const updated = { ...settings, updated_at: new Date().toISOString() };
+    setCustomSettings(updated);
+    if (typeof window !== 'undefined') {
+      saveCustomDraftSettings(window.localStorage, storageKey, updated);
+    }
+    setSim(null);
+  };
+
+  const effectivePlayers = useMemo(() => (players || []).map((player) => {
+    const custom = customSettings.entries[player.player_id];
+    return custom?.value === undefined ? player : { ...player, vbd: custom.value };
+  }), [players, customSettings]);
+
+  const valueOverrides = useMemo(
+    () => customValueMap(customSettings),
+    [customSettings],
+  );
+  const avoidIds = useMemo(
+    () => avoidedPlayerIds(customSettings),
+    [customSettings],
+  );
+  const priorityCandidateIds = useMemo(
+    () => Object.entries(customSettings.entries)
+      .filter(([, entry]) => entry.source === 'manual' && entry.value !== undefined)
+      .map(([pid]) => pid),
+    [customSettings],
+  );
+  const usableValueCount = effectivePlayers.filter((player) => player.vbd != null).length;
+  const isAdpOnly = sources?.values?.source === 'custom upload required';
+  const hasUsableValues = isAdpOnly
+    ? usableValueCount >= MIN_ADP_ONLY_VALUES
+    : usableValueCount > 0;
+
   const byId = useMemo(() => {
     const m: Record<string, RankingsPlayerRow> = {};
-    (players || []).forEach((p) => { m[p.player_id] = p; });
+    effectivePlayers.forEach((p) => { m[p.player_id] = p; });
     return m;
-  }, [players]);
+  }, [effectivePlayers]);
 
   const available = useMemo(() => {
-    const list = (players || [])
+    const list = effectivePlayers
       .filter((p) => drafted[p.player_id] === undefined)
       .filter((p) => posFilter === 'ALL' || p.pos === posFilter);
     // ADP sort = draft opponents realistically; VBD sort (via overall_rank,
     // which is assigned VBD-desc) = see the best value still on the board.
     list.sort(boardSort === 'adp'
       ? (a, b) => (a.adp ?? 9999) - (b.adp ?? 9999)
-      : (a, b) => (a.overall_rank ?? 9999) - (b.overall_rank ?? 9999));
+      : (a, b) => (b.vbd ?? -9999) - (a.vbd ?? -9999));
     return list.slice(0, 180);
-  }, [players, drafted, posFilter, boardSort]);
+  }, [effectivePlayers, drafted, posFilter, boardSort]);
 
   const rosterSlots = useMemo(
-    () => buildRosterSlots(myRoster, byId, starterSlots, superflex, rounds),
+    () => buildRosterSlots(
+      myRoster,
+      byId,
+      { ...starterSlots, ...(superflex ? { SUPER_FLEX: 1 } : {}) },
+      rounds,
+    ),
     [myRoster, byId, starterSlots, superflex, rounds],
   );
+  const confidence = confidencePresentation(sim?.recommendation_confidence);
 
   const loadBoard = async () => {
     setLoading(true);
@@ -206,6 +219,7 @@ const MockDraftView: React.FC = () => {
         setError('No rankings available for that season/config.');
       }
       setPlayers(resp.players);
+      setSources(resp.sources);
       setDrafted({});
       setMyRoster([]);
       setHistory([]);
@@ -235,6 +249,71 @@ const MockDraftView: React.FC = () => {
     setSim(null);
   };
 
+  const updateManualValue = () => {
+    const value = Number(manualValue);
+    if (!manualPlayerId || !Number.isFinite(value) || value < -10000 || value > 10000) {
+      setCustomMessage('Choose a player and enter a valid Value/VORP number.');
+      return;
+    }
+    persistCustomSettings({
+      ...customSettings,
+      entries: {
+        ...customSettings.entries,
+        [manualPlayerId]: {
+          ...customSettings.entries[manualPlayerId],
+          value,
+          source: 'manual',
+        },
+      },
+    });
+    setCustomMessage(`Saved ${byId[manualPlayerId]?.name || 'player'} at ${value}.`);
+  };
+
+  const toggleAvoid = (playerId: string) => {
+    const existing = customSettings.entries[playerId];
+    const nextAvoid = !existing?.avoid;
+    const nextEntries = { ...customSettings.entries };
+    const nextEntry = { ...existing, avoid: nextAvoid || undefined, source: existing?.source || 'manual' };
+    if (nextEntry.value === undefined && !nextEntry.avoid) delete nextEntries[playerId];
+    else nextEntries[playerId] = nextEntry;
+    persistCustomSettings({ ...customSettings, entries: nextEntries });
+  };
+
+  const readCustomCsv = async (file?: File) => {
+    if (!file || !players) return;
+    const preview = previewCustomValuesCsv(await file.text(), players);
+    setCsvPreview(preview);
+    setCustomMessage(null);
+  };
+
+  const applyCsvPreview = () => {
+    if (!csvPreview) return;
+    const nextEntries = { ...customSettings.entries };
+    let applied = 0;
+    csvPreview.matches.forEach((match) => {
+      if (!match.player_id || match.value === undefined || match.error) return;
+      const existing = nextEntries[match.player_id];
+      // A deliberate manual edit wins over a subsequent bulk upload.
+      if (existing?.source === 'manual' && existing.value !== undefined) return;
+      nextEntries[match.player_id] = {
+        ...existing,
+        value: match.value,
+        source: 'upload',
+      };
+      applied += 1;
+    });
+    persistCustomSettings({ ...customSettings, entries: nextEntries });
+    setCustomMessage(`Applied ${applied} uploaded values.`);
+  };
+
+  const clearCustomSettings = () => {
+    persistCustomSettings(emptyCustomDraftSettings());
+    setCsvPreview(null);
+    setManualPlayerId('');
+    setManualValue('');
+    setCustomMessage('Cleared custom values and Avoid selections for this config.');
+  };
+
   const recommend = async () => {
     if (!players) return;
     setSimLoading(true);
@@ -249,6 +328,9 @@ const MockDraftView: React.FC = () => {
         slots,
         current_pick: currentPick,
         n_sims: 60, top_k: 8, seed: 1,
+        value_overrides: valueOverrides,
+        avoid_ids: avoidIds,
+        priority_candidate_ids: priorityCandidateIds,
       });
       setSim(resp);
     } catch (e) {
@@ -368,7 +450,134 @@ const MockDraftView: React.FC = () => {
           ))}
           {superflex && <Badge colorScheme="purple" alignSelf="center">+ SUPERFLEX slot</Badge>}
         </HStack>
+        {sources && (
+          <HStack spacing={2} mt={3} flexWrap="wrap">
+            <Badge colorScheme={sources.values?.source === 'custom upload required' ? 'orange' : 'blue'}>
+              Values: {sources.values?.source || 'default rankings'}
+            </Badge>
+            <Badge colorScheme={sources.adp?.source ? 'green' : 'orange'}>
+              ADP: {sources.adp?.source === 'fantasypros_draftwizard'
+                ? 'FantasyPros DraftWizard'
+                : sources.adp?.source === 'fantasyfootballcalculator'
+                  ? 'FantasyFootballCalculator'
+                  : sources.adp?.source || 'rank fallback'}
+              {sources.adp?.total_drafts ? ` · ${sources.adp.total_drafts.toLocaleString()} drafts` : ''}
+            </Badge>
+            {sources.adp?.generated_at_utc && (
+              <Text fontSize="xs" color="gray.500">
+                refreshed {new Date(sources.adp.generated_at_utc).toLocaleDateString()}
+              </Text>
+            )}
+          </HStack>
+        )}
       </Box>
+
+      {players && (
+        <Accordion allowToggle borderWidth="1px" borderRadius="md">
+          <AccordionItem border="none">
+            <AccordionButton _expanded={{ bg: 'gray.50' }}>
+              <Box flex="1" textAlign="left" color="gray.800">
+                <Text fontWeight="semibold" color="gray.800">Custom values &amp; preferences</Text>
+                <Text fontSize="xs" color="gray.500">
+                  {Object.values(customSettings.entries).filter((entry) => entry.value !== undefined).length} custom values
+                  {' · '}{avoidIds.length} avoided · saved in this browser for this config
+                </Text>
+              </Box>
+              <AccordionIcon />
+            </AccordionButton>
+            <AccordionPanel>
+              <VStack align="stretch" spacing={4}>
+                <Text fontSize="sm" color="gray.600">
+                  Values must be cross-position VBD/VORP numbers—not raw fantasy points.
+                  They change your board and recommendations, but ADP still controls when
+                  opponents take players. CSV headers: <b>player_id</b> or <b>name</b>,
+                  optional <b>position</b>, and <b>value</b>/<b>VBD</b>/<b>VORP</b>.
+                </Text>
+
+                <Box>
+                  <Text fontSize="sm" fontWeight="semibold" mb={1}>Upload CSV</Text>
+                  <Input
+                    size="sm"
+                    type="file"
+                    accept=".csv,text/csv"
+                    p={1}
+                    onChange={(event) => readCustomCsv(event.target.files?.[0])}
+                  />
+                  {csvPreview && (
+                    <Box mt={2} borderWidth="1px" borderRadius="md" p={2}>
+                      <HStack spacing={2} flexWrap="wrap">
+                        <Badge colorScheme="green">
+                          {csvPreview.matches.filter((match) => match.player_id && !match.error).length} matched
+                        </Badge>
+                        <Badge colorScheme={csvPreview.matches.some((match) => match.error) ? 'orange' : 'gray'}>
+                          {csvPreview.matches.filter((match) => match.error).length} skipped
+                        </Badge>
+                        <Button
+                          size="xs"
+                          colorScheme="blue"
+                          onClick={applyCsvPreview}
+                          isDisabled={!!csvPreview.errors.length || !csvPreview.matches.some((match) => match.player_id && !match.error)}
+                        >
+                          Apply matched values
+                        </Button>
+                      </HStack>
+                      {csvPreview.errors.map((message) => (
+                        <Text key={message} fontSize="xs" color="red.600" mt={1}>{message}</Text>
+                      ))}
+                      {csvPreview.matches.filter((match) => match.error).slice(0, 8).map((match) => (
+                        <Text key={`${match.row}-${match.input_name}`} fontSize="xs" color="orange.700" mt={1}>
+                          Row {match.row}: {match.input_name || match.input_player_id || '(blank)'} — {match.error}
+                        </Text>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+
+                <Box>
+                  <Text fontSize="sm" fontWeight="semibold" mb={1}>Manual value</Text>
+                  <HStack align="flex-end" flexWrap="wrap">
+                    <PlayerCombobox
+                      players={effectivePlayers}
+                      value={manualPlayerId}
+                      onChange={(pid) => {
+                        setManualPlayerId(pid);
+                        const current = customSettings.entries[pid]?.value;
+                        setManualValue(current === undefined ? '' : String(current));
+                      }}
+                    />
+                    <Input
+                      size="sm"
+                      type="number"
+                      value={manualValue}
+                      placeholder="Value/VORP"
+                      onChange={(event) => setManualValue(event.target.value)}
+                      w="130px"
+                    />
+                    <Button size="sm" colorScheme="blue" onClick={updateManualValue}>
+                      Save value
+                    </Button>
+                    <Button size="sm" variant="outline" colorScheme="red" onClick={clearCustomSettings}>
+                      Clear all
+                    </Button>
+                  </HStack>
+                </Box>
+                {customMessage && <Text fontSize="xs" color="blue.700">{customMessage}</Text>}
+              </VStack>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
+
+      {players && isAdpOnly && (
+        <Box borderWidth="1px" borderColor="orange.300" bg="orange.50" borderRadius="md" p={3}>
+          <Text fontSize="sm" color="orange.800">
+            This is a current ADP-only board; no old projections were carried
+            forward into 2026. Add at least {MIN_ADP_ONLY_VALUES} Value/VORP rows
+            before requesting a recommendation ({usableValueCount} currently loaded).
+            A complete sheet is strongly recommended.
+          </Text>
+        </Box>
+      )}
 
       {error && <Text color="red.500">{error}</Text>}
 
@@ -387,7 +596,7 @@ const MockDraftView: React.FC = () => {
                 label="Monte-Carlo: simulates the rest of the draft from real ADP and recommends the player that builds your best starting lineup — not just the highest VBD."
                 hasArrow placement="top" openDelay={250} shouldWrapChildren>
                 <Button size="sm" colorScheme="green" onClick={recommend}
-                  isDisabled={draftOver} isLoading={simLoading}>
+                  isDisabled={draftOver || !hasUsableValues} isLoading={simLoading}>
                   Recommend my pick
                 </Button>
               </Tooltip>
@@ -399,27 +608,40 @@ const MockDraftView: React.FC = () => {
               <Heading size="sm" mb={1}>
                 Recommended: {sim.recommendation.name} ({sim.recommendation.pos})
               </Heading>
+              {confidence && (
+                <HStack mb={2}>
+                  <Badge colorScheme={confidence.color}>{confidence.label}</Badge>
+                  <Text fontSize="xs" color="gray.600">{confidence.detail}</Text>
+                  {sim.cache_hit && <Badge colorScheme="gray">cached state</Badge>}
+                </HStack>
+              )}
               <Text fontSize="xs" color="gray.600" mb={2}>
                 VAL = your projected <b>starting lineup</b> total value over replacement (VBD),
                 with every required slot filled across all positions — so it balances positions
                 and won&apos;t over-draft a shallow one (e.g. QB in 1-QB); depth only breaks
                 ties. VBD = this player&apos;s value over replacement. Likely next = the player
-                you most often take at each of your next pick slots (P# = pick number).
+                you most often take at each of your next pick slots (P# = pick number). The
+                smaller range below VAL is the middle 50% of simulated lineup outcomes.
               </Text>
               <Box overflowX="auto">
                 <Table size="sm" variant="simple">
                   <Thead>
                     <Tr><Th>Player</Th><Th>Pos</Th><Th isNumeric>ADP</Th><Th isNumeric>VBD</Th>
-                      <Th isNumeric>VAL</Th><Th>Likely next picks</Th></Tr>
+                      <Th isNumeric title="Middle 50% rollout range is shown below the mean">VAL</Th><Th>Likely next picks</Th></Tr>
                   </Thead>
                   <Tbody>
                     {sim.candidates.map((c, i) => (
                       <Tr key={c.player_id} bg={i === 0 ? 'green.100' : undefined}>
-                        <Td>{c.name}</Td>
+                        <Td><HStack spacing={2}><DraftPlayerAvatar playerId={c.player_id} name={c.name} team={byId[c.player_id]?.team} size={30} /><Text>{c.name}</Text></HStack></Td>
                         <Td>{c.pos}</Td>
                         <Td isNumeric>{Math.round(c.adp)}</Td>
                         <Td isNumeric>{c.proj.toFixed(0)}</Td>
-                        <Td isNumeric fontWeight={i === 0 ? 'bold' : 'normal'}>{c.avg_lineup.toFixed(1)}</Td>
+                        <Td isNumeric fontWeight={i === 0 ? 'bold' : 'normal'}>
+                          {c.avg_lineup.toFixed(1)}
+                          {c.lineup_p25 != null && c.lineup_p75 != null && (
+                            <Text fontSize="2xs" color="gray.500">{c.lineup_p25.toFixed(0)}–{c.lineup_p75.toFixed(0)}</Text>
+                          )}
+                        </Td>
                         <Td fontSize="xs" color="gray.700">
                           {c.likely_next && c.likely_next.length > 0
                             ? c.likely_next
@@ -432,6 +654,26 @@ const MockDraftView: React.FC = () => {
                   </Tbody>
                 </Table>
               </Box>
+              {sim.priority_candidates && sim.priority_candidates.some(
+                (target) => !sim.candidates.some((candidate) => candidate.player_id === target.player_id),
+              ) && (
+                <Box mt={3} pt={2} borderTopWidth="1px">
+                  <Text fontSize="xs" fontWeight="semibold" color="blue.800">
+                    Manually adjusted targets evaluated outside the top five
+                  </Text>
+                  {sim.priority_candidates
+                    .filter((target) => !sim.candidates.some(
+                      (candidate) => candidate.player_id === target.player_id,
+                    ))
+                    .map((target) => (
+                      <Text key={target.player_id} fontSize="xs" color="gray.600">
+                        {target.name} ({target.pos}) — VAL {target.avg_lineup.toFixed(1)}.
+                        The model preferred another player now, often because this target
+                        is likely to remain available later.
+                      </Text>
+                    ))}
+                </Box>
+              )}
             </Box>
           )}
 
@@ -469,23 +711,46 @@ const MockDraftView: React.FC = () => {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {available.map((p) => (
-                      <Tr key={p.player_id}>
+                    {available.map((p) => {
+                      const custom = customSettings.entries[p.player_id];
+                      return (
+                      <Tr key={p.player_id} bg={custom?.avoid ? 'red.50' : undefined}>
                         <Td isNumeric>{p.adp != null ? Math.round(p.adp) : '—'}</Td>
-                        <Td isNumeric>{p.vbd != null ? Math.round(p.vbd) : ''}</Td>
-                        <Td>{p.name}</Td>
+                        <Td isNumeric color={custom?.value !== undefined ? 'blue.600' : undefined} fontWeight={custom?.value !== undefined ? 'bold' : undefined}>
+                          {p.vbd != null ? Math.round(p.vbd) : ''}
+                        </Td>
+                        <Td>
+                          <HStack spacing={2}>
+                            <DraftPlayerAvatar playerId={p.player_id} name={p.name} team={p.team} />
+                            <Box>
+                              {p.name}
+                              {custom?.value !== undefined && <Badge ml={1} colorScheme="blue">custom</Badge>}
+                              {custom?.avoid && <Badge ml={1} colorScheme="red">avoid</Badge>}
+                            </Box>
+                          </HStack>
+                        </Td>
                         <Td>{p.pos}</Td>
                         <Td>{p.tier ?? ''}</Td>
                         <Td isNumeric>{p.fpts != null ? p.fpts.toFixed(0) : ''}</Td>
                         <Td isNumeric>{p.auction != null ? `$${p.auction.toFixed(0)}` : ''}</Td>
                         <Td>
-                          <Button size="xs" colorScheme={isMyPick ? 'green' : 'gray'}
-                            onClick={() => draftPlayer(p.player_id)} isDisabled={draftOver}>
-                            Draft
-                          </Button>
+                          <HStack spacing={1}>
+                            <Button
+                              size="xs"
+                              variant={custom?.avoid ? 'solid' : 'outline'}
+                              colorScheme="red"
+                              onClick={() => toggleAvoid(p.player_id)}
+                            >
+                              {custom?.avoid ? 'Allow' : 'Avoid'}
+                            </Button>
+                            <Button size="xs" colorScheme={isMyPick ? 'green' : 'gray'}
+                              onClick={() => draftPlayer(p.player_id)} isDisabled={draftOver}>
+                              Draft
+                            </Button>
+                          </HStack>
                         </Td>
                       </Tr>
-                    ))}
+                    );})}
                   </Tbody>
                 </Table>
               </Box>
@@ -513,6 +778,7 @@ const MockDraftView: React.FC = () => {
                         <Badge minW="34px" textAlign="center" colorScheme={SLOT_COLOR[s.type] || 'gray'}>
                           {s.label}
                         </Badge>
+                        {s.player && <DraftPlayerAvatar playerId={s.player.player_id} name={s.player.name} team={s.player.team} size={28} />}
                         <Text fontSize="sm" noOfLines={1} color={s.player ? undefined : 'gray.400'}>
                           {s.player ? s.player.name : 'Empty'}
                         </Text>

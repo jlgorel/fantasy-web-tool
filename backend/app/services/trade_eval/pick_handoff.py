@@ -36,10 +36,11 @@ def splice_series(
     ``cutoff`` and ``post`` from ``cutoff`` onward.
 
     Implementation: walk both inputs' sorted dates, keep ``pre`` samples
-    with ``d < cutoff``, and prepend a synthetic ``cutoff`` sample whose
-    value is the first ``post`` value (or post.value_on(cutoff) if it
-    has earlier data) so the integral picks up the drafted player from
-    day one. Then keep all ``post`` samples with ``d >= cutoff``.
+    with ``d < cutoff``, and prepend a synthetic ``cutoff`` sample. The
+    synthetic sample forward-fills the drafted player's value when it has
+    historical data on or before draft day; otherwise it preserves the last
+    pick value until the player first appears in KTC. Then keep all ``post``
+    samples with ``d >= cutoff``.
 
     The ``initial_value`` and stale-handling are inherited from ``pre``
     (asset existed as a pick before its drafted player did).
@@ -48,22 +49,22 @@ def splice_series(
     pre_values = [pre.values[i] for i, d in enumerate(pre.sorted_dates)
                   if d < cutoff]
 
-    # Post values on/after cutoff; if post has nothing yet on cutoff,
-    # synthesize using forward-fill from any earlier data.
+    # Post values on/after cutoff. If the drafted player has no KTC sample yet
+    # at the cutoff, retain the pick's last known value until KTC first lists
+    # the player; never backdate a later player value into the draft date.
     post_dates = [d for d in post.sorted_dates if d >= cutoff]
     post_values = [post.values[i] for i, d in enumerate(post.sorted_dates)
                    if d >= cutoff]
     if not post_dates or post_dates[0] != cutoff:
-        # Drafted player may not have a KTC entry on the exact draft day
-        # (rookies often appear a day or two later). Use the first known
-        # post value, or fall back to the last pre value if the drafted
-        # player has zero KTC history at all.
-        if post.sorted_dates:
-            seed_value = post.values[0]  # earliest known KTC for the player
-        elif pre_values:
+        # Drafted player may not have a KTC entry on the exact draft day.
+        # ``value_on`` only uses samples at or before cutoff, so it cannot
+        # accidentally apply a later player value retroactively.
+        has_post_sample_by_cutoff = bool(
+            post.sorted_dates and post.sorted_dates[0] <= cutoff
+        )
+        seed_value = post.value_on(cutoff)
+        if not has_post_sample_by_cutoff and pre_values:
             seed_value = pre_values[-1]
-        else:
-            seed_value = 0.0
         post_dates = [cutoff] + post_dates
         post_values = [seed_value] + post_values
 
@@ -121,30 +122,39 @@ def make_pick_aware_resolver(
     unchanged. That's the right behavior -- their value series is just
     the pick's KTC line.
     """
-    cache: Dict[str, ValueSeries] = {}
+    # Multiple actual picks can share a generic KTC blob id such as
+    # ``pick:2023_mid_2nd``. Their ``sleeper_id`` carries the original-roster
+    # pick key and distinguishes which drafted player the generic pick became.
+    # Cache each realized pick separately so one cannot inherit another's
+    # post-draft player series.
+    cache: Dict[Tuple[str, Optional[str]], ValueSeries] = {}
 
     def resolver(asset: TradeAsset) -> ValueSeries:
-        if asset.asset_id in cache:
-            return cache[asset.asset_id]
+        cache_key = (
+            asset.asset_id,
+            asset.sleeper_id if asset.is_pick else None,
+        )
+        if cache_key in cache:
+            return cache[cache_key]
         base_series = base_resolver(asset)
         if not asset.is_pick:
-            cache[asset.asset_id] = base_series
+            cache[cache_key] = base_series
             return base_series
 
         key = parse_pick_key(asset.sleeper_id)
         if key is None:
-            cache[asset.asset_id] = base_series
+            cache[cache_key] = base_series
             return base_series
 
         info = pick_table.get(key)
         if not info:
-            cache[asset.asset_id] = base_series
+            cache[cache_key] = base_series
             return base_series
 
         cutoff = _coerce_cutoff(info.get("draft_date"))
         drafted_player_id = info.get("player_id")
         if cutoff is None or not drafted_player_id:
-            cache[asset.asset_id] = base_series
+            cache[cache_key] = base_series
             return base_series
 
         # Pull the drafted player's series via the base resolver.
@@ -156,7 +166,7 @@ def make_pick_aware_resolver(
         )
         player_series = base_resolver(player_asset)
         spliced = splice_series(base_series, player_series, cutoff)
-        cache[asset.asset_id] = spliced
+        cache[cache_key] = spliced
         return spliced
 
     return resolver

@@ -231,6 +231,14 @@ def fetch_draft_picks(draft_id: str) -> List[Dict[str, Any]]:
     return fetch_json(f"{_SLEEPER}/draft/{draft_id}/picks") or []
 
 
+def fetch_draft_traded_picks(draft_id: str) -> List[Dict[str, Any]]:
+    return fetch_json(f"{_SLEEPER}/draft/{draft_id}/traded_picks") or []
+
+
+def fetch_user_drafts(user_id: str, year: str) -> List[Dict[str, Any]]:
+    return fetch_json(f"{_SLEEPER}/user/{user_id}/drafts/nfl/{year}") or []
+
+
 def load_draft(draft_id: str) -> Optional[NormalizedDraft]:
     """Fetch a draft's detail + picks and normalize. ``None`` on failure."""
     detail = fetch_draft_detail(draft_id)

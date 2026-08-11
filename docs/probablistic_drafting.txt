@@ -1,0 +1,36 @@
+What is Fantasy Probabilistic Drafting?
+
+The short answer
+
+The probabilistic drafting method relies on projecting overall position values for each round of your draft based on player projections, and Average Draft Position (ADP). By looking at every possible draft permutation, it decides who the best player to draft now is based on who will be available at all of the future rounds.
+
+The long answer
+
+Caution: Heavy math ahead
+
+The method starts by using ADP and the ADP standard deviation to calculate a probability that each individual player will be available at each of your picks. For stud players this table is pretty obvious:
+
+
+But in the middle of the draft, player start having very large ranges.
+
+
+In order to calculate the value for a specific position for a specific round, all players for that position are sorted by projection. By multiplying each player's projections by the probability that they will be the best available player you get an expected value for that pick for that position.
+
+
+The above is an example of the calculation for the WR value at pick 60. Golden Tate has about an 84% chance of being the best available WR at pick 60 since his ADP is 66 and his ADP Standard Deviation is 6.1. There is a pretty good chance that he will still be available at pick 60, but we also need to consider that he might not. The next several WRs are likely to be taken at that point, and the next most likely receiver is Devin Funchess – 8 points lower than Golden Tate. This puts the overall value of a WR at pick 60 equal to 128.1, slightly lower than the 129.1 of Golden Tate.
+
+Once these steps have been completed for each individual position at each of your draft picks a full projections box is constructed.
+
+
+For your first pick it will consider all of the skill position starters that are needed, for most leagues this would be 1 QB, 2 RB, 2 WR, 1 TE, and 1 Flex. These 7 positions can be picked in 1,260 different ways (RB-RB-WR-TE-WR-QB-Flex, or WR-WR-TE-QB-RB-RB-Flex for example). By scanning through all of the different permutations, the best likely draft order can be identified. In the above example, that solution would be this: RB-RB-TE-WR-WR-QB-Flex
+
+
+This calculation identifies the following trends and picks the best draft strategy based on them:
+
+A large drop-off in RB after the first 2 rounds followed by a steady decline
+A much less substantial drop in WR leading to the ability to pick them later
+A large drop in TE value between rounds 3 & 4
+Fairly slow consistent drop in QB allowing you to wait until value drops at other positions have slowed.
+Of course, based on who your league-mates draft, the draft strategy can change quickly. This is why all of the calculations are re-run after every player is picked.
+
+Throughout the draft, as starters are selected, bench players are gradually added to the pool of needed positions. This is to make sure to complete good depth at RB & WR while also placing an emphasis on completing a solid core of players to start each week

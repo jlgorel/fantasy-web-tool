@@ -21,6 +21,8 @@ import {
 } from '../types/player';
 import {
   LeagueHabitsResponse,
+  LiveDraftPollOptions,
+  LiveDraftState,
   OpponentsHabitsResponse,
   RankingsResponse,
   SimRequest,
@@ -45,7 +47,17 @@ class ApiError extends Error {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(API_BASE + path, init);
   if (!response.ok) {
-    throw new ApiError(response.status, `Request to ${path} failed: ${response.status}`);
+    let detail = '';
+    try {
+      const payload = await response.json();
+      detail = payload?.detail || payload?.error || payload?.message || '';
+    } catch (_error) {
+      // Non-JSON upstream failures keep the generic status message.
+    }
+    throw new ApiError(
+      response.status,
+      detail || `Request to ${path} failed: ${response.status}`,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -204,6 +216,36 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
+  },
+
+  getLiveDraft(
+    draftId: string, options: LiveDraftPollOptions = {},
+  ): Promise<LiveDraftState> {
+    const params = new URLSearchParams();
+    if (options.username) params.set('username', options.username);
+    if (options.slot != null) params.set('slot', String(options.slot));
+    if (options.knownLastPicked !== undefined) {
+      params.set(
+        'known_last_picked',
+        options.knownLastPicked === null ? 'null' : String(options.knownLastPicked),
+      );
+    }
+    if (options.knownStatus) params.set('known_status', options.knownStatus);
+    const query = params.toString();
+    return request<LiveDraftState>(
+      `/draft-help/live/draft/${encodeURIComponent(draftId)}${query ? `?${query}` : ''}`,
+    );
+  },
+
+  getLiveLeagueDraft(
+    leagueId: string, username?: string,
+  ): Promise<LiveDraftState> {
+    const query = username
+      ? `?username=${encodeURIComponent(username)}`
+      : '';
+    return request<LiveDraftState>(
+      `/draft-help/live/league/${encodeURIComponent(leagueId)}${query}`,
+    );
   },
 };
 

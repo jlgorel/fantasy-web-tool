@@ -1,0 +1,54 @@
+{
+  "user": {
+    "user_id": "336006564563410944",
+    "username": "jlgorel",
+    "display_name": "jlgorel"
+  },
+  "draft": {
+    "created": 1786273348276,
+    "creators": ["336006564563410944"],
+    "draft_id": "1392134959602356224",
+    "draft_order": {"336006564563410944": 2},
+    "last_picked": 1786273359868,
+    "league_id": null,
+    "metadata": {
+      "league_id": "1383556954865016832",
+      "name": "All Star League",
+      "scoring_type": "half_ppr",
+      "type": "league_mock"
+    },
+    "season": "2026",
+    "season_type": "regular",
+    "settings": {
+      "pick_timer": 30,
+      "rounds": 15,
+      "slots_bn": 6,
+      "slots_def": 1,
+      "slots_flex": 1,
+      "slots_qb": 1,
+      "slots_rb": 2,
+      "slots_rec_flex": 1,
+      "slots_te": 1,
+      "slots_wr": 2,
+      "teams": 12
+    },
+    "slot_to_roster_id": {
+      "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6,
+      "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "12": 12
+    },
+    "sport": "nfl",
+    "start_time": 1786273352629,
+    "status": "paused",
+    "type": "snake"
+  },
+  "picks": [
+    {"draft_id":"1392134959602356224","draft_slot":1,"is_keeper":null,"metadata":{"first_name":"Bijan","last_name":"Robinson","player_id":"9509","position":"RB","team":"ATL"},"pick_no":1,"picked_by":"","player_id":"9509","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":2,"is_keeper":null,"metadata":{"first_name":"Jahmyr","last_name":"Gibbs","player_id":"9221","position":"RB","team":"DET"},"pick_no":2,"picked_by":"336006564563410944","player_id":"9221","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":3,"is_keeper":null,"metadata":{"first_name":"Christian","last_name":"McCaffrey","player_id":"4034","position":"RB","team":"SF"},"pick_no":3,"picked_by":"","player_id":"4034","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":4,"is_keeper":null,"metadata":{"first_name":"Ja'Marr","last_name":"Chase","player_id":"7564","position":"WR","team":"CIN"},"pick_no":4,"picked_by":"","player_id":"7564","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":5,"is_keeper":null,"metadata":{"first_name":"Puka","last_name":"Nacua","player_id":"9493","position":"WR","team":"LAR"},"pick_no":5,"picked_by":"","player_id":"9493","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":6,"is_keeper":null,"metadata":{"first_name":"Jonathan","last_name":"Taylor","player_id":"6813","position":"RB","team":"IND"},"pick_no":6,"picked_by":"","player_id":"6813","roster_id":null,"round":1},
+    {"draft_id":"1392134959602356224","draft_slot":7,"is_keeper":null,"metadata":{"first_name":"James","last_name":"Cook","player_id":"8138","position":"RB","team":"BUF"},"pick_no":7,"picked_by":"","player_id":"8138","roster_id":null,"round":1}
+  ],
+  "traded_picks": []
+}

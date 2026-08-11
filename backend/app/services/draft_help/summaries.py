@@ -15,6 +15,7 @@ orchestration is unit-testable with in-memory fakes.
 from __future__ import annotations
 
 import datetime as _dt
+import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -36,7 +37,8 @@ from app.services.sleeper_league_lookup import get_league_season_chain
 DEFAULT_MAX_OPP_LEAGUES = 5
 DEFAULT_SEASONS = 3
 
-_REPO_CACHE: Dict[str, Optional[RankingsRepository]] = {}
+_SOURCE_CACHE_TTL_SECONDS = 300
+_REPO_CACHE: Dict[str, Tuple[float, RankingsRepository]] = {}
 
 # Drafts/value pair fed to the aggregators.
 DraftCtx = Tuple[NormalizedDraft, Dict[str, RankingPlayer]]
@@ -55,13 +57,17 @@ def load_rankings_repo(
             return RankingsRepository(blob_loader(rankings_blob_name(year)))
         except Exception:
             return None
-    if year in _REPO_CACHE:
-        return _REPO_CACHE[year]
+    cached = _REPO_CACHE.get(year)
+    if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
+        return cached[1]
     try:
         repo: Optional[RankingsRepository] = RankingsRepository(load_blob(rankings_blob_name(year)))
     except Exception:
         repo = None
-    _REPO_CACHE[year] = repo
+    if repo is not None:
+        _REPO_CACHE[year] = (time.monotonic(), repo)
+    else:
+        _REPO_CACHE.pop(year, None)
     return repo
 
 
@@ -83,10 +89,13 @@ def rankings_config_players(
     """Player rows for a (year, teams, ppr, superflex) config -- drives the
     mock draft board + the sim. Real ADP (``adp``/``adp_stdev``, from the FFC
     blob) is merged in when available; absent it, the sim falls back to VBD
-    order. Empty list when the season rankings blob is absent."""
+    order. When the season value sheet is absent, a current ADP-only pool is
+    returned if available so the browser can attach uploaded values."""
     repo = load_rankings_repo(year, blob_loader=blob_loader)
     if not repo:
-        return []
+        return _adp_only_config_players(
+            year, teams, ppr, superflex, blob_loader=blob_loader,
+        )
     cfg = repo.get_config(int(teams), float(ppr), bool(superflex))
     if not cfg:
         return []
@@ -98,32 +107,70 @@ def rankings_config_players(
         if entry:
             row["adp"] = entry.get("adp")
             row["adp_stdev"] = entry.get("stdev")
+            row["adp_stdev_source"] = entry.get("stdev_source")
+            row["adp_sample_size"] = entry.get("times_drafted")
+            row["adp_high"] = entry.get("high")
+            row["adp_low"] = entry.get("low")
         rows.append(row)
     return rows
 
 
-_ADP_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+def rankings_config_sources(
+    year: Any, teams: int, ppr: float, superflex: bool,
+    *, blob_loader: Optional[Callable[[str], Any]] = None,
+) -> Dict[str, Any]:
+    """Source/freshness metadata for a board configuration."""
+    repo = load_rankings_repo(year, blob_loader=blob_loader)
+    blob = _load_adp_blob(year, blob_loader=blob_loader) or {}
+    if repo:
+        value_source = repo.source_file or "draft rankings"
+    elif blob.get("adp_only"):
+        value_source = "custom upload required"
+    else:
+        value_source = "unavailable"
+    key = config_key(int(teams), float(ppr), bool(superflex))
+    cfg = (blob.get("configs") or {}).get(key) or {}
+    return {
+        "values": {"source": value_source},
+        "adp": {
+            "source": blob.get("source"),
+            "generated_at_utc": blob.get("generated_at_utc"),
+            "format": cfg.get("format"),
+            "total_drafts": cfg.get("total_drafts"),
+            "matched": cfg.get("matched"),
+            "total": cfg.get("total"),
+        },
+    }
+
+
+_ADP_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 
 def _load_adp_blob(year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None) -> Optional[Dict[str, Any]]:
     """Load (and cache) the ``draft_adp_{year}.json`` blob; ``None`` if absent."""
     year = str(year)
     loader = blob_loader or load_blob
-    if blob_loader is None and year in _ADP_CACHE:
-        return _ADP_CACHE[year]
+    if blob_loader is None:
+        cached = _ADP_CACHE.get(year)
+        if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
+            return cached[1]
     try:
         blob = loader(adp_blob_name(year))
     except Exception:
         blob = None
-    if blob_loader is None:
-        _ADP_CACHE[year] = blob
+    if blob_loader is None and isinstance(blob, dict):
+        _ADP_CACHE[year] = (time.monotonic(), blob)
+    elif blob_loader is None:
+        # Never negative-cache a missing blob: the scheduled scraper may create
+        # it moments later, especially at the start of a new draft season.
+        _ADP_CACHE.pop(year, None)
     return blob
 
 
 def _adp_for_config(
     year: Any, teams: int, ppr: float, superflex: bool,
     *, blob_loader: Optional[Callable[[str], Any]] = None,
-) -> Dict[str, Dict[str, float]]:
+) -> Dict[str, Dict[str, Any]]:
     """``{player_id: {adp, stdev}}`` for one config, or ``{}`` when unavailable.
 
     Defensive: a rankings-shaped blob (config ``players`` is a list, e.g. when
@@ -136,6 +183,54 @@ def _adp_for_config(
     cfg = (blob.get("configs") or {}).get(key) or {}
     players = cfg.get("players")
     return players if isinstance(players, dict) else {}
+
+
+def _adp_only_config_players(
+    year: Any, teams: int, ppr: float, superflex: bool,
+    *, blob_loader: Optional[Callable[[str], Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Build display/sim rows from a current ADP-only player pool.
+
+    No VBD or projected points are invented. The board is useful for CSV
+    matching and ADP timing; recommendations become meaningful only after the
+    browser supplies value overrides.
+    """
+    blob = _load_adp_blob(year, blob_loader=blob_loader) or {}
+    if not blob.get("adp_only"):
+        return []
+    key = config_key(int(teams), float(ppr), bool(superflex))
+    cfg = (blob.get("configs") or {}).get(key) or {}
+    players = cfg.get("players")
+    if not isinstance(players, dict):
+        return []
+    ordered = sorted(
+        players.items(),
+        key=lambda item: float((item[1] or {}).get("adp") or 9999),
+    )
+    rows: List[Dict[str, Any]] = []
+    for rank, (pid, entry) in enumerate(ordered, start=1):
+        if not isinstance(entry, dict) or not entry.get("name") or not entry.get("pos"):
+            continue
+        rows.append({
+            "player_id": str(pid),
+            "name": entry.get("name"),
+            "pos": entry.get("pos"),
+            "team": entry.get("team"),
+            "bye": None,
+            "fpts": None,
+            "auction": None,
+            "vbd": None,
+            "tier": None,
+            "pos_rank": None,
+            "overall_rank": rank,
+            "adp": entry.get("adp"),
+            "adp_stdev": entry.get("stdev"),
+            "adp_stdev_source": entry.get("stdev_source"),
+            "adp_sample_size": entry.get("times_drafted"),
+            "adp_high": entry.get("high"),
+            "adp_low": entry.get("low"),
+        })
+    return rows
 
 
 def _candidate_years(seasons: int) -> List[str]:

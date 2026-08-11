@@ -10,6 +10,8 @@ from app.services.wrapped.trade_accolades import inspect_trade as inspect_trade_
 from app.services.wrapped.redraft_trade_inspector import inspect_redraft_trade
 from app.services.draft_help import summaries as draft_help_summaries
 from app.services.draft_help import sim as draft_help_sim
+from app.services.draft_help import draft_fetch as draft_help_fetch
+from app.services.draft_help import live_draft as draft_help_live
 from app.services.draft_help.sim import sim_players_from_config_players
 from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
@@ -21,6 +23,8 @@ from app.services.sleeper_league_lookup import (
 import traceback
 from app.config import Config
 import json
+import math
+import hashlib
 
 main = Blueprint('main', __name__)
     
@@ -315,6 +319,46 @@ def _parse_bool(value, default=False):
     return str(value).lower() in ('1', 'true', 'yes', 'sf', 'on')
 
 
+def _parse_value_overrides(raw):
+    """Sanitize browser-supplied ``{player_id: value}`` overrides.
+
+    Values are VBD/VORP-style cross-position numbers. A bounded map prevents a
+    malformed upload from creating excessive work or non-finite sim values.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for pid, value in list(raw.items())[:500]:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(numeric) or numeric < -10000 or numeric > 10000:
+            continue
+        out[str(pid)] = numeric
+    return out
+
+
+def _parse_avoid_ids(raw):
+    if not isinstance(raw, list):
+        return []
+    return [str(pid) for pid in raw[:500] if pid is not None and str(pid)]
+
+
+def _parse_pick_numbers(raw):
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for value in raw[:100]:
+        try:
+            pick = int(value)
+        except (TypeError, ValueError):
+            continue
+        if pick > 0:
+            out.append(pick)
+    return out
+
+
 def _parse_sim_slots(raw, superflex):
     """Sanitize a client-supplied starting-slot map for the draft sim.
 
@@ -360,6 +404,9 @@ def draft_help_rankings():
         return jsonify({
             'year': str(year),
             'config': {'teams': teams, 'ppr': ppr, 'superflex': superflex},
+            'sources': draft_help_summaries.rankings_config_sources(
+                year, teams, ppr, superflex,
+            ),
             'players': players,
         }), 200
     except Exception as e:
@@ -383,25 +430,186 @@ def draft_help_sim_route():
         my_slot = int(body.get('my_slot', 1))
         ppr = float(body.get('ppr', 0.5))
         superflex = bool(body.get('superflex', False))
+        value_overrides = _parse_value_overrides(body.get('value_overrides'))
+        avoid_ids = _parse_avoid_ids(body.get('avoid_ids'))
+        priority_candidate_ids = _parse_avoid_ids(
+            body.get('priority_candidate_ids')
+        )
+        my_future_pick_numbers = _parse_pick_numbers(
+            body.get('my_future_pick_numbers')
+        )
+        if my_future_pick_numbers is not None:
+            my_future_pick_numbers = sorted(my_future_pick_numbers)
+        config_players = draft_help_summaries.rankings_config_players(
+            year, teams, ppr, superflex,
+        )
+        adp_only = bool(config_players) and all(
+            row.get('vbd') is None and row.get('fpts') is None
+            for row in config_players
+        )
+        if adp_only and len(value_overrides) < 50:
+            return jsonify({
+                'error': 'ADP-only board requires an uploaded value sheet',
+                'detail': (
+                    'Provide at least 50 player Value/VORP overrides; '
+                    f'{len(value_overrides)} were supplied.'
+                ),
+            }), 400
         players = sim_players_from_config_players(
-            draft_help_summaries.rankings_config_players(year, teams, ppr, superflex)
+            config_players,
+            value_overrides=value_overrides,
         )
         if not players:
             return jsonify({'error': 'no rankings for that config/year'}), 503
         slots = _parse_sim_slots(body.get('slots'), superflex)
+        n_sims = max(10, min(int(body.get('n_sims', 150)), 400))
+        top_k = max(1, min(int(body.get('top_k', 6)), 12))
+        drafted_ids = sorted(str(pid) for pid in body.get('drafted_ids', []))
+        my_roster_ids = sorted(str(pid) for pid in body.get('my_roster_ids', []))
+        player_revision = [
+            (
+                str(row.get('player_id') or ''),
+                row.get('vbd'), row.get('fpts'), row.get('adp'),
+                row.get('adp_stdev'),
+            )
+            for row in config_players
+        ]
+        cache_spec = {
+            'version': 3,
+            'year': str(year), 'teams': teams, 'rounds': rounds,
+            'my_slot': my_slot, 'ppr': ppr, 'superflex': superflex,
+            'slots': slots, 'current_pick': body.get('current_pick'),
+            'n_sims': n_sims, 'top_k': top_k, 'seed': body.get('seed'),
+            'drafted_ids': drafted_ids, 'my_roster_ids': my_roster_ids,
+            'avoid_ids': sorted(avoid_ids),
+            'priority_candidate_ids': sorted(priority_candidate_ids),
+            'my_future_pick_numbers': my_future_pick_numbers,
+            'value_overrides': sorted(value_overrides.items()),
+            'player_revision': player_revision,
+        }
+        cache_digest = hashlib.sha256(json.dumps(
+            cache_spec, sort_keys=True, separators=(',', ':'),
+        ).encode('utf-8')).hexdigest()
+        cache_key = f'draft_help_sim_v3_{cache_digest}'
+        redis_client = getattr(current_app, 'redis_client', None)
+        try:
+            cached = redis_client.get(cache_key) if redis_client else None
+        except Exception:
+            cached = None
+        if cached:
+            try:
+                payload = json.loads(cached)
+                payload['cache_hit'] = True
+                return jsonify(payload), 200
+            except Exception:
+                pass
         result = draft_help_sim.recommend_pick(
             players,
-            drafted_ids=body.get('drafted_ids', []),
-            my_roster_ids=body.get('my_roster_ids', []),
+            drafted_ids=drafted_ids,
+            my_roster_ids=my_roster_ids,
             teams=teams, rounds=rounds, my_slot=my_slot, slots=slots,
             current_pick=body.get('current_pick'),
-            n_sims=max(10, min(int(body.get('n_sims', 150)), 400)),
-            top_k=max(1, min(int(body.get('top_k', 6)), 12)),
+            n_sims=n_sims,
+            top_k=top_k,
             seed=body.get('seed'),
+            avoid_ids=avoid_ids,
+            priority_candidate_ids=priority_candidate_ids,
+            my_future_pick_numbers=my_future_pick_numbers,
         )
+        result['cache_hit'] = False
+        try:
+            if redis_client:
+                redis_client.set(cache_key, json.dumps(result), ex=300)
+        except Exception:
+            pass
         return jsonify(result), 200
     except Exception as e:
         print("Exception in draft_help_sim_route: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+def _live_draft_response(draft_id):
+    detail = draft_help_fetch.fetch_draft_detail(str(draft_id))
+    if not detail:
+        return jsonify({
+            'error': 'Sleeper draft data is temporarily unavailable',
+            'detail': f'Could not load draft {draft_id}; retry shortly.',
+        }), 503
+    try:
+        draft_help_live.validate_supported_draft(detail)
+    except draft_help_live.LiveDraftError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    username = (request.args.get('username') or '').strip()
+    user_id = draft_help_fetch.resolve_user_id(username) if username else None
+    slot_raw = request.args.get('slot')
+    try:
+        selected_slot = int(slot_raw) if slot_raw else None
+    except ValueError:
+        return jsonify({'error': 'slot must be an integer'}), 400
+
+    known_last_picked = request.args.get('known_last_picked')
+    known_status = request.args.get('known_status')
+    current_last_picked = detail.get('last_picked')
+    current_last_picked_token = (
+        'null' if current_last_picked is None else str(current_last_picked)
+    )
+    if (
+        known_last_picked is not None
+        and current_last_picked_token == known_last_picked
+        and str(detail.get('status') or '') == str(known_status or '')
+    ):
+        return jsonify(draft_help_live.unchanged_live_response(detail)), 200
+
+    picks = draft_help_fetch.fetch_draft_picks(str(draft_id))
+    traded = draft_help_fetch.fetch_draft_traded_picks(str(draft_id))
+    try:
+        payload = draft_help_live.build_live_draft_state(
+            detail, picks, traded,
+            user_id=user_id, selected_slot=selected_slot,
+        )
+    except draft_help_live.LiveDraftError as exc:
+        return jsonify({'error': str(exc)}), 400
+    if username and not user_id:
+        payload['username_warning'] = f'Sleeper username not found: {username}'
+    elif username and payload.get('needs_slot'):
+        payload['username_warning'] = (
+            f'{username} is not assigned a slot in this draft; select one manually.'
+        )
+    return jsonify(payload), 200
+
+
+@main.route('/draft-help/live/draft/<draft_id>', methods=['GET'])
+def draft_help_live_draft(draft_id):
+    """Read-only live Sleeper draft state by direct draft ID."""
+    try:
+        return _live_draft_response(draft_id)
+    except Exception as e:
+        print("Exception in draft_help_live_draft: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/draft-help/live/league/<league_id>', methods=['GET'])
+def draft_help_live_league(league_id):
+    """Find the active/pre-draft redraft snake draft for a selected league."""
+    try:
+        league = draft_help_fetch.fetch_league(league_id)
+        if not league:
+            return jsonify({'error': f'Sleeper league not found: {league_id}'}), 404
+        if draft_help_fetch.is_dynasty_league(league):
+            return jsonify({'error': 'Dynasty drafts are not supported yet.'}), 400
+        selected = draft_help_live.choose_league_draft(
+            draft_help_fetch.fetch_league_drafts(league_id)
+        )
+        if not selected or not selected.get('draft_id'):
+            return jsonify({
+                'error': 'No active or upcoming supported snake draft found for this league.'
+            }), 404
+        return _live_draft_response(str(selected['draft_id']))
+    except Exception as e:
+        print("Exception in draft_help_live_league: " + str(e))
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
@@ -601,6 +809,35 @@ def player_detail(player_id):
         return jsonify(payload), 200
     except Exception as e:
         print("Exception in player_detail: " + str(e))
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route('/projection-review', methods=['GET'])
+def projection_review():
+    """Return the Vegas-projection accuracy review for a season.
+
+    Query params:
+        year: 4-digit fantasy year (default = current fantasy year).
+
+    The review blob (``projection_review_{year}.json``) is produced by the
+    scraper's Tuesday ``weekly_projection_accuracy_review`` timer. Returns 404
+    when no review has been generated yet (e.g. pre-Week-1).
+    """
+    try:
+        from app.services.season import get_current_fantasy_year
+        from app.services.blob_store import try_load_blob
+        year = request.args.get('year') or get_current_fantasy_year()
+
+        review = try_load_blob(f"projection_review_{year}.json")
+        if not review:
+            return jsonify({
+                'error': 'No projection review available',
+                'detail': f'projection_review_{year}.json is missing or empty',
+            }), 404
+        return jsonify(review), 200
+    except Exception as e:
+        print("Exception in projection_review: " + str(e))
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 

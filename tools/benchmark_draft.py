@@ -113,6 +113,7 @@ def simulate(payload):
     players = get_players(year, teams, ppr, sf)
     byid = {p.player_id: p for p in players}
     mc_slot, val_slot = rng.sample(range(1, teams + 1), 2)
+    opponent_order = sim._draw_opponent_order(players, rng)
 
     drafted: set = set()
     mc: list = []
@@ -139,7 +140,7 @@ def simulate(payload):
             drafted.add(p.player_id)
             val.append(p.player_id)
         else:
-            p = sim._opponent_pick(avail, rng)
+            p = next(p for p in opponent_order if p.player_id not in drafted)
             drafted.add(p.player_id)
 
     g_mc = grade([byid[i] for i in mc], slots)

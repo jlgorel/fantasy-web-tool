@@ -231,23 +231,30 @@ def my_upcoming_picks(current_pick: int, teams: int, rounds: int, my_slot: int) 
 # ---------------------------------------------------------------------------
 # Pick policies
 # ---------------------------------------------------------------------------
-def _opponent_pick(available_by_adp: List[SimPlayer], rng: random.Random, *, k: int = 40) -> SimPlayer:
-    """Sample an opponent's pick from a Gaussian-ADP board.
+def _draw_opponent_order(
+    available: Sequence[SimPlayer], rng: random.Random,
+) -> List[SimPlayer]:
+    """Draw one coherent opponent draft board for an entire rollout.
 
-    ``available_by_adp`` must be pre-sorted by ADP ascending. Each of the top
-    ``k`` available players draws a would-be draft slot ~ ``Normal(adp,
-    adp_stdev)`` and the earliest draw is taken. This reproduces realistic
-    positional runs and "who slides / who gets reached for" variance, instead
-    of drafting in strict value order (which is what made the old model chalk).
+    Each player's latent draft priority is sampled exactly once from their ADP
+    distribution. Opponents then consume this fixed order, skipping anyone the
+    user's simulated picks already removed. This is both faster and more
+    statistically coherent than re-drawing every player at every opponent pick.
     """
-    head = available_by_adp[:k] if len(available_by_adp) > k else available_by_adp
-    best: Optional[SimPlayer] = None
-    best_draw = 0.0
-    for p in head:
-        draw = rng.gauss(p.adp, p.adp_stdev if p.adp_stdev > 0 else 1.0)
-        if best is None or draw < best_draw:
-            best_draw, best = draw, p
-    return best if best is not None else head[0]
+    drawn = [
+        (
+            rng.gauss(
+                player.adp,
+                player.adp_stdev if player.adp_stdev > 0 else 1.0,
+            ),
+            player.adp,
+            player.player_id,
+            player,
+        )
+        for player in available
+    ]
+    drawn.sort(key=lambda row: (row[0], row[1], row[2]))
+    return [row[3] for row in drawn]
 
 
 def _flex_or_proj(p: SimPlayer) -> float:
@@ -260,7 +267,7 @@ def _flex_or_proj(p: SimPlayer) -> float:
 
 def _greedy_my_pick(
     available: List[SimPlayer], roster: List[SimPlayer], slots: Dict[str, int],
-    consider: int = 14,
+    consider: int = 14, avoid_ids: Optional[set] = None,
 ) -> Optional[SimPlayer]:
     """Pick the available player that most improves my roster value.
 
@@ -269,9 +276,12 @@ def _greedy_my_pick(
     only the ``consider`` highest-projection available players to keep
     simulation cost bounded; ties break toward higher projection.
     """
-    if not available:
+    user_available = [
+        p for p in available if not avoid_ids or p.player_id not in avoid_ids
+    ]
+    if not user_available:
         return None
-    pool = sorted(available, key=_flex_or_proj, reverse=True)[:consider]
+    pool = sorted(user_available, key=_flex_or_proj, reverse=True)[:consider]
     base = roster_value(roster, slots)
     best: Optional[SimPlayer] = None
     best_gain = -1.0
@@ -290,9 +300,9 @@ def _simulate_once(
     available: List[SimPlayer],
     my_roster: List[SimPlayer],
     my_future: List[int],
-    teams: int,
     slots: Dict[str, int],
-    rng: random.Random,
+    opponent_order: Sequence[SimPlayer],
+    avoid_ids: Optional[set] = None,
 ) -> Tuple[float, float, List[str]]:
     """One rollout: take ``candidate`` now, then play out to my last pick.
 
@@ -300,7 +310,10 @@ def _simulate_once(
     ``follow_pick_ids`` are the players I drafted at my *subsequent* picks in
     this rollout (drives the "likely next picks" aggregation).
     """
-    avail = [p for p in available if p.player_id != candidate.player_id]
+    remaining = {
+        p.player_id: p for p in available
+        if p.player_id != candidate.player_id
+    }
     roster = my_roster + [candidate]
     follows: List[str] = []
     if len(my_future) <= 1:
@@ -309,19 +322,30 @@ def _simulate_once(
 
     my_pick_set = set(my_future)
     last = my_future[-1]
-    avail.sort(key=lambda p: p.adp)
+    opponent_index = 0
     for pick in range(my_future[0] + 1, last + 1):
-        if not avail:
+        if not remaining:
             break
         if pick in my_pick_set:
-            choice = _greedy_my_pick(avail, roster, slots)
+            choice = _greedy_my_pick(
+                list(remaining.values()), roster, slots, avoid_ids=avoid_ids,
+            )
             if choice is not None:
                 roster.append(choice)
-                avail.remove(choice)
+                remaining.pop(choice.player_id, None)
                 follows.append(choice.player_id)
         else:
-            choice = _opponent_pick(avail, rng)
-            avail.remove(choice)
+            while (
+                opponent_index < len(opponent_order)
+                and opponent_order[opponent_index].player_id not in remaining
+            ):
+                opponent_index += 1
+            if opponent_index < len(opponent_order):
+                choice = opponent_order[opponent_index]
+                opponent_index += 1
+            else:  # defensive fallback; the sampled board should be exhaustive
+                choice = min(remaining.values(), key=lambda p: p.adp)
+            remaining.pop(choice.player_id, None)
     starters, by_pos, used = _fill_lineup(roster, slots)
     return starters, _depth_bonus(by_pos, used, slots), follows
 
@@ -336,6 +360,9 @@ class PickRecommendation:
     avg_lineup: float
     sims: int
     avg_depth: float = 0.0
+    lineup_stdev: float = 0.0
+    lineup_p25: float = 0.0
+    lineup_p75: float = 0.0
     likely_next: Optional[List[Dict[str, object]]] = None
 
     def to_dict(self) -> Dict[str, object]:
@@ -347,9 +374,25 @@ class PickRecommendation:
             "proj": round(self.proj, 1),
             "avg_lineup": round(self.avg_lineup, 1),
             "avg_depth": round(self.avg_depth, 1),
+            "lineup_stdev": round(self.lineup_stdev, 2),
+            "lineup_p25": round(self.lineup_p25, 1),
+            "lineup_p75": round(self.lineup_p75, 1),
             "likely_next": self.likely_next or [],
             "sims": self.sims,
         }
+
+
+def _percentile(values: Sequence[float], q: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    index = (len(ordered) - 1) * q
+    lower = int(index)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = index - lower
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
 
 
 def _modal_path(
@@ -406,8 +449,10 @@ def recommend_pick(
     n_sims: int = 150,
     top_k: int = 6,
     show_top: int = 5,
-    tau: float = 3.0,
     seed: Optional[int] = None,
+    avoid_ids: Optional[Iterable[str]] = None,
+    priority_candidate_ids: Optional[Iterable[str]] = None,
+    my_future_pick_numbers: Optional[Iterable[int]] = None,
 ) -> Dict[str, object]:
     """Rank the best players to draft *now* via Monte-Carlo rollout.
 
@@ -429,6 +474,8 @@ def recommend_pick(
     """
     slots = slots or default_starting_slots(False)
     drafted = set(drafted_ids)
+    avoided = {str(pid) for pid in (avoid_ids or [])}
+    priority_ids = {str(pid) for pid in (priority_candidate_ids or [])}
     by_id = {p.player_id: p for p in players}
     my_roster = [by_id[i] for i in my_roster_ids if i in by_id]
     available = [p for p in players if p.player_id not in drafted]
@@ -437,13 +484,27 @@ def recommend_pick(
 
     if current_pick is None:
         current_pick = len(drafted) + 1
-    future = my_upcoming_picks(current_pick, teams, rounds, my_slot)
+    if my_future_pick_numbers is None:
+        future = my_upcoming_picks(current_pick, teams, rounds, my_slot)
+    else:
+        future_set = set()
+        for raw_pick in my_future_pick_numbers:
+            try:
+                pick = int(raw_pick)
+            except (TypeError, ValueError):
+                continue
+            if current_pick <= pick <= teams * rounds:
+                future_set.add(pick)
+        future = sorted(future_set)
     if not future:
         # Not my pick / draft over -> nothing to recommend.
         return {"current_pick": current_pick, "candidates": [], "recommendation": None}
 
     available_by_adp = sorted(available, key=lambda p: p.adp)
-    candidates = list(available_by_adp[:top_k])
+    user_available_by_adp = [
+        p for p in available_by_adp if p.player_id not in avoided
+    ]
+    candidates = list(user_available_by_adp[:top_k])
     # Also always evaluate, at each startable position, BOTH the highest-value
     # (VBD) player and the next one due off the board (lowest ADP). The value
     # pick is what a greedy "best player available" drafter would take, so it
@@ -454,7 +515,7 @@ def recommend_pick(
     startable = _startable_positions(slots) or set(_DEDICATED)
     best_value: Dict[str, SimPlayer] = {}
     best_adp: Dict[str, SimPlayer] = {}
-    for p in available_by_adp:  # ascending ADP -> first per pos is the lowest ADP
+    for p in user_available_by_adp:  # ascending ADP -> first per pos is the lowest ADP
         if p.pos not in startable:
             continue
         best_adp.setdefault(p.pos, p)
@@ -465,37 +526,110 @@ def recommend_pick(
         if p.player_id not in seen:
             candidates.append(p)
             seen.add(p.player_id)
+    # A manual adjustment is an explicit request to examine that player. Add
+    # it to the evaluated pool even when the player is far below the ADP/value
+    # shortlist. It may still rank below "take someone else now and target him
+    # later"; priority_candidates in the response makes that distinction clear.
+    for p in user_available_by_adp:
+        if p.player_id in priority_ids and p.player_id not in seen:
+            candidates.append(p)
+            seen.add(p.player_id)
     n_next = min(3, max(0, len(future) - 1))  # how many upcoming slots to surface
 
+    # Common random numbers: every candidate is tested against the exact same
+    # sampled opponent boards, which reduces comparison noise and avoids
+    # re-drawing hundreds of priorities for every candidate.
+    rollout_rng = random.Random(seed)
+    rollout_orders = [
+        _draw_opponent_order(available, rollout_rng)
+        for _ in range(n_sims)
+    ]
+
     recs: List[PickRecommendation] = []
+    samples_by_player: Dict[str, List[float]] = {}
     for cand in candidates:
-        rng = random.Random(seed)  # same opponent stream per candidate = fair compare
         total_lineup = 0.0
         total_depth = 0.0
+        lineup_samples: List[float] = []
         all_follows: List[List[str]] = []
-        for _ in range(n_sims):
+        for opponent_order in rollout_orders:
             starters, depth, follows = _simulate_once(
-                cand, available, my_roster, future, teams, slots, rng)
+                cand, available, my_roster, future, slots, opponent_order,
+                avoid_ids=avoided,
+            )
             total_lineup += starters
             total_depth += depth
+            lineup_samples.append(starters)
             all_follows.append(follows[:n_next])
+        samples_by_player[cand.player_id] = lineup_samples
         likely_next = _modal_path(all_follows, future, by_id, n_next)
         recs.append(PickRecommendation(
             player_id=cand.player_id, name=cand.name, pos=cand.pos,
             adp=cand.adp, proj=cand.proj or 0.0,
             avg_lineup=total_lineup / n_sims,
             avg_depth=total_depth / n_sims,
+            lineup_stdev=(statistics.pstdev(lineup_samples) if len(lineup_samples) > 1 else 0.0),
+            lineup_p25=_percentile(lineup_samples, 0.25),
+            lineup_p75=_percentile(lineup_samples, 0.75),
             likely_next=likely_next,
             sims=n_sims,
         ))
 
     # Starters first (rounded so near-ties go to depth), then depth bonus.
     recs.sort(key=lambda r: (round(r.avg_lineup, 1), r.avg_depth), reverse=True)
+    priority_recs = [
+        r.to_dict() for r in recs if r.player_id in priority_ids
+    ]
+    confidence: Dict[str, object]
+    if len(recs) >= 2:
+        top, second = recs[0], recs[1]
+        differences = [
+            a - b for a, b in zip(
+                samples_by_player[top.player_id],
+                samples_by_player[second.player_id],
+            )
+        ]
+        gap = statistics.mean(differences) if differences else 0.0
+        win_pct = (
+            sum(1.0 if diff > 0 else 0.5 if diff == 0 else 0.0 for diff in differences)
+            / len(differences)
+            if differences else 0.5
+        )
+        diff_stdev = statistics.pstdev(differences) if len(differences) > 1 else 0.0
+        if win_pct >= 0.8 and gap >= 0.5:
+            label = "strong_edge"
+        elif win_pct >= 0.6 and gap > 0:
+            label = "slight_edge"
+        else:
+            label = "near_tie"
+        confidence = {
+            "label": label,
+            "gap": round(gap, 2),
+            "win_pct": round(win_pct, 3),
+            "difference_stdev": round(diff_stdev, 2),
+            "standard_error": round(
+                diff_stdev / (len(differences) ** 0.5), 3,
+            ) if differences else 0.0,
+            "runner_up_player_id": second.player_id,
+            "sims": len(differences),
+        }
+    else:
+        confidence = {
+            "label": "only_option",
+            "gap": None,
+            "win_pct": 1.0,
+            "difference_stdev": 0.0,
+            "standard_error": 0.0,
+            "runner_up_player_id": None,
+            "sims": n_sims,
+        }
     return {
         "current_pick": current_pick,
         "my_upcoming_picks": future,
         "candidates": [r.to_dict() for r in recs[:show_top]],
         "recommendation": recs[0].to_dict() if recs else None,
+        "priority_candidates": priority_recs,
+        "recommendation_confidence": confidence,
     }
 
 
@@ -536,7 +670,10 @@ def _flex_replacement_baseline(rows: Sequence[Dict[str, object]]) -> Optional[fl
     return max(bases) if bases else None
 
 
-def sim_players_from_config_players(config_players: Iterable[Dict[str, object]]) -> List[SimPlayer]:
+def sim_players_from_config_players(
+    config_players: Iterable[Dict[str, object]],
+    value_overrides: Optional[Dict[str, float]] = None,
+) -> List[SimPlayer]:
     """Build ``SimPlayer``s from rankings-config player dicts.
 
     ``adp`` uses real ADP (``adp`` field, from the FantasyFootballCalculator
@@ -552,6 +689,7 @@ def sim_players_from_config_players(config_players: Iterable[Dict[str, object]])
     instead of drafting in pure value order.
     """
     rows = list(config_players)
+    overrides = value_overrides or {}
     flex_baseline = _flex_replacement_baseline(rows)
     out: List[SimPlayer] = []
     for p in rows:
@@ -571,13 +709,21 @@ def sim_players_from_config_players(config_players: Iterable[Dict[str, object]])
         vbd = p.get("vbd")
         fpts_val = p.get("fpts")
         fpts = float(fpts_val) if fpts_val is not None else 0.0
-        proj = float(vbd) if vbd is not None else fpts
+        override = overrides.get(str(pid))
+        proj = float(override) if override is not None else (
+            float(vbd) if vbd is not None else fpts
+        )
         pos = str(p.get("pos") or "").upper()
         # Only a flex "guest" (TE) is judged at the shared RB/WR flex level; the
         # natural flex positions (RB/WR) and QB keep their own VBD so their
         # scarcity value isn't distorted. This de-inflates a 2nd TE dropped into
         # the flex (the reported over-valuation) without hurting RB/WR.
-        if pos in _FLEX_GUEST_POS and fpts_val is not None and flex_baseline is not None:
+        if override is not None:
+            # An uploaded/manual value is explicitly cross-positional, so use
+            # it in both dedicated and flex slots. This makes the user's sheet
+            # authoritative instead of mixing it with the default TE baseline.
+            flex_proj = float(override)
+        elif pos in _FLEX_GUEST_POS and fpts_val is not None and flex_baseline is not None:
             flex_proj: Optional[float] = fpts - flex_baseline
         else:
             flex_proj = None

@@ -15,6 +15,9 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from draftkings_help import form_player_projections_dict, normalize_name_to_sleeper, form_all_projections_and_points_dict
+import draft_adp
+import fantasypros_adp
+import vegas_accuracy
 import pytz
 
 app = func.FunctionApp()
@@ -543,7 +546,113 @@ def form_standard_player_rankings():
 
     standard_league_projections = form_all_projections_and_points_dict()
     upload_to_azure_blob(standard_league_projections, "standard_player_rankings.json")
-    
+
+
+def capture_vegas_history():
+    """Fold this run's Vegas projections + FantasyPros ECR into a per-week,
+    per-player *locked* history blob (``projection_history_{year}.json``).
+
+    This is the accountability record: each scrape we refresh every player's
+    current-week slot with their latest projected fantasy points, but a player
+    who has already played and dropped out of later scrapes keeps their earlier
+    line. That freezing is what lets a Thursday-night starter's projection
+    survive the Sunday/Monday scrapes instead of being wiped out by a naive
+    end-of-week snapshot. See ``vegas_accuracy.merge_week_capture``.
+    """
+    year = get_current_fantasy_year()
+    week = get_current_nfl_week()
+
+    rankings = try_download_blob_json("standard_player_rankings.json") or {}
+    ranking_rows = rankings.get(vegas_accuracy.HALF_PPR_VARIANT) or []
+    if not ranking_rows:
+        logging.info("capture_vegas_history: no half-ppr rankings this run; skipping.")
+        return
+
+    fantasypros_data = try_download_blob_json("fantasypros_data.json") or {}
+    players = try_download_blob_json("players.json") or {}
+    fp_rank_by_pid = vegas_accuracy.fp_overall_rank_by_pid(fantasypros_data, players)
+
+    history = try_download_blob_json(f"projection_history_{year}.json") or {}
+    vegas_accuracy.merge_week_capture(
+        history,
+        week,
+        ranking_rows,
+        fp_rank_by_pid,
+        captured_at=datetime.now(timezone.utc).isoformat(),
+    )
+    upload_to_azure_blob(history, f"projection_history_{year}.json")
+    logging.info(
+        "capture_vegas_history: locked %d players for %s week %s",
+        len(history.get(str(week), {})), year, week,
+    )
+
+
+def build_projection_review(year: int | None = None):
+    """Compile the Vegas-projection accuracy review from accumulated history +
+    realized Sleeper actuals, and write ``projection_review_{year}.json``.
+
+    Meant to run Tuesday once the prior week's results are final: it grades
+    projected fantasy points vs reality, contrasts Vegas positional ranks
+    against FantasyPros ECR, and rolls everything up season-to-date so a single
+    ugly week doesn't hide a season-long edge.
+    """
+    year = year or get_current_fantasy_year()
+    history = try_download_blob_json(f"projection_history_{year}.json") or {}
+    if not history:
+        logging.info("build_projection_review: no projection history for %s.", year)
+        return None
+
+    actuals = try_download_blob_json(f"player_season_scoring_{year}.json") or {}
+    review = vegas_accuracy.compile_review(history, actuals)
+    review["year"] = year
+    review["generated_utc"] = datetime.now(timezone.utc).isoformat()
+    upload_to_azure_blob(review, f"projection_review_{year}.json")
+    logging.info(
+        "build_projection_review: graded weeks %s for %s.",
+        review.get("weeks"), year,
+    )
+    return review
+
+
+def refresh_draft_adp(year: int | None = None):
+    """Build and safely publish format-specific FantasyPros DraftWizard ADP.
+
+    DraftWizard supplies current mock-draft ADP plus observed standard
+    deviation for league size/scoring/1QB-or-2QB. A bad/partial upstream pull
+    never overwrites the last healthy blob.
+    """
+    year = year or get_current_fantasy_year()
+    players = try_download_blob_json("players.json") or {}
+    if not players:
+        logging.info("refresh_draft_adp: players.json is unavailable.")
+        return None
+
+    def fetch_text(url: str):
+        return _http_get(url, timeout=30).text
+
+    candidate = fantasypros_adp.build_fantasypros_adp_blob(
+        str(year), players, fetch_text=fetch_text,
+    )
+    errors = draft_adp.validate_adp_blob(candidate)
+    if errors:
+        logging.error(
+            "refresh_draft_adp: rejected %s update: %s",
+            year, "; ".join(errors[:10]),
+        )
+        return None
+
+    blob_name = f"draft_adp_{year}.json"
+    existing = try_download_blob_json(blob_name)
+    if isinstance(existing, dict) and existing.get("configs"):
+        upload_to_azure_blob(existing, f"draft_adp_{year}_prev.json")
+    upload_to_azure_blob(candidate, blob_name)
+    logging.info(
+        "refresh_draft_adp: published %s (%d configs).",
+        blob_name, len(candidate.get("configs") or {}),
+    )
+    return candidate
+
+
 def download_necessary_fantasy_data(force: bool = False):
 
     now = datetime.now()
@@ -584,6 +693,13 @@ def download_necessary_fantasy_data(force: bool = False):
             logging.info("Exception is " + str(e))
         getProjectionsFromAllVegas()
         form_standard_player_rankings()
+
+        # Lock this run's projections into the per-week accountability history
+        # (freezes each player's last pre-game line). Non-fatal on failure.
+        try:
+            capture_vegas_history()
+        except Exception as e:
+            logging.info("capture_vegas_history failed (continuing): %s", e)
 
         logging.info("Web scraping completed!")
         success = True
@@ -691,6 +807,32 @@ def sleeper_player_update(mytimer: func.TimerRequest) -> None:
     logging.info('Executing sleeper player update')
     get_sleeper_player_data()
     get_sleeper_owned_for_week()
+
+
+@app.function_name(name="weekly_projection_accuracy_review")
+@app.timer_trigger(schedule="0 0 12 * * Tue", arg_name="mytimer")
+def weekly_projection_accuracy_review(mytimer: func.TimerRequest) -> None:
+    """Tuesday: last week's results are final, so refresh Sleeper actuals and
+    recompile the Vegas-projection accuracy review."""
+    logging.info('Executing weekly projection accuracy review')
+    if not is_in_fantasy_season():
+        logging.info("Not in football season. Skipping accuracy review.")
+        return
+    try:
+        get_sleeper_player_data()
+    except Exception as e:
+        logging.info("Could not refresh sleeper actuals before review: %s", e)
+    build_projection_review()
+
+
+@app.function_name(name="daily_draft_adp_refresh")
+@app.timer_trigger(schedule="0 0 10 * * *", arg_name="mytimer")
+def daily_draft_adp_refresh(mytimer: func.TimerRequest) -> None:
+    """Daily in July-September: refresh ADP without touching value sheets."""
+    if not draft_adp.is_draft_season(datetime.now(timezone.utc)):
+        logging.info("Outside draft season. Skipping ADP refresh.")
+        return
+    refresh_draft_adp()
 
 
 # ---------------------------------------------------------------------------
