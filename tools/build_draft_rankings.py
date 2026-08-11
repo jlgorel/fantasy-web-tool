@@ -64,6 +64,15 @@ DEFAULT_YEARS = ("2022", "2023", "2024", "2025")
 CELL_TEAMS = "F2"
 CELL_BUDGET = "F3"
 CELL_QB_STARTERS = "D3"   # 2 == superflex/2QB, 1 == 1QB
+CELL_RB_STARTERS = "D4"
+CELL_WR_STARTERS = "D5"
+CELL_TE_STARTERS = "D6"
+CELL_FLEX_STARTERS = "D7"
+CELL_SECOND_FLEX_STARTERS = "D8"
+CELL_BENCH_SIZE = "F5"
+CELL_FLEX_TYPE = "F8"
+CELL_SECOND_FLEX_TYPE = "F9"
+CELL_PASS_TD = "J2"
 CELL_REC_WR = "N5"
 CELL_REC_RB = "J15"
 CELL_REC_TE = "N15"
@@ -92,13 +101,22 @@ def _read_position_rows(ws) -> List[List[Any]]:
 
 def _build_config(
     wb, resolver: NameResolver, teams: int, ppr: float, superflex: bool,
-    budget: int, max_overall: int,
+    budget: int, max_overall: int, passing_td: int = 4, bench_size: int = 6,
 ) -> Dict[str, Any]:
     """Set LeagueInfo inputs, recalc, and extract one configuration."""
     li = wb.sheets["LeagueInfo"]
     li.range(CELL_TEAMS).value = teams
     li.range(CELL_BUDGET).value = budget
     li.range(CELL_QB_STARTERS).value = 2 if superflex else 1
+    li.range(CELL_RB_STARTERS).value = 2
+    li.range(CELL_WR_STARTERS).value = 2
+    li.range(CELL_TE_STARTERS).value = 1
+    li.range(CELL_FLEX_STARTERS).value = 1
+    li.range(CELL_SECOND_FLEX_STARTERS).value = 0
+    li.range(CELL_BENCH_SIZE).value = bench_size
+    li.range(CELL_FLEX_TYPE).value = "WR/RB/TE"
+    li.range(CELL_SECOND_FLEX_TYPE).value = "WR/TE"
+    li.range(CELL_PASS_TD).value = passing_td
     li.range(CELL_REC_WR).value = ppr
     li.range(CELL_REC_RB).value = ppr
     li.range(CELL_REC_TE).value = ppr
@@ -134,11 +152,15 @@ def build_year(
     budget: int,
     max_overall: int,
     visible: bool,
+    source_file: Optional[Path] = None,
+    source_metadata: Optional[Dict[str, Any]] = None,
+    passing_td: int = 4,
+    bench_size: int = 6,
 ) -> Optional[Dict[str, Any]]:
     """Drive Excel for one workbook across the requested configurations."""
     import xlwings as xw
 
-    src = source_dir / f"{year}Rankings.xlsm"
+    src = source_file or (source_dir / f"{year}Rankings.xlsm")
     if not src.exists():
         print(f"  SKIP {year}: workbook not found at {src}")
         return None
@@ -153,7 +175,8 @@ def build_year(
         wb = app.books.open(str(src), update_links=False)
         for i, cfg in enumerate(configs, start=1):
             built = _build_config(
-                wb, resolver, cfg["teams"], cfg["ppr"], cfg["superflex"], budget, max_overall
+                wb, resolver, cfg["teams"], cfg["ppr"], cfg["superflex"],
+                budget, max_overall, passing_td, bench_size,
             )
             key = built.pop("key")
             unmatched = built.pop("unmatched")
@@ -168,15 +191,24 @@ def build_year(
     finally:
         app.quit()
 
-    return {
+    result = {
         "schema_version": SCHEMA_VERSION,
         "year": str(year),
         "source_file": src.name,
         "budget": budget,
+        "profile": {
+            "passing_td": passing_td,
+            "bench_size": bench_size,
+            "starters": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+            "superflex_mode": "2qb",
+        },
         "generated_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
         "configs": blob_configs,
         "unmatched_names": unmatched_by_key,
     }
+    if source_metadata:
+        result.update(source_metadata)
+    return result
 
 
 def _resolve_configs(args) -> List[Dict[str, Any]]:
@@ -202,9 +234,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--years", nargs="+", default=list(DEFAULT_YEARS))
     ap.add_argument("--source-dir", type=Path, default=DEFAULT_SOURCE_DIR)
+    ap.add_argument("--source-file", type=Path,
+                    help="Use this workbook instead of {year}Rankings.xlsm. Only valid for one year.")
     ap.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     ap.add_argument("--players", type=Path, default=DEFAULT_PLAYERS)
     ap.add_argument("--budget", type=int, default=DEFAULT_AUCTION_BUDGET)
+    ap.add_argument("--passing-td", type=int, choices=(4, 6), default=4)
+    ap.add_argument("--bench-size", type=int, default=6)
     ap.add_argument("--max-overall", type=int, default=300,
                     help="Keep only the top-N players by overall value (0 = all). "
                          "Default 300 covers every realistically-drafted player.")
@@ -218,6 +254,9 @@ def main() -> int:
     if not args.players.exists():
         print(f"FATAL: players.json not found at {args.players}", file=sys.stderr)
         return 2
+    if args.source_file and len(args.years) != 1:
+        print("FATAL: --source-file requires exactly one --years value.", file=sys.stderr)
+        return 2
 
     resolver = _load_resolver(args.players)
     configs = _resolve_configs(args)
@@ -227,7 +266,11 @@ def main() -> int:
     wrote = 0
     for year in args.years:
         print(f"Year {year}:")
-        blob = build_year(year, args.source_dir, resolver, configs, args.budget, args.max_overall, args.visible)
+        blob = build_year(
+            year, args.source_dir, resolver, configs, args.budget,
+            args.max_overall, args.visible, source_file=args.source_file,
+            passing_td=args.passing_td, bench_size=args.bench_size,
+        )
         if blob is None:
             continue
         out = args.out_dir / rankings_blob_name(year)

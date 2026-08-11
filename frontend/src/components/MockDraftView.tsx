@@ -14,6 +14,8 @@ import {
   AccordionIcon,
   AccordionItem,
   AccordionPanel,
+  Alert,
+  AlertIcon,
   Badge,
   Box,
   Button,
@@ -28,6 +30,7 @@ import {
   Tbody,
   Td,
   Text,
+  Textarea,
   Th,
   Thead,
   Tooltip,
@@ -51,7 +54,7 @@ import {
   customValueMap,
   emptyCustomDraftSettings,
   loadCustomDraftSettings,
-  previewCustomValuesCsv,
+  previewElBobertoValues,
   saveCustomDraftSettings,
 } from '../utils/customDraftValues';
 import {
@@ -60,6 +63,12 @@ import {
   SLOT_COLOR,
 } from '../utils/draftRoster';
 import { confidencePresentation } from '../utils/simConfidence';
+import {
+  derivedRounds,
+  normalizedStarterSlots,
+  profileStorageSignature,
+  providerProfileMatches,
+} from '../utils/draftValueProfile';
 
 const YEARS = ['2026', '2025', '2024', '2023', '2022'];
 const TEAM_SIZES = [8, 10, 12, 14];
@@ -79,6 +88,13 @@ const SLOT_KEYS: Array<{ key: string; label: string }> = [
   { key: 'TE', label: 'TE' },
   { key: 'FLEX', label: 'FLEX' },
 ];
+const SLOT_OPTIONS: Record<string, number[]> = {
+  QB: [1, 2],
+  RB: [1, 2, 3],
+  WR: [1, 2, 3],
+  TE: [0, 1, 2, 3],
+  FLEX: [0, 1, 2, 3],
+};
 
 function snakeSlot(pick: number, teams: number): number {
   const rnd = Math.floor((pick - 1) / teams);
@@ -92,7 +108,8 @@ const MockDraftView: React.FC = () => {
   // Config
   const [year, setYear] = useState('2026');
   const [teams, setTeams] = useState(12);
-  const [rounds, setRounds] = useState(15);
+  const [benchSize, setBenchSize] = useState(6);
+  const [passingTd, setPassingTd] = useState(4);
   const [mySlot, setMySlot] = useState(1);
   const [ppr, setPpr] = useState(0.5);
   const [superflex, setSuperflex] = useState(false);
@@ -116,7 +133,8 @@ const MockDraftView: React.FC = () => {
   const [customSettings, setCustomSettings] = useState<CustomDraftSettings>(
     emptyCustomDraftSettings(),
   );
-  const [csvPreview, setCsvPreview] = useState<CustomCsvPreview | null>(null);
+  const [elBobertoPaste, setElBobertoPaste] = useState('');
+  const [elBobertoPreview, setElBobertoPreview] = useState<CustomCsvPreview | null>(null);
   const [manualPlayerId, setManualPlayerId] = useState('');
   const [manualValue, setManualValue] = useState('');
   const [customMessage, setCustomMessage] = useState<string | null>(null);
@@ -125,15 +143,21 @@ const MockDraftView: React.FC = () => {
   const [sim, setSim] = useState<SimResponse | null>(null);
   const [simLoading, setSimLoading] = useState(false);
 
+  const rounds = derivedRounds(starterSlots, superflex, benchSize);
+
   const currentPick = history.length + 1;
   const totalPicks = teams * rounds;
   const onClock = snakeSlot(currentPick, teams);
   const isMyPick = onClock === mySlot;
   const draftOver = currentPick > totalPicks;
 
+  const profileSignature = useMemo(
+    () => profileStorageSignature(starterSlots, superflex, benchSize, passingTd),
+    [starterSlots, superflex, benchSize, passingTd],
+  );
   const storageKey = useMemo(
-    () => customDraftStorageKey(year, teams, ppr, superflex),
-    [year, teams, ppr, superflex],
+    () => customDraftStorageKey(year, teams, ppr, superflex, profileSignature),
+    [year, teams, ppr, superflex, profileSignature],
   );
 
   useEffect(() => {
@@ -141,7 +165,8 @@ const MockDraftView: React.FC = () => {
       ? emptyCustomDraftSettings()
       : loadCustomDraftSettings(window.localStorage, storageKey);
     setCustomSettings(loaded);
-    setCsvPreview(null);
+    setElBobertoPaste('');
+    setElBobertoPreview(null);
     setCustomMessage(null);
     setSim(null);
   }, [storageKey]);
@@ -155,13 +180,25 @@ const MockDraftView: React.FC = () => {
     setSim(null);
   };
 
+  const profileMatches = providerProfileMatches(
+    sources?.values?.profile, starterSlots, benchSize, passingTd,
+  );
+  const useProviderValues = !sources?.values?.provider || profileMatches;
   const effectivePlayers = useMemo(() => (players || []).map((player) => {
     const custom = customSettings.entries[player.player_id];
-    return custom?.value === undefined ? player : { ...player, vbd: custom.value };
-  }), [players, customSettings]);
+    if (custom?.value !== undefined) return { ...player, vbd: custom.value };
+    if (useProviderValues) return player;
+    return { ...player, vbd: null, fpts: null, auction: null, tier: null };
+  }), [players, customSettings, useProviderValues]);
 
   const valueOverrides = useMemo(
     () => customValueMap(customSettings),
+    [customSettings],
+  );
+  const importedOverrideCount = useMemo(
+    () => Object.values(customSettings.entries).filter(
+      (entry) => entry.value !== undefined && entry.source !== 'manual',
+    ).length,
     [customSettings],
   );
   const avoidIds = useMemo(
@@ -176,7 +213,8 @@ const MockDraftView: React.FC = () => {
   );
   const usableValueCount = effectivePlayers.filter((player) => player.vbd != null).length;
   const isAdpOnly = sources?.values?.source === 'custom upload required';
-  const hasUsableValues = isAdpOnly
+  const customProfileRequired = isAdpOnly || !useProviderValues;
+  const hasUsableValues = customProfileRequired
     ? usableValueCount >= MIN_ADP_ONLY_VALUES
     : usableValueCount > 0;
 
@@ -185,6 +223,9 @@ const MockDraftView: React.FC = () => {
     effectivePlayers.forEach((p) => { m[p.player_id] = p; });
     return m;
   }, [effectivePlayers]);
+  const providerById = useMemo(() => Object.fromEntries(
+    (players || []).map((player) => [player.player_id, player]),
+  ), [players]);
 
   const available = useMemo(() => {
     const list = effectivePlayers
@@ -202,7 +243,7 @@ const MockDraftView: React.FC = () => {
     () => buildRosterSlots(
       myRoster,
       byId,
-      { ...starterSlots, ...(superflex ? { SUPER_FLEX: 1 } : {}) },
+      normalizedStarterSlots(starterSlots, superflex),
       rounds,
     ),
     [myRoster, byId, starterSlots, superflex, rounds],
@@ -279,48 +320,61 @@ const MockDraftView: React.FC = () => {
     persistCustomSettings({ ...customSettings, entries: nextEntries });
   };
 
-  const readCustomCsv = async (file?: File) => {
-    if (!file || !players) return;
-    const preview = previewCustomValuesCsv(await file.text(), players);
-    setCsvPreview(preview);
+  const previewElBobertoPaste = () => {
+    if (!players) return;
+    setElBobertoPreview(
+      previewElBobertoValues(elBobertoPaste, players),
+    );
     setCustomMessage(null);
   };
 
-  const applyCsvPreview = () => {
-    if (!csvPreview) return;
+  const applyElBobertoPreview = () => {
+    if (!elBobertoPreview) return;
     const nextEntries = { ...customSettings.entries };
     let applied = 0;
-    csvPreview.matches.forEach((match) => {
+    elBobertoPreview.matches.forEach((match) => {
       if (!match.player_id || match.value === undefined || match.error) return;
       const existing = nextEntries[match.player_id];
-      // A deliberate manual edit wins over a subsequent bulk upload.
       if (existing?.source === 'manual' && existing.value !== undefined) return;
       nextEntries[match.player_id] = {
         ...existing,
         value: match.value,
-        source: 'upload',
+        source: 'elboberto_paste',
       };
       applied += 1;
     });
     persistCustomSettings({ ...customSettings, entries: nextEntries });
-    setCustomMessage(`Applied ${applied} uploaded values.`);
+    setCustomMessage(`Applied ${applied} ElBoberto values for this custom profile.`);
   };
 
   const clearCustomSettings = () => {
     persistCustomSettings(emptyCustomDraftSettings());
-    setCsvPreview(null);
+    setElBobertoPaste('');
+    setElBobertoPreview(null);
     setManualPlayerId('');
     setManualValue('');
     setCustomMessage('Cleared custom values and Avoid selections for this config.');
+  };
+
+  const clearImportedValues = () => {
+    const entries: CustomDraftSettings['entries'] = {};
+    Object.entries(customSettings.entries).forEach(([playerId, entry]) => {
+      if (entry.source === 'manual') {
+        entries[playerId] = entry;
+      } else if (entry.avoid) {
+        entries[playerId] = { avoid: true, source: 'manual' };
+      }
+    });
+    persistCustomSettings({ ...customSettings, entries });
+    setElBobertoPreview(null);
+    setCustomMessage('Removed imported values; provider AvgVBD is active again. Manual edits and Avoid selections were preserved.');
   };
 
   const recommend = async () => {
     if (!players) return;
     setSimLoading(true);
     try {
-      const slots: Record<string, number> = {};
-      Object.entries(starterSlots).forEach(([k, v]) => { if (v > 0) slots[k] = v; });
-      if (superflex) slots.SUPER_FLEX = 1;
+      const slots = normalizedStarterSlots(starterSlots, superflex);
       const resp = await api.postDraftHelpSim({
         year, teams, rounds, my_slot: mySlot, ppr, superflex,
         drafted_ids: Object.keys(drafted),
@@ -329,6 +383,7 @@ const MockDraftView: React.FC = () => {
         current_pick: currentPick,
         n_sims: 60, top_k: 8, seed: 1,
         value_overrides: valueOverrides,
+        use_provider_values: useProviderValues,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityCandidateIds,
       });
@@ -358,8 +413,9 @@ const MockDraftView: React.FC = () => {
                 <b>Monte-Carlo simulation</b> of the rest of the draft (~60 times). Your
                 opponents draft by <b>real ADP</b> with realistic variance, so positions
                 &quot;run&quot; just like a live draft. Each rollout it builds the best{' '}
-                <b>starting lineup</b> you&apos;d finish with (scored by VBD — value over
-                replacement) and then recommends the player that gives you the{' '}
+                <b>starting lineup</b> you&apos;d finish with plus a small, geometrically
+                discounted bench-depth bonus (scored by VBD — value over replacement),
+                then recommends the player that gives you the{' '}
                 <b>best overall team</b>, not just the best player on the board now.
               </Text>
               <Box bg="white" borderWidth="1px" borderRadius="md" p={3}>
@@ -378,7 +434,7 @@ const MockDraftView: React.FC = () => {
                     <Tr><Th>Column</Th><Th>What it means</Th></Tr>
                   </Thead>
                   <Tbody>
-                    <Tr><Td><b>VAL</b></Td><Td>Projected value of your whole starting lineup if you take this player — the number it ranks by. Higher = better team.</Td></Tr>
+                    <Tr><Td><b>VAL</b></Td><Td>Projected value of your full starting lineup plus discounted bench depth if you take this player — the number it ranks by. Higher = better team.</Td></Tr>
                     <Tr><Td><b>VBD</b></Td><Td>This player&apos;s own value over replacement (standalone).</Td></Tr>
                     <Tr><Td><b>Likely next</b></Td><Td>Who you&apos;ll most often still get at each of your upcoming picks.</Td></Tr>
                   </Tbody>
@@ -405,9 +461,10 @@ const MockDraftView: React.FC = () => {
             </Select>
           </Box>
           <Box>
-            <Text fontSize="xs" color="gray.500">Rounds</Text>
-            <Input size="sm" type="number" value={rounds} min={1} max={30} w="80px"
-              onChange={(e) => setRounds(Math.max(1, Math.min(30, Number(e.target.value) || 1)))} />
+            <Text fontSize="xs" color="gray.500">Bench</Text>
+            <Select size="sm" value={benchSize} onChange={(e) => setBenchSize(Number(e.target.value))} w="80px">
+              {[3, 4, 5, 6, 7, 8].map((count) => <option key={count} value={count}>{count}</option>)}
+            </Select>
           </Box>
           <Box>
             <Text fontSize="xs" color="gray.500">Your slot</Text>
@@ -421,6 +478,13 @@ const MockDraftView: React.FC = () => {
             <Text fontSize="xs" color="gray.500">Scoring</Text>
             <Select size="sm" value={ppr} onChange={(e) => setPpr(Number(e.target.value))} w="110px">
               {PPRS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+            </Select>
+          </Box>
+          <Box>
+            <Text fontSize="xs" color="gray.500">Pass TD</Text>
+            <Select size="sm" value={passingTd} onChange={(e) => setPassingTd(Number(e.target.value))} w="85px">
+              <option value={4}>4 pt</option>
+              <option value={6}>6 pt</option>
             </Select>
           </Box>
           <Box alignSelf="flex-end">
@@ -439,21 +503,27 @@ const MockDraftView: React.FC = () => {
           {SLOT_KEYS.map(({ key, label }) => (
             <Box key={key}>
               <Text fontSize="xs" color="gray.500">{label}</Text>
-              <Input
-                size="sm" type="number" w="62px" min={0} max={10}
+              <Select
+                size="sm" w="62px"
                 value={starterSlots[key] ?? 0}
                 onChange={(e) => setStarterSlots((s) => ({
-                  ...s, [key]: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+                  ...s, [key]: Number(e.target.value),
                 }))}
-              />
+              >
+                {SLOT_OPTIONS[key].map((count) => (
+                  <option key={count} value={count}>{count}</option>
+                ))}
+              </Select>
             </Box>
           ))}
           {superflex && <Badge colorScheme="purple" alignSelf="center">+ SUPERFLEX slot</Badge>}
+          <Badge colorScheme="gray" alignSelf="center">{rounds} rounds incl. K/DEF</Badge>
         </HStack>
         {sources && (
           <HStack spacing={2} mt={3} flexWrap="wrap">
             <Badge colorScheme={sources.values?.source === 'custom upload required' ? 'orange' : 'blue'}>
               Values: {sources.values?.source || 'default rankings'}
+              {sources.values?.source_version ? ` v${sources.values.source_version}` : ''}
             </Badge>
             <Badge colorScheme={sources.adp?.source ? 'green' : 'orange'}>
               ADP: {sources.adp?.source === 'fantasypros_draftwizard'
@@ -468,7 +538,45 @@ const MockDraftView: React.FC = () => {
                 refreshed {new Date(sources.adp.generated_at_utc).toLocaleDateString()}
               </Text>
             )}
+            {(sources.values?.retrieved_at_utc || sources.values?.generated_at_utc) && (
+              <Text fontSize="xs" color="gray.500">
+                values refreshed {new Date(
+                  sources.values.retrieved_at_utc || sources.values.generated_at_utc || '',
+                ).toLocaleDateString()}
+              </Text>
+            )}
           </HStack>
+        )}
+        {players && sources?.values?.provider && !useProviderValues && (
+          <Alert status="warning" mt={3} borderRadius="md" alignItems="flex-start">
+            <AlertIcon />
+            <Box flex="1" fontSize="sm">
+              This exact profile is not in the published {sources.values.source} blob. Provider
+              VBD is disabled rather than pretending the default sheet fits. Paste at least
+              {` ${MIN_ADP_ONLY_VALUES} `}finished ElBoberto values configured for these settings
+              ({usableValueCount} loaded), or reset to 1 QB / 2 RB / 2 WR / 1 TE / 1 FLEX,
+              6 bench, and 4-point passing TD.
+            </Box>
+            <Button size="xs" ml={2} onClick={() => {
+              setStarterSlots({ QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 });
+              setBenchSize(6);
+              setPassingTd(4);
+            }}>
+              Published profile
+            </Button>
+          </Alert>
+        )}
+        {sources?.values?.provider && useProviderValues && importedOverrideCount > 0 && (
+          <Alert status="warning" mt={3} borderRadius="md">
+            <AlertIcon />
+            <Box flex="1" fontSize="sm">
+              {importedOverrideCount} saved bulk values currently override {sources.values.source || 'the provider'} AvgVBD.
+              The board shows both columns below so the source values are never hidden.
+            </Box>
+            <Button size="xs" ml={2} onClick={clearImportedValues}>
+              Use provider values
+            </Button>
+          </Alert>
         )}
       </Box>
 
@@ -490,43 +598,60 @@ const MockDraftView: React.FC = () => {
                 <Text fontSize="sm" color="gray.600">
                   Values must be cross-position VBD/VORP numbers—not raw fantasy points.
                   They change your board and recommendations, but ADP still controls when
-                  opponents take players. CSV headers: <b>player_id</b> or <b>name</b>,
-                  optional <b>position</b>, and <b>value</b>/<b>VBD</b>/<b>VORP</b>.
+                  opponents take players. Manual edits always override a pasted sheet.
                 </Text>
 
                 <Box>
-                  <Text fontSize="sm" fontWeight="semibold" mb={1}>Upload CSV</Text>
-                  <Input
+                  <Text fontSize="sm" fontWeight="semibold" mb={1}>
+                    Paste custom ElBoberto values
+                  </Text>
+                  <Text fontSize="xs" color="gray.600" mb={2}>
+                    In the ElBoberto workbook, configure your league, open <b>CheatSheet</b>,
+                    copy the used table (or just <b>OVR / Player / Pos / VBD</b>), and paste
+                    it here. These values are saved only for this exact browser profile.
+                  </Text>
+                  <Textarea
                     size="sm"
-                    type="file"
-                    accept=".csv,text/csv"
-                    p={1}
-                    onChange={(event) => readCustomCsv(event.target.files?.[0])}
+                    value={elBobertoPaste}
+                    onChange={(event) => {
+                      setElBobertoPaste(event.target.value);
+                      setElBobertoPreview(null);
+                    }}
+                    placeholder={'OVR\tPlayer\tPos\tVBD\n1\tJahmyr Gibbs\tRB\t211.01'}
+                    minH="120px"
                   />
-                  {csvPreview && (
+                  <Button
+                    size="xs"
+                    mt={2}
+                    onClick={previewElBobertoPaste}
+                    isDisabled={!elBobertoPaste.trim()}
+                  >
+                    Preview ElBoberto values
+                  </Button>
+                  {elBobertoPreview && (
                     <Box mt={2} borderWidth="1px" borderRadius="md" p={2}>
                       <HStack spacing={2} flexWrap="wrap">
                         <Badge colorScheme="green">
-                          {csvPreview.matches.filter((match) => match.player_id && !match.error).length} matched
+                          {elBobertoPreview.matches.filter((match) => match.player_id && !match.error).length} matched
                         </Badge>
-                        <Badge colorScheme={csvPreview.matches.some((match) => match.error) ? 'orange' : 'gray'}>
-                          {csvPreview.matches.filter((match) => match.error).length} skipped
+                        <Badge colorScheme={elBobertoPreview.matches.some((match) => match.error) ? 'orange' : 'gray'}>
+                          {elBobertoPreview.matches.filter((match) => match.error).length} skipped
                         </Badge>
                         <Button
                           size="xs"
                           colorScheme="blue"
-                          onClick={applyCsvPreview}
-                          isDisabled={!!csvPreview.errors.length || !csvPreview.matches.some((match) => match.player_id && !match.error)}
+                          onClick={applyElBobertoPreview}
+                          isDisabled={!!elBobertoPreview.errors.length || !elBobertoPreview.matches.some((match) => match.player_id && !match.error)}
                         >
                           Apply matched values
                         </Button>
                       </HStack>
-                      {csvPreview.errors.map((message) => (
+                      {elBobertoPreview.errors.map((message) => (
                         <Text key={message} fontSize="xs" color="red.600" mt={1}>{message}</Text>
                       ))}
-                      {csvPreview.matches.filter((match) => match.error).slice(0, 8).map((match) => (
+                      {elBobertoPreview.matches.filter((match) => match.error).slice(0, 8).map((match) => (
                         <Text key={`${match.row}-${match.input_name}`} fontSize="xs" color="orange.700" mt={1}>
-                          Row {match.row}: {match.input_name || match.input_player_id || '(blank)'} — {match.error}
+                          Row {match.row}: {match.input_name || '(blank)'} — {match.error}
                         </Text>
                       ))}
                     </Box>
@@ -568,13 +693,13 @@ const MockDraftView: React.FC = () => {
         </Accordion>
       )}
 
-      {players && isAdpOnly && (
+      {players && customProfileRequired && (
         <Box borderWidth="1px" borderColor="orange.300" bg="orange.50" borderRadius="md" p={3}>
           <Text fontSize="sm" color="orange.800">
-            This is a current ADP-only board; no old projections were carried
-            forward into 2026. Add at least {MIN_ADP_ONLY_VALUES} Value/VORP rows
-            before requesting a recommendation ({usableValueCount} currently loaded).
-            A complete sheet is strongly recommended.
+            Provider values are unavailable for this exact profile. Paste at least{' '}
+            {MIN_ADP_ONLY_VALUES} finished ElBoberto Value/VORP rows before requesting
+            a recommendation ({usableValueCount} currently loaded). A complete sheet
+            is strongly recommended.
           </Text>
         </Box>
       )}
@@ -593,7 +718,7 @@ const MockDraftView: React.FC = () => {
             <HStack>
               <Button size="sm" onClick={undo} isDisabled={history.length === 0}>Undo</Button>
               <Tooltip
-                label="Monte-Carlo: simulates the rest of the draft from real ADP and recommends the player that builds your best starting lineup — not just the highest VBD."
+                label="Monte-Carlo: simulates the rest of the draft from real ADP and recommends the player that builds your best starters plus discounted depth — not just the highest VBD."
                 hasArrow placement="top" openDelay={250} shouldWrapChildren>
                 <Button size="sm" colorScheme="green" onClick={recommend}
                   isDisabled={draftOver || !hasUsableValues} isLoading={simLoading}>
@@ -616,17 +741,18 @@ const MockDraftView: React.FC = () => {
                 </HStack>
               )}
               <Text fontSize="xs" color="gray.600" mb={2}>
-                VAL = your projected <b>starting lineup</b> total value over replacement (VBD),
-                with every required slot filled across all positions — so it balances positions
-                and won&apos;t over-draft a shallow one (e.g. QB in 1-QB); depth only breaks
-                ties. VBD = this player&apos;s value over replacement. Likely next = the player
+                VAL = your projected <b>starting lineup</b> total value over replacement (VBD)
+                plus heavily discounted depth. Starters count fully; the best backup at each
+                startable position counts 10%, the next 1%, and the third 0.1%. That keeps
+                starters dominant while still recognizing an extreme bench bargain. VBD = this
+                player&apos;s value over replacement. Likely next = the player
                 you most often take at each of your next pick slots (P# = pick number). The
                 smaller range below VAL is the middle 50% of simulated lineup outcomes.
               </Text>
               <Box overflowX="auto">
                 <Table size="sm" variant="simple">
                   <Thead>
-                    <Tr><Th>Player</Th><Th>Pos</Th><Th isNumeric>ADP</Th><Th isNumeric>VBD</Th>
+                    <Tr><Th>Player</Th><Th>Pos</Th><Th isNumeric>ADP</Th><Th isNumeric>Used VBD</Th>
                       <Th isNumeric title="Middle 50% rollout range is shown below the mean">VAL</Th><Th>Likely next picks</Th></Tr>
                   </Thead>
                   <Tbody>
@@ -637,9 +763,9 @@ const MockDraftView: React.FC = () => {
                         <Td isNumeric>{Math.round(c.adp)}</Td>
                         <Td isNumeric>{c.proj.toFixed(0)}</Td>
                         <Td isNumeric fontWeight={i === 0 ? 'bold' : 'normal'}>
-                          {c.avg_lineup.toFixed(1)}
-                          {c.lineup_p25 != null && c.lineup_p75 != null && (
-                            <Text fontSize="2xs" color="gray.500">{c.lineup_p25.toFixed(0)}–{c.lineup_p75.toFixed(0)}</Text>
+                          {c.avg_value.toFixed(1)}
+                          {c.value_p25 != null && c.value_p75 != null && (
+                            <Text fontSize="2xs" color="gray.500">{c.value_p25.toFixed(0)}–{c.value_p75.toFixed(0)}</Text>
                           )}
                         </Td>
                         <Td fontSize="xs" color="gray.700">
@@ -667,7 +793,7 @@ const MockDraftView: React.FC = () => {
                     ))
                     .map((target) => (
                       <Text key={target.player_id} fontSize="xs" color="gray.600">
-                        {target.name} ({target.pos}) — VAL {target.avg_lineup.toFixed(1)}.
+                        {target.name} ({target.pos}) — VAL {target.avg_value.toFixed(1)}.
                         The model preferred another player now, often because this target
                         is likely to remain available later.
                       </Text>
@@ -698,13 +824,16 @@ const MockDraftView: React.FC = () => {
                       >
                         ADP{boardSort === 'adp' ? ' ↓' : ''}
                       </Th>
+                      <Th isNumeric title="Finished AvgVBD supplied by the selected provider">
+                        Source VBD
+                      </Th>
                       <Th
                         isNumeric cursor="pointer" userSelect="none"
                         color={boardSort === 'vbd' ? 'blue.600' : undefined}
                         onClick={() => setBoardSort('vbd')}
                         title="Value over replacement — sort to see the best value still available"
                       >
-                        VBD{boardSort === 'vbd' ? ' ↓' : ''}
+                        Used VBD{boardSort === 'vbd' ? ' ↓' : ''}
                       </Th>
                       <Th>Player</Th><Th>Pos</Th><Th>Tier</Th>
                       <Th isNumeric>Proj</Th><Th isNumeric>$</Th><Th></Th>
@@ -713,9 +842,11 @@ const MockDraftView: React.FC = () => {
                   <Tbody>
                     {available.map((p) => {
                       const custom = customSettings.entries[p.player_id];
+                      const provider = providerById[p.player_id];
                       return (
                       <Tr key={p.player_id} bg={custom?.avoid ? 'red.50' : undefined}>
                         <Td isNumeric>{p.adp != null ? Math.round(p.adp) : '—'}</Td>
+                        <Td isNumeric>{provider?.vbd != null ? Math.round(provider.vbd) : '—'}</Td>
                         <Td isNumeric color={custom?.value !== undefined ? 'blue.600' : undefined} fontWeight={custom?.value !== undefined ? 'bold' : undefined}>
                           {p.vbd != null ? Math.round(p.vbd) : ''}
                         </Td>

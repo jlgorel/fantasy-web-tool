@@ -148,8 +148,8 @@ def lineup_value(roster: Sequence[SimPlayer], slots: Dict[str, int]) -> float:
 # How much a non-starter (bench) player is worth relative to a starter, and how
 # many bench bodies per position we bother valuing. Depth is strictly secondary:
 # the best backup is worth ``DEPTH_WEIGHT`` of its projection, the next far less.
-DEPTH_WEIGHT = 0.2
-DEPTH_SPOTS = 2
+DEPTH_WEIGHT = 0.1
+DEPTH_SPOTS = 3
 
 
 def _startable_positions(slots: Dict[str, int]) -> set:
@@ -357,9 +357,13 @@ class PickRecommendation:
     pos: str
     adp: float
     proj: float
+    avg_value: float
     avg_lineup: float
     sims: int
     avg_depth: float = 0.0
+    value_stdev: float = 0.0
+    value_p25: float = 0.0
+    value_p75: float = 0.0
     lineup_stdev: float = 0.0
     lineup_p25: float = 0.0
     lineup_p75: float = 0.0
@@ -372,8 +376,12 @@ class PickRecommendation:
             "pos": self.pos,
             "adp": self.adp,
             "proj": round(self.proj, 1),
+            "avg_value": round(self.avg_value, 1),
             "avg_lineup": round(self.avg_lineup, 1),
             "avg_depth": round(self.avg_depth, 1),
+            "value_stdev": round(self.value_stdev, 2),
+            "value_p25": round(self.value_p25, 1),
+            "value_p75": round(self.value_p75, 1),
             "lineup_stdev": round(self.lineup_stdev, 2),
             "lineup_p25": round(self.lineup_p25, 1),
             "lineup_p75": round(self.lineup_p75, 1),
@@ -457,15 +465,18 @@ def recommend_pick(
     """Rank the best players to draft *now* via Monte-Carlo rollout.
 
     Returns ``{current_pick, candidates: [PickRecommendation...],
-    recommendation: <best>}`` where each candidate's ``avg_lineup`` is the mean
-    projected **starting-lineup** value across ``n_sims`` rollouts in which you
+    recommendation: <best>}`` where each candidate's ``avg_value`` is the mean
+    projected **starting-lineup plus discounted depth** value across ``n_sims``
+    rollouts in which you
     take that player now and draft greedily thereafter while opponents draft by
     ADP. The candidate pool is the top ``top_k`` available by ADP plus the best
     available player at each startable position, so a needed position is always
     evaluated even if it has slid well down the board; only the top ``show_top``
     by value are returned, so a positional long-shot is shown only when scarcity
-    actually lifts it into the best picks. Candidates are ranked by
-    starting lineup first, then depth as a tiebreaker. Each candidate also
+    actually lifts it into the best picks. Starters count at full provider
+    value; bench depth uses geometric 10%/1%/0.1% weights, so an ordinary bench
+    player cannot displace a starter upgrade but an extreme value can beat a
+    tiny starter edge. Each candidate also
     carries ``likely_next`` -- for each of your
     next few pick *slots* (pick 16, 17, ...), the single player you most often
     end up taking *at that slot* (with the fraction of sims). This is per-slot
@@ -551,6 +562,7 @@ def recommend_pick(
         total_lineup = 0.0
         total_depth = 0.0
         lineup_samples: List[float] = []
+        value_samples: List[float] = []
         all_follows: List[List[str]] = []
         for opponent_order in rollout_orders:
             starters, depth, follows = _simulate_once(
@@ -560,14 +572,19 @@ def recommend_pick(
             total_lineup += starters
             total_depth += depth
             lineup_samples.append(starters)
+            value_samples.append(starters + depth)
             all_follows.append(follows[:n_next])
-        samples_by_player[cand.player_id] = lineup_samples
+        samples_by_player[cand.player_id] = value_samples
         likely_next = _modal_path(all_follows, future, by_id, n_next)
         recs.append(PickRecommendation(
             player_id=cand.player_id, name=cand.name, pos=cand.pos,
             adp=cand.adp, proj=cand.proj or 0.0,
+            avg_value=statistics.mean(value_samples),
             avg_lineup=total_lineup / n_sims,
             avg_depth=total_depth / n_sims,
+            value_stdev=(statistics.pstdev(value_samples) if len(value_samples) > 1 else 0.0),
+            value_p25=_percentile(value_samples, 0.25),
+            value_p75=_percentile(value_samples, 0.75),
             lineup_stdev=(statistics.pstdev(lineup_samples) if len(lineup_samples) > 1 else 0.0),
             lineup_p25=_percentile(lineup_samples, 0.25),
             lineup_p75=_percentile(lineup_samples, 0.75),
@@ -575,8 +592,10 @@ def recommend_pick(
             sims=n_sims,
         ))
 
-    # Starters first (rounded so near-ties go to depth), then depth bonus.
-    recs.sort(key=lambda r: (round(r.avg_lineup, 1), r.avg_depth), reverse=True)
+    # Headline VAL counts starters fully and already-discounted depth slightly.
+    # A normal starter gain dwarfs a 10% backup contribution; only an extreme
+    # bench bargain can overcome a genuinely tiny starter edge.
+    recs.sort(key=lambda r: r.avg_value, reverse=True)
     priority_recs = [
         r.to_dict() for r in recs if r.player_id in priority_ids
     ]

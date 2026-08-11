@@ -53,6 +53,9 @@ def test_normalize_applies_aliases():
     assert normalize_player_name("Gabriel Davis") == "gabe davis"
     assert normalize_player_name("Mitch Trubisky") == "mitchell trubisky"
     assert normalize_player_name("Chigoziem Okonkwo") == "chig okonkwo"
+    assert normalize_player_name("Bam Knight") == "zonovan knight"
+    assert normalize_player_name("Hollywood Brown") == "marquise brown"
+    assert normalize_player_name("Kenny Gainwell") == "kenneth gainwell"
 
 
 def test_normalize_handles_none_and_empty():
@@ -261,7 +264,7 @@ def test_repository_empty_returns_none():
 # ---------------------------------------------------------------------------
 # Generated fixture integrity (guards the ingestion output shape)
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("year", ["2022", "2023", "2024", "2025"])
+@pytest.mark.parametrize("year", ["2022", "2023", "2024", "2025", "2026"])
 def test_generated_fixture_is_wellformed(year):
     path = FIXTURE_BLOBS / rankings_blob_name(year)
     if not path.exists():
@@ -280,3 +283,17 @@ def test_generated_fixture_is_wellformed(year):
     assert top.vbd == max(p.vbd for p in cfg.players if p.vbd is not None)
     # Auction values present for premium players.
     assert any(p.auction for p in cfg.players[:20])
+    if year == "2026":
+        assert blob.get("provider") == "elboberto"
+        assert blob.get("source_version")
+        assert blob.get("unmatched_names") == {}
+        one_qb = repo.get_config(12, 0.5, False, fallback=False)
+        assert one_qb is not None
+        by_name = {player.name: player for player in one_qb.players}
+        # These are the workbook's AvgVBD cells (column Z), not an inverted
+        # overall-rank sequence. The large gaps are intentional and important
+        # to the recommender's cross-position utility scale.
+        assert by_name["Jahmyr Gibbs"].vbd == pytest.approx(211.01)
+        assert by_name["Bijan Robinson"].vbd == pytest.approx(206.53)
+        assert by_name["Christian McCaffrey"].vbd == pytest.approx(169.73)
+        assert by_name["Derrick Henry"].vbd == pytest.approx(138.38)

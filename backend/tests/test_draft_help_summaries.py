@@ -6,6 +6,7 @@ aggregation logic against in-memory fakes (no network / no Excel).
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -320,6 +321,25 @@ def test_missing_adp_blob_is_not_negative_cached(monkeypatch):
     assert len(calls) == 2
 
 
+def test_partial_cached_adp_config_is_reloaded(monkeypatch):
+    year = "2097"
+    key = config_key(12, 0.5, False)
+    summaries._ADP_CACHE[year] = (
+        time.monotonic(),
+        {"source": "partial", "configs": {key: {"players": []}}},
+    )
+    healthy = {
+        "source": "fantasypros_draftwizard",
+        "configs": {key: {"players": {"1": {"adp": 7.0}}}},
+    }
+    monkeypatch.setattr(summaries, "load_blob", lambda _name: healthy)
+
+    assert summaries._adp_for_config(year, 12, 0.5, False) == {
+        "1": {"adp": 7.0},
+    }
+    assert summaries._ADP_CACHE[year][1]["source"] == "fantasypros_draftwizard"
+
+
 def test_missing_rankings_blob_is_not_negative_cached(monkeypatch):
     year = "2098"
     summaries._REPO_CACHE.pop(year, None)
@@ -418,6 +438,42 @@ def test_route_rejects_adp_only_board_without_enough_values(client, monkeypatch)
     })
     assert resp.status_code == 400
     assert "at least 50" in resp.get_json()["detail"]
+
+
+def test_route_custom_profile_ignores_provider_values(client, monkeypatch):
+    rows = [
+        {
+            "player_id": str(i), "name": f"Player {i}",
+            "pos": "RB", "adp": float(i), "adp_stdev": 2.0,
+            "vbd": 1000.0 - i, "fpts": 1200.0 - i,
+        }
+        for i in range(1, 61)
+    ]
+    monkeypatch.setattr(summaries, "rankings_config_players", lambda *a, **k: rows)
+    captured = {}
+
+    def fake_recommend(players, **kwargs):
+        captured.update({player.player_id: player.proj for player in players})
+        return {"current_pick": 1, "candidates": [], "recommendation": None}
+
+    monkeypatch.setattr(routes.draft_help_sim, "recommend_pick", fake_recommend)
+    base = {
+        "year": "2026", "teams": 12, "rounds": 15, "my_slot": 1,
+        "ppr": 0.5, "superflex": False, "use_provider_values": False,
+        "drafted_ids": [], "my_roster_ids": [], "current_pick": 1,
+        "n_sims": 10, "top_k": 4, "seed": 321987,
+    }
+    base["value_overrides"] = {str(i): 100 - i for i in range(1, 50)}
+    rejected = client.post("/draft-help/sim", json=base)
+    assert rejected.status_code == 400
+    assert "does not match the published provider sheet" in rejected.get_json()["detail"]
+
+    base["value_overrides"]["50"] = 50
+    accepted = client.post("/draft-help/sim", json=base)
+    assert accepted.status_code == 200
+    assert captured["1"] == pytest.approx(99)
+    assert captured["50"] == pytest.approx(50)
+    assert captured["60"] == 0  # provider VBD/fpts were deliberately stripped
 
 
 def test_route_sim_exact_state_cache_and_invalidation(client, monkeypatch):

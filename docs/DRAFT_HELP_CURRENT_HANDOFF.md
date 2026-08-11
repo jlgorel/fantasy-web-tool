@@ -2,8 +2,10 @@
 
 > **Created:** 2026-08-10  
 > **Current branch:** `dev/jgorel/addinbacktestingandproof`  
-> **Status:** Phases 1, 2, A, B, and C are implemented in the working tree and
-> validated. The working tree is still heavily uncommitted.  
+> **Status:** Phases 1, 2, A, B, and C are implemented. The first current-year
+> external value source (ElBoberto) is now generated and published, with an
+> exact-profile ElBoberto CheatSheet paste workflow. The working tree
+> has new uncommitted source-ingestion/UI work.
 > **Use this document as the authoritative starting point for the next thread.**
 > `docs/DRAFT_HELP_HANDOFF.md` describes an older state and contains obsolete
 > phase goals, test counts, source information, algorithm details, and proof
@@ -41,16 +43,18 @@ That means:
   pipeline. It is an older scaffold and is not the product direction.
 - Matching names to Sleeper IDs, selecting the provider's published league
   configuration, validating data, and normalizing file shape are allowed.
-- Browser CSV uploads and manual value adjustments remain supported overrides.
+- Browser ElBoberto CheatSheet paste and manual value adjustments remain
+  supported overrides for exact custom profiles.
 - If no valid current value source exists, show an ADP-only board but refuse to
   produce recommendations until at least 50 external/user values are supplied.
 - Prefer a source that also publishes a finished flex-aware value or companion
   field if available. Never invent a replacement baseline to fill a source gap
   without an explicit product decision.
 
-The likely source family is a Reddit-trusted draft sheet/product such as
-BeerSheets/Football Absurdity, ElBoberto, CSG, or a similar active source. No
-provider has been selected yet.
+ElBoberto is the provisional default 2026 provider. DraftSheets remains the
+preferred comparison/cloud candidate. Football Absurdity was removed from the
+product because its current value curve assigns zero to too many relevant
+players.
 
 ---
 
@@ -58,8 +62,8 @@ provider has been selected yet.
 
 The final validation run after Phase C cleanup reported:
 
-- **Backend:** 510 tests passed.
-- **Frontend:** 9 tests passed.
+- **Backend:** 518 tests passed.
+- **Frontend:** 13 tests passed.
 - **TypeScript:** `npx tsc --noEmit -p tsconfig.json` passed.
 - **Production frontend build:** passed.
 - **Whitespace/patch integrity:** `git diff --check` passed.
@@ -130,11 +134,11 @@ simulated draft. The full deterministic grid is:
 
 Latest aggregate results from `tools/draft_proof_output/summary.json`:
 
-- MC lineup points: 1643.4 per team.
-- Greedy-VBD lineup points: 1627.4.
-- Pure-ADP lineup points: 1479.6.
-- **MC vs greedy VBD: +16.0 points/team, 64.9% wins, 95% CI ±2.8.**
-- **MC vs pure ADP: +163.8 points/team, 98.8% wins, 95% CI ±7.0.**
+- MC lineup points: 1643.5 per team.
+- Greedy-VBD lineup points: 1627.7.
+- Pure-ADP lineup points: 1479.0.
+- **MC vs greedy VBD: +15.9 points/team, 64.1% wins, 95% CI ±2.8.**
+- **MC vs pure ADP: +164.5 points/team, 98.4% wins, 95% CI ±6.9.**
 
 The claim is deliberately limited:
 
@@ -248,7 +252,34 @@ Current values:
 
 - Historical ranking fixtures exist for 2022–2025 and came from external
   BeerSheets/ElBoberto-style workbooks.
-- There is no selected/default external 2026 value source yet.
+- ElBoberto is the selected provisional default external 2026 value source.
+- Version 0.4 of the public 2026 workbook was discovered from the creator's
+  Reddit post, downloaded from Dropbox, recalculated in desktop Excel for all
+  24 supported configurations, conservatively matched to the production
+  Sleeper player map, validated at 300 players/config with zero unmatched
+  names, and published to Azure as `draft_rankings_2026.json`.
+- `tools/refresh_elboberto_values.py` performs that complete workflow in one
+  command. `--upload` validates the complete candidate, snapshots an existing
+  healthy blob to `draft_rankings_2026_prev.json`, then publishes. It can read
+  the Azure connection string from the environment or the ignored local Azure
+  settings file without logging the credential.
+- The generator still uses the provider's finished `AvgVBD`; it does not
+  recreate or alter ElBoberto's VBD methodology. The current production profile
+  is 4-point passing TD, six bench spots, 1 QB/2 RB/2 WR/1 TE/1 FLEX, with the
+  existing 1QB-or-2QB configuration dimension.
+- This refresh is automated as a local one-command workflow but still requires
+  Windows desktop Excel/`xlwings`. It cannot yet run inside Azure Functions.
+- Representative 12-team half-PPR source cells are pinned by regression:
+  Jahmyr Gibbs 211.01, Bijan Robinson 206.53, Christian McCaffrey 169.73,
+  and Derrick Henry 138.38. These are ElBoberto `AvgVBD` values, not an
+  inverted rank sequence.
+- The board displays independent `ADP`, provider `Source VBD`, and effective
+  `Used VBD` columns. Saved pasted/provider imports can no longer silently hide
+  ElBoberto: a warning reports the override count and `Use provider values`
+  removes bulk imports while preserving manual edits and Avoid selections.
+- ADP cache loading rejects empty/partial cached blobs and reloads once when the
+  requested configuration is missing, preventing a newly available healthy ADP
+  blob from leaving source metadata and player ADPs blank for five minutes.
 - If only the current ADP blob exists, `rankings_config_players()` returns an
   ADP-only player pool with `vbd=None` and `fpts=None`; it invents nothing.
 - `POST /draft-help/sim` rejects an ADP-only board unless at least 50 valid
@@ -256,19 +287,32 @@ Current values:
 
 Browser-local custom value support:
 
-- CSV headers accept `player_id`/`sleeper_id`/`id`, or exact player name plus
-  optional position, and `value`/`vbd`/`vorp`/`val`.
-- Matching is conservative: Sleeper ID first, then normalized exact name; an
-  ambiguous name requires position or ID.
-- Invalid, duplicate, ambiguous, and unmatched rows are surfaced rather than
-  silently guessed.
-- Manual per-player values override uploaded values.
+- The visible bulk workflow accepts the real ElBoberto CheatSheet clipboard
+  layout. It locates the contiguous `OVR / Player / Pos / VBD` block whether the
+  user copies only that block or the whole used sheet.
+- Matching is conservative by normalized exact name plus position. Invalid,
+  duplicate, ambiguous, and unmatched rows are surfaced rather than guessed.
+- Manual per-player values override pasted values.
+- Football Absurdity and the generic file-upload control were removed from the
+  UI. The current Football Absurdity sample matched 168 names but assigned zero
+  to 98 players, collapsing too much of the utility curve for this algorithm.
+- Browser storage uses a v2 key containing the exact starters, bench size, and
+  passing-TD setting so values cannot leak across materially different leagues.
+- Custom-room dropdowns cover QB 1–2, RB 1–3, WR 1–3, TE 0–3, FLEX 0–3, bench
+  3–8, 4/6-point passing TD, 8/10/12/14 teams, three PPR settings, and optional
+  superflex. Only the published profile uses centralized provider VBD; every
+  mismatch disables provider VBD and requires at least 50 pasted/manual values.
 - `Avoid` excludes a player from the user's candidate/pick policy.
 - Manually valued players are force-evaluated as priority candidates even when
   outside the normal shortlist.
 - Settings persist only in browser `localStorage`, keyed by
   season/team-count/PPR/1QB-or-superflex. They are not synced across browsers or
   devices.
+- The shared player combobox renders its result list in a fixed-position portal
+  with its own scroll area, so accordion and board overflow containers no longer
+  clip all but the first result.
+- Local backend settings load with values redacted; storage keys and other
+  credentials must never be printed to logs or handoffs.
 
 Useful files:
 
@@ -276,8 +320,12 @@ Useful files:
 - `azure-functions/draft_adp.py`
 - `azure-functions/function_app.py`
 - `tools/build_draft_adp.py`
+- `tools/build_draft_rankings.py`
+- `tools/refresh_elboberto_values.py`
+- `azure-functions/draft_values.py`
 - `backend/app/services/draft_help/summaries.py`
 - `frontend/src/utils/customDraftValues.ts`
+- `backend/tests/test_draft_values_pipeline.py`
 - `backend/tests/test_fantasypros_adp_pipeline.py`
 - `backend/tests/test_draft_adp_pipeline.py`
 - `frontend/src/utils/customDraftValues.test.ts`
@@ -365,8 +413,11 @@ Important model semantics:
 - `SimPlayer.proj` is the externally supplied cross-position Value/VORP currency,
   not raw fantasy points.
 - ADP and ADP standard deviation control opponent availability/timing.
-- The user's simulated future picks maximize starting-lineup value first and use
-  a small discounted depth bonus only as a tiebreaker/secondary objective.
+- The user's simulated future picks maximize starter value plus geometrically
+  discounted depth. Starters count 100%; the best backup at each startable
+  position counts 10%, the second 1%, and the third 0.1%. An ordinary bench
+  player cannot outweigh a starter upgrade, while an extreme value can beat a
+  genuinely tiny starter edge.
 - Candidate pool includes top ADP players, best-value and next-due players at
   each startable position, plus manually adjusted priority candidates.
 - `Avoid` affects the user's picks but not opponents.
@@ -387,7 +438,9 @@ Coherent opponent boards:
 
 Uncertainty/confidence output:
 
-- Per candidate: mean lineup value, standard deviation, P25, and P75.
+- Per candidate: mean total VAL (starters plus discounted depth), standard
+  deviation, P25, and P75. Starter-only and depth components remain available
+  separately for audit.
 - Top-vs-runner-up paired differences use the shared boards.
 - Response labels: `strong_edge`, `slight_edge`, `near_tie`, or `only_option`.
 - Response also includes paired gap, win percentage, difference standard
@@ -400,7 +453,7 @@ Exact-state cache:
 - `POST /draft-help/sim` hashes the complete semantic state: year/configuration,
   slots, current/future picks, drafted IDs, roster IDs, values, Avoid/priority
   preferences, seed, `n_sims`, `top_k`, and a ranking/ADP revision fingerprint.
-- Redis/fakeredis key prefix: `draft_help_sim_v3_`.
+- Redis/fakeredis key prefix: `draft_help_sim_v4_`.
 - TTL: five minutes.
 - Cache failures degrade safely to normal simulation.
 - Responses expose `cache_hit` for the UI.
@@ -475,6 +528,8 @@ Relevant blob names:
 
 - `draft_rankings_{year}.json` — finished external values and optional companion
   fields, by league configuration.
+- `draft_rankings_{year}_prev.json` — prior healthy external-value snapshot when
+  a published rankings blob already exists.
 - `draft_adp_{year}.json` — independent ADP/timing data.
 - `draft_adp_{year}_prev.json` — prior healthy ADP snapshot.
 - `players.json` — canonical Sleeper player identity map.
@@ -576,9 +631,22 @@ No commit was created by the assistant.
 
 ## 6. Known limitations and deliberate non-goals
 
-- **No default 2026 values yet.** This is the next blocking product task.
-- The next source must provide finished cross-position values; rankings-only or
-  projection-only sources are insufficient as the default.
+- **ElBoberto 2026 values are live**, but the refresh currently depends on local
+  desktop Excel and is not yet an unattended Azure schedule.
+- DraftSheets remains the strongest cloud-oriented comparison candidate. Its
+  public Google XLSX export and finished cross-position `Value` field are
+  verified, but changing settings and recalculating formulas without a writable
+  Google copy or desktop spreadsheet engine is not solved.
+- Football Absurdity is no longer exposed in the product. Do not restore it or
+  make production depend on Playwright scraping of its zero-heavy generator.
+- Side-by-side source comparison and explicit simulation source selection are
+  not implemented yet; the current backend still exposes one canonical value
+  blob per year.
+- The current published profile is 4-point passing TD. A 6-point passing-TD
+  selector requires an exact-profile schema/cache/UI migration rather than
+  overloading the existing 24 configuration keys.
+- Any additional default source must provide finished cross-position values;
+  rankings-only or projection-only sources are insufficient.
 - Automated retrieval may be blocked by licensing, redistribution terms,
   authentication, unstable Google Sheets URLs, anti-bot measures, or a provider
   becoming inactive. Research these before coding around a source.
@@ -602,15 +670,27 @@ No commit was created by the assistant.
 
 ---
 
-## 7. Next phase — automated external finished values
+## 7. Next phase — operationalize and compare external finished values
 
-This is the highest-priority remaining work.
+The first source is now published. The highest-priority remaining work is to
+remove the desktop-only operational dependency and implement explicit
+multi-source comparison without blending values.
 
-### Step 1 — research and select a source before implementation
+### Step 1 — completed source selection/proof
 
-Start with active 2026 Reddit-trusted sources such as BeerSheets/Football
-Absurdity, ElBoberto, CSG, or comparable community sheets. The user may provide a
-specific Reddit post, creator, sheet, or export link; if not, perform the survey.
+Current source roles:
+
+1. ElBoberto — provisional default; current 2026 blob published.
+2. DraftSheets — comparison/cloud-fallback candidate; public export verified,
+   unattended setting recalculation still unresolved.
+3. Custom ElBoberto — browser-local exact-profile CheatSheet paste source.
+
+Do not recreate these providers' man-games/VOR/VBD methodology locally merely
+because cloud spreadsheet recalculation is inconvenient. Revisit an internal
+implementation only after the external options are exhausted and the user makes
+another explicit methodology decision.
+
+The following criteria remain required for any additional source:
 
 For each candidate, verify:
 
@@ -635,7 +715,7 @@ For each candidate, verify:
 Deliver the source survey and recommendation to the user before writing a
 provider-specific scraper if the choice is not obvious.
 
-### Step 2 — define a provider adapter and canonical value blob
+### Step 2 — provider registry and exact-profile blobs
 
 The adapter should output finished source values without changing their
 meaning. The canonical blob should include, at minimum:
@@ -653,9 +733,11 @@ meaning. The canonical blob should include, at minimum:
 - Match counts, unmatched rows, ambiguous rows, and total source rows.
 
 Keep ADP in `draft_adp_{year}.json`; do not merge timing and value provenance
-into one opaque source.
+into one opaque source. Move toward independently versioned provider artifacts
+and exact profile matching so 4-point/6-point passing TD and future source
+selection cannot silently reuse a nearby board.
 
-### Step 3 — guarded scheduled refresh
+### Step 3 — guarded scheduled/cloud refresh
 
 Follow the current ADP safety pattern:
 
@@ -672,15 +754,21 @@ Follow the current ADP safety pattern:
 9. Refresh daily during draft season if the provider actually updates daily;
    otherwise match the provider's publication cadence.
 
-The scheduled ingestion belongs in Azure Functions. Pure parsing/validation
-should remain independently testable without Azure or network access.
+The target scheduled ingestion belongs in Azure Functions or another explicit
+managed spreadsheet runtime. Pure parsing/validation remains independently
+testable without Azure or network access. Until a headless recalculation path is
+proven equivalent to Excel, the guarded local ElBoberto publisher is the
+authoritative refresh mechanism.
 
 ### Step 4 — backend/frontend integration
 
 - Make `rankings_config_players()` use the new external current-year values and
   existing independent ADP.
 - Display provider attribution, freshness, configuration, and coverage.
-- Preserve CSV/manual/Avoid behavior as overrides, not replacements for source
+- Add side-by-side raw provider value plus within-source overall rank, with one
+  explicitly selected source supplying the simulation currency. Do not compare
+  unlike raw scales as if they were interchangeable.
+- Preserve ElBoberto-paste/manual/Avoid behavior as overrides, not replacements for source
   provenance.
 - Keep the ADP-only safety gate when no healthy value blob exists.
 - Ensure source changes invalidate the exact-state recommendation cache via its
@@ -714,19 +802,20 @@ Only after the daily value source is stable:
 Use the following in the next thread:
 
 > Read `docs/DRAFT_HELP_CURRENT_HANDOFF.md` completely before making changes.
-> The current priority is selecting and automating a trusted external provider's
-> finished cross-position Value/VORP for the 2026 Draft Room. Do not calculate
-> our own VBD/VORP from FantasyPros, Vegas, rankings, or projections. Keep
-> FantasyPros DraftWizard as the independent ADP source. First research active
-> 2026 Reddit-trusted candidates (BeerSheets/Football Absurdity, ElBoberto, CSG,
-> or similar), verify configuration coverage, stable export, update cadence, and
-> automated-use/redistribution terms, then recommend a source before building a
-> guarded Azure ingestion adapter. Preserve browser uploads/manual values/Avoid,
-> the ADP-only safety gate, and the completed Phase C Monte Carlo behavior. The
-> validated baseline is 510 backend tests, 9 frontend tests, clean TypeScript,
-> and a successful production build. The working tree is heavily uncommitted on
-> `dev/jgorel/addinbacktestingandproof`, so inspect the diff before editing or
-> committing.
+> ElBoberto v0.4 is the provisional default 2026 finished-value source and is
+> live in `draft_rankings_2026.json`. The refresh tool with `--upload` discovers
+> the current public workbook, uses desktop Excel to build
+> and validate all 24 configurations, snapshots the prior healthy blob, and
+> publishes it. The remaining blocker is unattended cloud recalculation;
+> DraftSheets is the main comparison candidate, while unsupported profiles use
+> a browser-local ElBoberto CheatSheet paste workflow. Do not recreate or blend
+> provider VBD/VORP from
+> projections, man-games, ECR, Vegas, or ADP unless the user explicitly reverses
+> that decision. Keep FantasyPros DraftWizard as independent ADP, preserve
+> manual/Avoid overrides and Phase C semantics, and design exact profiles before
+> adding centralized 6-point passing TD profiles or source selection. The
+> validated baseline is 518 backend tests, 13 frontend tests, clean TypeScript,
+> a successful production build, and a regenerated 960-draft proof.
 
 ---
 
@@ -751,6 +840,9 @@ Use the following in the next thread:
 - `azure-functions/draft_adp.py`
 - `azure-functions/function_app.py`
 - `tools/build_draft_adp.py`
+- `tools/build_draft_rankings.py`
+- `tools/refresh_elboberto_values.py`
+- `azure-functions/draft_values.py`
 - `frontend/src/utils/customDraftValues.ts`
 
 ### Proof/accountability
@@ -771,4 +863,5 @@ Use the following in the next thread:
 - `backend/tests/test_draft_proof_harness.py`
 - `backend/tests/test_vegas_accuracy.py`
 - `frontend/src/components/LiveDraftView.test.tsx`
+- `frontend/src/components/PlayerCombobox.test.tsx`
 - `frontend/src/utils/customDraftValues.test.ts`

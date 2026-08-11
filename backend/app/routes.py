@@ -430,6 +430,7 @@ def draft_help_sim_route():
         my_slot = int(body.get('my_slot', 1))
         ppr = float(body.get('ppr', 0.5))
         superflex = bool(body.get('superflex', False))
+        use_provider_values = body.get('use_provider_values', True) is not False
         value_overrides = _parse_value_overrides(body.get('value_overrides'))
         avoid_ids = _parse_avoid_ids(body.get('avoid_ids'))
         priority_candidate_ids = _parse_avoid_ids(
@@ -443,20 +444,35 @@ def draft_help_sim_route():
         config_players = draft_help_summaries.rankings_config_players(
             year, teams, ppr, superflex,
         )
-        adp_only = bool(config_players) and all(
+        simulation_config_players = config_players
+        if not use_provider_values:
+            simulation_config_players = [
+                {
+                    **row,
+                    'vbd': None,
+                    'fpts': None,
+                    'auction': None,
+                    'tier': None,
+                }
+                for row in config_players
+            ]
+        custom_profile = not use_provider_values
+        adp_only = bool(simulation_config_players) and all(
             row.get('vbd') is None and row.get('fpts') is None
-            for row in config_players
+            for row in simulation_config_players
         )
         if adp_only and len(value_overrides) < 50:
             return jsonify({
-                'error': 'ADP-only board requires an uploaded value sheet',
+                'error': 'This profile requires a custom value sheet',
                 'detail': (
-                    'Provide at least 50 player Value/VORP overrides; '
+                    ('The selected starter/bench/scoring profile does not match '
+                     'the published provider sheet. ' if custom_profile else '')
+                    + 'Paste at least 50 finished player Value/VORP overrides; '
                     f'{len(value_overrides)} were supplied.'
                 ),
             }), 400
         players = sim_players_from_config_players(
-            config_players,
+            simulation_config_players,
             value_overrides=value_overrides,
         )
         if not players:
@@ -472,12 +488,13 @@ def draft_help_sim_route():
                 row.get('vbd'), row.get('fpts'), row.get('adp'),
                 row.get('adp_stdev'),
             )
-            for row in config_players
+            for row in simulation_config_players
         ]
         cache_spec = {
-            'version': 3,
+            'version': 4,
             'year': str(year), 'teams': teams, 'rounds': rounds,
             'my_slot': my_slot, 'ppr': ppr, 'superflex': superflex,
+            'use_provider_values': use_provider_values,
             'slots': slots, 'current_pick': body.get('current_pick'),
             'n_sims': n_sims, 'top_k': top_k, 'seed': body.get('seed'),
             'drafted_ids': drafted_ids, 'my_roster_ids': my_roster_ids,
@@ -490,7 +507,7 @@ def draft_help_sim_route():
         cache_digest = hashlib.sha256(json.dumps(
             cache_spec, sort_keys=True, separators=(',', ':'),
         ).encode('utf-8')).hexdigest()
-        cache_key = f'draft_help_sim_v3_{cache_digest}'
+        cache_key = f'draft_help_sim_v4_{cache_digest}'
         redis_client = getattr(current_app, 'redis_client', None)
         try:
             cached = redis_client.get(cache_key) if redis_client else None

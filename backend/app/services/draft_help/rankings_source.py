@@ -49,10 +49,13 @@ _PLACEHOLDER_NAMES = {"duplicate player", "player invalid"}
 # (keyed and valued in normalized form). Extend as ``unmatched_names`` surfaces
 # new ones; most names match via punctuation/suffix normalization alone.
 _NAME_ALIASES = {
+    "bam knight": "zonovan knight",
     "chigoziem okonkwo": "chig okonkwo",
     "nyheim hines": "nyheim miller hines",
     "gabriel davis": "gabe davis",
+    "hollywood brown": "marquise brown",
     "ken walker": "kenneth walker",
+    "kenny gainwell": "kenneth gainwell",
     "mike strachan": "michael strachan",
     "mitch trubisky": "mitchell trubisky",
     "robbie anderson": "robbie chosen",
@@ -326,6 +329,14 @@ class RankingsRepository:
         self.year = str(blob.get("year", ""))
         self.budget = int(blob.get("budget", DEFAULT_AUCTION_BUDGET))
         self.source_file = blob.get("source_file")
+        self.provider = blob.get("provider")
+        self.source = blob.get("source")
+        self.source_url = blob.get("source_url")
+        self.source_version = blob.get("source_version")
+        self.generated_at_utc = blob.get("generated_at_utc")
+        self.retrieved_at_utc = blob.get("retrieved_at_utc")
+        self.attribution = blob.get("attribution")
+        self.profile = blob.get("profile") if isinstance(blob.get("profile"), dict) else None
         self._configs: Dict[str, RankingsConfig] = {
             key: RankingsConfig.from_dict(cfg)
             for key, cfg in (blob.get("configs") or {}).items()

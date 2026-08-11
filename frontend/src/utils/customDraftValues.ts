@@ -144,6 +144,105 @@ export function previewCustomValuesCsv(
   return { matches, errors };
 }
 
+/** Parse the overall-ranks block copied from ElBoberto's CheatSheet tab.
+ *
+ * Users may copy the whole used sheet or only the four-column block. The
+ * parser locates the contiguous ``OVR | Player | Pos | VBD`` header, preserves
+ * the provider's finished VBD without recalculation, and conservatively maps
+ * exact name+position pairs to the loaded Sleeper player pool.
+ */
+export function previewElBobertoValues(
+  text: string,
+  players: RankingsPlayerRow[],
+): CustomCsvPreview {
+  const rows = (text || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map((line) => line.split('\t').map((cell) => cell.trim()))
+    .filter((row) => row.some((cell) => cell !== ''));
+  if (!rows.length || !rows.some((row) => row.length > 1)) {
+    return {
+      matches: [],
+      errors: ['Paste the tab-separated Overall Ranks table from ElBoberto’s CheatSheet tab.'],
+    };
+  }
+
+  const byNamePos: Record<string, RankingsPlayerRow[]> = {};
+  players.forEach((player) => {
+    const key = `${normalizeDraftPlayerName(player.name)}|${player.pos}`;
+    (byNamePos[key] ||= []).push(player);
+  });
+
+  let headerRow = -1;
+  let nameCol = -1;
+  let positionCol = -1;
+  let valueCol = -1;
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const headers = rows[rowIndex].map(headerKey);
+    for (let index = 0; index <= headers.length - 4; index += 1) {
+      if (
+        headers[index] === 'ovr'
+        && headers[index + 1] === 'player'
+        && headers[index + 2] === 'pos'
+        && headers[index + 3] === 'vbd'
+      ) {
+        headerRow = rowIndex;
+        nameCol = index + 1;
+        positionCol = index + 2;
+        valueCol = index + 3;
+        break;
+      }
+    }
+    if (headerRow >= 0) break;
+  }
+  if (headerRow < 0) {
+    return {
+      matches: [],
+      errors: ['Could not find ElBoberto columns: OVR, Player, Pos, VBD. Copy from the CheatSheet tab.'],
+    };
+  }
+
+  const seen = new Set<string>();
+  const matches: CustomCsvMatch[] = [];
+  rows.slice(headerRow + 1).forEach((cells, index) => {
+    const inputName = (cells[nameCol] || '').trim();
+    const position = (cells[positionCol] || '').trim().toUpperCase();
+    if (!inputName || !['QB', 'RB', 'WR', 'TE'].includes(position)) return;
+    const rawValue = (cells[valueCol] || '').trim();
+    const value = Number(rawValue);
+    const result: CustomCsvMatch = {
+      row: headerRow + index + 2,
+      input_name: inputName,
+      input_position: position,
+    };
+    if (!Number.isFinite(value) || value < -10000 || value > 10000) {
+      result.error = `Invalid value: ${rawValue || '(blank)'}`;
+      matches.push(result);
+      return;
+    }
+    result.value = value;
+
+    const candidates = byNamePos[`${normalizeDraftPlayerName(inputName)}|${position}`] || [];
+    if (candidates.length === 0) {
+      result.error = 'No exact player and position match';
+    } else if (candidates.length > 1) {
+      result.error = 'Ambiguous player name and position';
+    } else if (seen.has(candidates[0].player_id)) {
+      result.error = 'Duplicate player in ElBoberto paste';
+    } else {
+      const player = candidates[0];
+      seen.add(player.player_id);
+      result.player_id = player.player_id;
+      result.matched_name = player.name;
+    }
+    matches.push(result);
+  });
+
+  const errors: string[] = [];
+  if (!matches.length) errors.push('No ElBoberto Overall Ranks player rows were found.');
+  return { matches, errors };
+}
+
 export function emptyCustomDraftSettings(): CustomDraftSettings {
   return { version: 1, updated_at: new Date(0).toISOString(), entries: {} };
 }
@@ -153,8 +252,9 @@ export function customDraftStorageKey(
   teams: number,
   ppr: number,
   superflex: boolean,
+  profileSignature = 'default',
 ): string {
-  return `draft-help-custom-v1:${year}:${teams}:${ppr}:${superflex ? 'sf' : '1qb'}`;
+  return `draft-help-custom-v2:${year}:${teams}:${ppr}:${superflex ? 'sf' : '1qb'}:${profileSignature}`;
 }
 
 export function loadCustomDraftSettings(
@@ -178,7 +278,11 @@ export function loadCustomDraftSettings(
       entries[pid] = {
         ...(hasValue ? { value } : {}),
         ...(avoid ? { avoid: true } : {}),
-        source: entry?.source === 'upload' ? 'upload' : 'manual',
+        source: entry?.source === 'elboberto_paste'
+          ? 'elboberto_paste'
+          : entry?.source === 'upload' || entry?.source === 'football_absurdity'
+            ? 'upload'
+            : 'manual',
       };
     });
     return {

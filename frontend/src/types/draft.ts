@@ -170,7 +170,21 @@ export interface RankingsResponse {
   year: string;
   config: { teams: number; ppr: number; superflex: boolean };
   sources?: {
-    values?: { source?: string | null };
+    values?: {
+      source?: string | null;
+      provider?: string | null;
+      source_url?: string | null;
+      source_version?: string | null;
+      generated_at_utc?: string | null;
+      retrieved_at_utc?: string | null;
+      attribution?: string | null;
+      profile?: {
+        passing_td?: number;
+        bench_size?: number;
+        starters?: Record<string, number>;
+        superflex_mode?: string;
+      } | null;
+    };
     adp?: {
       source?: string | null;
       generated_at_utc?: string | null;
@@ -186,7 +200,7 @@ export interface RankingsResponse {
 export interface CustomValueEntry {
   value?: number;
   avoid?: boolean;
-  source: 'upload' | 'manual';
+  source: 'upload' | 'elboberto_paste' | 'manual';
 }
 
 export interface CustomDraftSettings {
@@ -225,8 +239,12 @@ export interface SimCandidate {
   pos: string;
   adp: number;
   proj: number;
+  avg_value: number;
   avg_lineup: number;
   avg_depth?: number;
+  value_stdev?: number;
+  value_p25?: number;
+  value_p75?: number;
   lineup_stdev?: number;
   lineup_p25?: number;
   lineup_p75?: number;
@@ -269,6 +287,7 @@ export interface SimRequest {
   top_k?: number;
   seed?: number;
   value_overrides?: Record<string, number>;
+  use_provider_values?: boolean;
   avoid_ids?: string[];
   priority_candidate_ids?: string[];
   my_future_pick_numbers?: number[];

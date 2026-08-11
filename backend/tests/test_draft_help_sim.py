@@ -287,6 +287,23 @@ def test_lineup_value_is_starters_only_roster_value_adds_discounted_depth():
     assert 20 < full < 30
 
 
+def test_starter_upgrade_beats_normal_depth_but_extreme_depth_can_win():
+    slots = {"RB": 2, "WR": 1}
+    roster = [_p("1", "RB", 200), _p("2", "RB", 190)]
+    normal_depth = sim.roster_value(roster + [_p("3", "RB", 50)], slots)
+    fill_wr = sim.roster_value(roster + [_p("4", "WR", 15)], slots)
+    extreme_depth = sim.roster_value(roster + [_p("5", "RB", 180)], slots)
+
+    # A normal backup contributes only 10%, so filling the missing starter wins.
+    assert normal_depth == pytest.approx(395)
+    assert fill_wr == pytest.approx(405)
+    assert fill_wr > normal_depth
+    # A truly exceptional third RB can beat a tiny WR starter edge (18 > 15),
+    # matching the deliberate "too good to pass up" exception.
+    assert extreme_depth == pytest.approx(408)
+    assert extreme_depth > fill_wr
+
+
 def test_depth_only_counts_startable_positions():
     # No RB slot at all -> a spare RB is not "depth" (you can never start it).
     roster = [_p("1", "WR", 30), _p("2", "RB", 25)]
@@ -298,7 +315,13 @@ def test_recommend_pick_returns_likely_next_and_depth():
     out = recommend_pick(players, drafted_ids=[], my_roster_ids=[],
                          teams=12, rounds=14, my_slot=1, n_sims=20, top_k=4, seed=3)
     top = out["candidates"][0]
+    assert top["avg_value"] == pytest.approx(
+        top["avg_lineup"] + top["avg_depth"], abs=0.11,
+    )
+    assert top["avg_value"] >= top["avg_lineup"]
     assert "avg_depth" in top
+    assert top["value_stdev"] >= 0
+    assert top["value_p25"] <= top["value_p75"]
     assert top["lineup_stdev"] >= 0
     assert top["lineup_p25"] <= top["lineup_p75"]
     assert isinstance(top["likely_next"], list) and top["likely_next"]

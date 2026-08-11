@@ -1,9 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Badge,
   Box,
   Button,
   Input,
+  Portal,
   VStack,
 } from '@chakra-ui/react';
 import { RankingsPlayerRow } from '../types/draft';
@@ -25,6 +33,14 @@ const PlayerCombobox: React.FC<PlayerComboboxProps> = ({
   const [query, setQuery] = useState(selected?.name || '');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+  const [menuPosition, setMenuPosition] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   useEffect(() => {
     setQuery(selected?.name || '');
@@ -46,13 +62,37 @@ const PlayerCombobox: React.FC<PlayerComboboxProps> = ({
     setOpen(false);
   };
 
+  const positionMenu = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const spaceBelow = Math.max(120, window.innerHeight - rect.bottom - 12);
+    setMenuPosition({
+      left: rect.left,
+      top: rect.bottom + 4,
+      width: rect.width,
+      maxHeight: Math.min(260, spaceBelow),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    positionMenu();
+    window.addEventListener('resize', positionMenu);
+    window.addEventListener('scroll', positionMenu, true);
+    return () => {
+      window.removeEventListener('resize', positionMenu);
+      window.removeEventListener('scroll', positionMenu, true);
+    };
+  }, [open, positionMenu]);
+
   return (
-    <Box position="relative" minW="240px" maxW="320px" flex="1">
+    <Box ref={anchorRef} position="relative" minW="240px" maxW="320px" flex="1">
       <Input
         size="sm"
         role="combobox"
         aria-expanded={open}
-        aria-controls="player-combobox-options"
+        aria-controls={listboxId}
         aria-autocomplete="list"
         value={query}
         placeholder={placeholder}
@@ -80,48 +120,51 @@ const PlayerCombobox: React.FC<PlayerComboboxProps> = ({
           }
         }}
       />
-      {open && (
-        <VStack
-          id="player-combobox-options"
-          role="listbox"
-          align="stretch"
-          spacing={0}
-          position="absolute"
-          top="100%"
-          left={0}
-          right={0}
-          mt={1}
-          maxH="260px"
-          overflowY="auto"
-          bg="white"
-          borderWidth="1px"
-          borderRadius="md"
-          boxShadow="lg"
-          zIndex={20}
-        >
-          {matches.map((player, index) => (
-            <Button
-              key={player.player_id}
-              role="option"
-              aria-selected={player.player_id === value}
-              size="sm"
-              variant="ghost"
-              borderRadius={0}
-              justifyContent="space-between"
-              bg={index === activeIndex ? 'blue.50' : undefined}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => select(player)}
-            >
-              <span>{player.name}</span>
-              <Badge ml={2}>{player.pos}</Badge>
-            </Button>
-          ))}
-          {!matches.length && (
-            <Box px={3} py={2} fontSize="sm" color="gray.500">
-              No matching players
-            </Box>
-          )}
-        </VStack>
+      {open && menuPosition && (
+        <Portal>
+          <VStack
+            id={listboxId}
+            role="listbox"
+            data-testid="player-combobox-options"
+            align="stretch"
+            spacing={0}
+            position="fixed"
+            left={`${menuPosition.left}px`}
+            top={`${menuPosition.top}px`}
+            width={`${menuPosition.width}px`}
+            maxH={`${menuPosition.maxHeight}px`}
+            overflowY="auto"
+            bg="white"
+            borderWidth="1px"
+            borderRadius="md"
+            boxShadow="lg"
+            zIndex={1500}
+          >
+            {matches.map((player, index) => (
+              <Button
+                key={player.player_id}
+                role="option"
+                aria-selected={player.player_id === value}
+                size="sm"
+                variant="ghost"
+                borderRadius={0}
+                justifyContent="space-between"
+                flexShrink={0}
+                bg={index === activeIndex ? 'blue.50' : undefined}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => select(player)}
+              >
+                <span>{player.name}</span>
+                <Badge ml={2}>{player.pos}</Badge>
+              </Button>
+            ))}
+            {!matches.length && (
+              <Box px={3} py={2} fontSize="sm" color="gray.500">
+                No matching players
+              </Box>
+            )}
+          </VStack>
+        </Portal>
       )}
     </Box>
   );

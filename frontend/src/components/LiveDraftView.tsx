@@ -27,6 +27,7 @@ import {
   Tbody,
   Td,
   Text,
+  Textarea,
   Th,
   Thead,
   Tr,
@@ -50,7 +51,7 @@ import {
   customValueMap,
   emptyCustomDraftSettings,
   loadCustomDraftSettings,
-  previewCustomValuesCsv,
+  previewElBobertoValues,
   saveCustomDraftSettings,
 } from '../utils/customDraftValues';
 import {
@@ -59,6 +60,10 @@ import {
   SLOT_COLOR,
 } from '../utils/draftRoster';
 import { confidencePresentation } from '../utils/simConfidence';
+import {
+  profileStorageSignature,
+  providerProfileMatches,
+} from '../utils/draftValueProfile';
 import DraftPlayerAvatar from './DraftPlayerAvatar';
 import MockDraftView from './MockDraftView';
 import PlayerCombobox from './PlayerCombobox';
@@ -93,6 +98,7 @@ const LiveDraftView: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [boardPpr, setBoardPpr] = useState(0.5);
+  const [boardPassingTd, setBoardPassingTd] = useState(4);
   const [manualPicks, setManualPicks] = useState<LiveDraftPick[]>([]);
   const [manualDraftWarning, setManualDraftWarning] = useState<string | null>(null);
 
@@ -101,7 +107,8 @@ const LiveDraftView: React.FC = () => {
   const [customSettings, setCustomSettings] = useState<CustomDraftSettings>(
     emptyCustomDraftSettings(),
   );
-  const [csvPreview, setCsvPreview] = useState<CustomCsvPreview | null>(null);
+  const [elBobertoPaste, setElBobertoPaste] = useState('');
+  const [elBobertoPreview, setElBobertoPreview] = useState<CustomCsvPreview | null>(null);
   const [manualPlayerId, setManualPlayerId] = useState('');
   const [manualValue, setManualValue] = useState('');
   const [sim, setSim] = useState<SimResponse | null>(null);
@@ -265,18 +272,26 @@ const LiveDraftView: React.FC = () => {
 
   const storageKey = useMemo(() => {
     if (!live?.config || !live.season) return null;
+    const starterCount = Object.values(live.config.slots || {})
+      .reduce((total, count) => total + count, 0);
+    const benchSize = Math.max(0, live.config.rounds - starterCount - 2);
+    const signature = profileStorageSignature(
+      live.config.slots || {}, false, benchSize, boardPassingTd,
+    );
     return customDraftStorageKey(
       live.season,
       live.config.teams,
       boardPpr,
       live.config.superflex,
+      signature,
     );
-  }, [boardPpr, live?.config, live?.season]);
+  }, [boardPassingTd, boardPpr, live?.config, live?.season]);
 
   useEffect(() => {
     if (!storageKey) return;
     setCustomSettings(loadCustomDraftSettings(window.localStorage, storageKey));
-    setCsvPreview(null);
+    setElBobertoPaste('');
+    setElBobertoPreview(null);
     setSim(null);
   }, [storageKey]);
 
@@ -289,14 +304,32 @@ const LiveDraftView: React.FC = () => {
   };
 
   const valueOverrides = useMemo(() => customValueMap(customSettings), [customSettings]);
+  const importedOverrideCount = useMemo(() => Object.values(customSettings.entries)
+    .filter((entry) => entry.value !== undefined && entry.source !== 'manual').length,
+  [customSettings]);
   const avoidIds = useMemo(() => avoidedPlayerIds(customSettings), [customSettings]);
   const priorityIds = useMemo(() => Object.entries(customSettings.entries)
     .filter(([, entry]) => entry.source === 'manual' && entry.value !== undefined)
     .map(([pid]) => pid), [customSettings]);
+  const starterCount = Object.values(live?.config?.slots || {})
+    .reduce((total, count) => total + count, 0);
+  const liveBenchSize = Math.max(0, (live?.config?.rounds || 0) - starterCount - 2);
+  const profileMatches = providerProfileMatches(
+    sources?.values?.profile,
+    live?.config?.slots || {},
+    liveBenchSize,
+    boardPassingTd,
+  );
+  const useProviderValues = !sources?.values?.provider || profileMatches;
   const effectivePlayers = useMemo(() => players.map((player) => {
     const value = customSettings.entries[player.player_id]?.value;
-    return value === undefined ? player : { ...player, vbd: value };
-  }), [players, customSettings]);
+    if (value !== undefined) return { ...player, vbd: value };
+    if (useProviderValues) return player;
+    return { ...player, vbd: null, fpts: null, auction: null, tier: null };
+  }), [players, customSettings, useProviderValues]);
+  const providerById = useMemo(() => Object.fromEntries(
+    players.map((player) => [player.player_id, player]),
+  ), [players]);
   const pendingManualPicks = useMemo(() => {
     const authoritativeIds = new Set((live?.picks || []).map((pick) => pick.player_id));
     const authoritativePickNos = new Set((live?.picks || []).map((pick) => pick.pick_no));
@@ -353,7 +386,8 @@ const LiveDraftView: React.FC = () => {
   [effectivePlayers, drafted]);
   const valueCount = effectivePlayers.filter((player) => player.vbd != null).length;
   const adpOnly = sources?.values?.source === 'custom upload required';
-  const valuesReady = adpOnly ? valueCount >= MIN_ADP_ONLY_VALUES : valueCount > 0;
+  const customProfileRequired = adpOnly || !useProviderValues;
+  const valuesReady = customProfileRequired ? valueCount >= MIN_ADP_ONLY_VALUES : valueCount > 0;
 
   const rosterSlots = useMemo(() => buildRosterSlots(
     displayMyRosterIds,
@@ -411,6 +445,7 @@ const LiveDraftView: React.FC = () => {
         top_k: 8,
         seed: displayCurrentPick,
         value_overrides: valueOverrides,
+        use_provider_values: useProviderValues,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityIds,
       });
@@ -420,7 +455,7 @@ const LiveDraftView: React.FC = () => {
     } finally {
       setSimLoading(false);
     }
-  }, [avoidIds, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, priorityIds, valueOverrides, valuesReady]);
+  }, [avoidIds, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, priorityIds, useProviderValues, valueOverrides, valuesReady]);
 
   // Run once per changed on-clock state/value revision. Manual refresh remains.
   useEffect(() => {
@@ -431,21 +466,36 @@ const LiveDraftView: React.FC = () => {
     recommend();
   }, [customSettings.updated_at, displayCurrentPick, displayIsUserPick, live, pendingManualPicks.length, recommend, valuesReady]);
 
-  const readCsv = async (file?: File) => {
-    if (!file) return;
-    setCsvPreview(previewCustomValuesCsv(await file.text(), players));
+  const previewElBobertoPaste = () => {
+    setElBobertoPreview(
+      previewElBobertoValues(elBobertoPaste, players),
+    );
   };
 
-  const applyCsv = () => {
-    if (!csvPreview) return;
+  const applyElBoberto = () => {
+    if (!elBobertoPreview) return;
     const entries = { ...customSettings.entries };
-    csvPreview.matches.forEach((match) => {
+    elBobertoPreview.matches.forEach((match) => {
       if (!match.player_id || match.value === undefined || match.error) return;
       const existing = entries[match.player_id];
       if (existing?.source === 'manual' && existing.value !== undefined) return;
-      entries[match.player_id] = { ...existing, value: match.value, source: 'upload' };
+      entries[match.player_id] = {
+        ...existing,
+        value: match.value,
+        source: 'elboberto_paste',
+      };
     });
     persistCustom({ ...customSettings, entries });
+  };
+
+  const clearImportedValues = () => {
+    const entries: CustomDraftSettings['entries'] = {};
+    Object.entries(customSettings.entries).forEach(([playerId, entry]) => {
+      if (entry.source === 'manual') entries[playerId] = entry;
+      else if (entry.avoid) entries[playerId] = { avoid: true, source: 'manual' };
+    });
+    persistCustom({ ...customSettings, entries });
+    setElBobertoPreview(null);
   };
 
   const saveManual = () => {
@@ -614,6 +664,13 @@ const LiveDraftView: React.FC = () => {
                 <option value={1}>Full PPR</option>
               </Select>
             </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500">Passing TD</Text>
+              <Select aria-label="Passing touchdown scoring" size="sm" value={boardPassingTd} onChange={(e) => setBoardPassingTd(Number(e.target.value))} w="100px">
+                <option value={4}>4 points</option>
+                <option value={6}>6 points</option>
+              </Select>
+            </Box>
             <Text fontSize="xs" color="gray.500">
               Sleeper detected {live.config?.ppr === 1 ? 'Full PPR' : live.config?.ppr === 0.5 ? 'Half PPR' : 'Standard'}.
               Change this if the draft metadata is wrong or you prefer another market.
@@ -621,12 +678,35 @@ const LiveDraftView: React.FC = () => {
           </HStack>
 
           <HStack spacing={2} flexWrap="wrap">
-            <Badge colorScheme={adpOnly ? 'orange' : 'blue'}>Values: {sources?.values?.source || 'loading'}</Badge>
+            <Badge colorScheme={adpOnly ? 'orange' : 'blue'}>
+              Values: {sources?.values?.source || 'loading'}
+              {sources?.values?.source_version ? ` v${sources.values.source_version}` : ''}
+            </Badge>
             <Badge colorScheme="green">ADP: {adpSourceLabel(sources?.adp?.source)}</Badge>
             <Text fontSize="xs" color="gray.500">{valueCount} player values loaded</Text>
           </HStack>
+          {sources?.values?.provider && !useProviderValues && (
+            <Alert status="warning">
+              <AlertIcon />
+              <Box fontSize="sm">
+                Sleeper&apos;s exact starter/bench/passing-TD profile is not in the
+                published provider blob. Provider VBD is disabled; paste at least{' '}
+                {MIN_ADP_ONLY_VALUES} finished ElBoberto values configured for this league
+                ({valueCount} loaded).
+              </Box>
+            </Alert>
+          )}
+          {sources?.values?.provider && useProviderValues && importedOverrideCount > 0 && (
+            <Alert status="warning">
+              <AlertIcon />
+              <Box flex="1" fontSize="sm">
+                {importedOverrideCount} saved bulk values override {sources.values.source || 'provider'} AvgVBD.
+              </Box>
+              <Button size="xs" onClick={clearImportedValues}>Use provider values</Button>
+            </Alert>
+          )}
           {!valuesReady && (
-            <Alert status="warning"><AlertIcon />Upload at least {MIN_ADP_ONLY_VALUES} Value/VORP rows before requesting recommendations.</Alert>
+            <Alert status="warning"><AlertIcon />Paste at least {MIN_ADP_ONLY_VALUES} finished ElBoberto Value/VORP rows before requesting recommendations.</Alert>
           )}
 
           <Accordion allowToggle borderWidth="1px" borderRadius="md">
@@ -634,15 +714,60 @@ const LiveDraftView: React.FC = () => {
               <AccordionButton><Box flex="1" textAlign="left" color="gray.800"><b>Live draft values &amp; preferences</b> · {valueCount} values · {avoidIds.length} avoided</Box><AccordionIcon /></AccordionButton>
               <AccordionPanel>
                 <VStack align="stretch" spacing={3}>
-                  <Text fontSize="xs" color="gray.600">Upload a player_id/name + position + Value/VORP CSV. Settings are shared with Custom room for this league configuration.</Text>
-                  <Input size="sm" type="file" accept=".csv,text/csv" p={1} onChange={(e) => readCsv(e.target.files?.[0])} />
-                  {csvPreview && (
-                    <HStack>
-                      <Badge colorScheme="green">{csvPreview.matches.filter((m) => m.player_id && !m.error).length} matched</Badge>
-                      <Badge colorScheme="orange">{csvPreview.matches.filter((m) => m.error).length} skipped</Badge>
-                      <Button size="xs" onClick={applyCsv}>Apply values</Button>
-                    </HStack>
-                  )}
+                  <Box>
+                    <Text fontSize="sm" fontWeight="semibold" mb={1}>Paste custom ElBoberto values</Text>
+                    <Text fontSize="xs" color="gray.600" mb={2}>
+                      Configure ElBoberto for this league, open <b>CheatSheet</b>, copy the
+                      used table (or <b>OVR / Player / Pos / VBD</b>), and paste it below.
+                      Settings are browser-local and shared with the Custom room only for
+                      this exact league profile.
+                    </Text>
+                    <Textarea
+                      size="sm"
+                      value={elBobertoPaste}
+                      onChange={(event) => {
+                        setElBobertoPaste(event.target.value);
+                        setElBobertoPreview(null);
+                      }}
+                      placeholder={'OVR\tPlayer\tPos\tVBD\n1\tJahmyr Gibbs\tRB\t211.01'}
+                      minH="110px"
+                    />
+                    <Button
+                      size="xs"
+                      mt={2}
+                      onClick={previewElBobertoPaste}
+                      isDisabled={!elBobertoPaste.trim()}
+                    >
+                      Preview ElBoberto values
+                    </Button>
+                    {elBobertoPreview && (
+                      <Box mt={2}>
+                        <HStack flexWrap="wrap">
+                          <Badge colorScheme="green">
+                            {elBobertoPreview.matches.filter((match) => match.player_id && !match.error).length} matched
+                          </Badge>
+                          <Badge colorScheme="orange">
+                            {elBobertoPreview.matches.filter((match) => match.error).length} skipped
+                          </Badge>
+                          <Button
+                            size="xs"
+                            onClick={applyElBoberto}
+                            isDisabled={!!elBobertoPreview.errors.length || !elBobertoPreview.matches.some((match) => match.player_id && !match.error)}
+                          >
+                            Apply values
+                          </Button>
+                        </HStack>
+                        {elBobertoPreview.errors.map((message) => (
+                          <Text key={message} fontSize="xs" color="red.600" mt={1}>{message}</Text>
+                        ))}
+                        {elBobertoPreview.matches.filter((match) => match.error).slice(0, 6).map((match) => (
+                          <Text key={`${match.row}-${match.input_name}`} fontSize="xs" color="orange.700" mt={1}>
+                            Row {match.row}: {match.input_name || '(blank)'} — {match.error}
+                          </Text>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
                   <HStack flexWrap="wrap">
                     <PlayerCombobox
                       players={effectivePlayers}
@@ -671,12 +796,12 @@ const LiveDraftView: React.FC = () => {
                   {sim.cache_hit && <Badge colorScheme="gray">cached state</Badge>}
                 </HStack>
               )}
-              <Table size="sm"><Thead><Tr><Th>Player</Th><Th>Pos</Th><Th isNumeric>ADP</Th><Th isNumeric>Value</Th><Th isNumeric title="Middle 50% rollout range is shown below the mean">Lineup VAL</Th></Tr></Thead>
+              <Table size="sm"><Thead><Tr><Th>Player</Th><Th>Pos</Th><Th isNumeric>ADP</Th><Th isNumeric>Used VBD</Th><Th isNumeric title="Middle 50% rollout range is shown below the mean">Lineup VAL</Th></Tr></Thead>
                 <Tbody>{sim.candidates.map((candidate, index) => (
                   <Tr key={candidate.player_id} bg={index === 0 ? 'green.100' : undefined}>
                     <Td><HStack spacing={2}><DraftPlayerAvatar playerId={candidate.player_id} name={candidate.name} team={byId[candidate.player_id]?.team} size={30} /><Text>{candidate.name}</Text></HStack></Td>
                     <Td>{candidate.pos}</Td><Td isNumeric>{candidate.adp.toFixed(1)}</Td><Td isNumeric>{candidate.proj.toFixed(1)}</Td>
-                    <Td isNumeric>{candidate.avg_lineup.toFixed(1)}{candidate.lineup_p25 != null && candidate.lineup_p75 != null && <Text fontSize="2xs" color="gray.500">{candidate.lineup_p25.toFixed(0)}–{candidate.lineup_p75.toFixed(0)}</Text>}</Td>
+                    <Td isNumeric>{candidate.avg_value.toFixed(1)}{candidate.value_p25 != null && candidate.value_p75 != null && <Text fontSize="2xs" color="gray.500">{candidate.value_p25.toFixed(0)}–{candidate.value_p75.toFixed(0)}</Text>}</Td>
                   </Tr>
                 ))}</Tbody></Table>
               {sim.priority_candidates?.filter((target) => !sim.candidates.some(
@@ -684,7 +809,7 @@ const LiveDraftView: React.FC = () => {
               )).map((target) => (
                 <Text key={target.player_id} mt={2} fontSize="xs" color="blue.800">
                   Manually adjusted target evaluated: {target.name} ({target.pos}) —
-                  lineup VAL {target.avg_lineup.toFixed(1)}. The model currently
+                  VAL {target.avg_value.toFixed(1)}. The model currently
                   prefers taking someone else first and targeting this player later.
                 </Text>
               ))}
@@ -695,14 +820,18 @@ const LiveDraftView: React.FC = () => {
             <Box gridColumn={{ lg: 'span 2' }}>
               <Heading size="xs" mb={2}>Available by ADP ({available.length})</Heading>
               <Box maxH="620px" overflowY="auto" borderWidth="1px" borderRadius="md">
-                <Table size="sm"><Thead position="sticky" top={0} bg="white" zIndex={1}><Tr><Th isNumeric>ADP</Th><Th>Player</Th><Th>Pos</Th><Th isNumeric>Value</Th><Th></Th></Tr></Thead>
+                <Table size="sm"><Thead position="sticky" top={0} bg="white" zIndex={1}><Tr><Th isNumeric>ADP</Th><Th>Player</Th><Th>Pos</Th><Th isNumeric>Source VBD</Th><Th isNumeric>Used VBD</Th><Th></Th></Tr></Thead>
                   <Tbody>{available.slice(0, 160).map((player) => {
                     const custom = customSettings.entries[player.player_id];
                     return (
                       <Tr key={player.player_id} bg={custom?.avoid ? 'red.50' : undefined}>
                         <Td isNumeric>{player.adp?.toFixed(1)}</Td>
                         <Td><HStack spacing={2}><DraftPlayerAvatar playerId={player.player_id} name={player.name} team={player.team} /><Box>{player.name}{custom?.avoid && <Badge ml={1} colorScheme="red">avoid</Badge>}</Box></HStack></Td>
-                        <Td>{player.pos}</Td><Td isNumeric>{player.vbd?.toFixed(1) || '—'}</Td>
+                        <Td>{player.pos}</Td>
+                        <Td isNumeric>{providerById[player.player_id]?.vbd?.toFixed(1) || '—'}</Td>
+                        <Td isNumeric color={custom?.value !== undefined ? 'blue.600' : undefined}>
+                          {player.vbd?.toFixed(1) || '—'}
+                        </Td>
                         <Td>
                           <HStack spacing={1}>
                             <Button size="xs" colorScheme="orange" onClick={() => manuallyDraft(player)}>Mark drafted</Button>

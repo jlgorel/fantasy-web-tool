@@ -123,15 +123,28 @@ def rankings_config_sources(
     repo = load_rankings_repo(year, blob_loader=blob_loader)
     blob = _load_adp_blob(year, blob_loader=blob_loader) or {}
     if repo:
-        value_source = repo.source_file or "draft rankings"
+        value_source = repo.source or repo.source_file or "draft rankings"
     elif blob.get("adp_only"):
         value_source = "custom upload required"
     else:
         value_source = "unavailable"
     key = config_key(int(teams), float(ppr), bool(superflex))
     cfg = (blob.get("configs") or {}).get(key) or {}
+    if not isinstance(cfg.get("players"), dict) and blob_loader is None:
+        _ADP_CACHE.pop(str(year), None)
+        blob = _load_adp_blob(year, force_reload=True) or {}
+        cfg = (blob.get("configs") or {}).get(key) or {}
     return {
-        "values": {"source": value_source},
+        "values": {
+            "source": value_source,
+            "provider": repo.provider if repo else None,
+            "source_url": repo.source_url if repo else None,
+            "source_version": repo.source_version if repo else None,
+            "generated_at_utc": repo.generated_at_utc if repo else None,
+            "retrieved_at_utc": repo.retrieved_at_utc if repo else None,
+            "attribution": repo.attribution if repo else None,
+            "profile": repo.profile if repo else None,
+        },
         "adp": {
             "source": blob.get("source"),
             "generated_at_utc": blob.get("generated_at_utc"),
@@ -146,11 +159,16 @@ def rankings_config_sources(
 _ADP_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 
-def _load_adp_blob(year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None) -> Optional[Dict[str, Any]]:
+def _load_adp_blob(
+    year: Any,
+    *,
+    blob_loader: Optional[Callable[[str], Any]] = None,
+    force_reload: bool = False,
+) -> Optional[Dict[str, Any]]:
     """Load (and cache) the ``draft_adp_{year}.json`` blob; ``None`` if absent."""
     year = str(year)
     loader = blob_loader or load_blob
-    if blob_loader is None:
+    if blob_loader is None and not force_reload:
         cached = _ADP_CACHE.get(year)
         if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
             return cached[1]
@@ -158,7 +176,12 @@ def _load_adp_blob(year: Any, *, blob_loader: Optional[Callable[[str], Any]] = N
         blob = loader(adp_blob_name(year))
     except Exception:
         blob = None
-    if blob_loader is None and isinstance(blob, dict):
+    has_configs = (
+        isinstance(blob, dict)
+        and isinstance(blob.get("configs"), dict)
+        and bool(blob.get("configs"))
+    )
+    if blob_loader is None and has_configs:
         _ADP_CACHE[year] = (time.monotonic(), blob)
     elif blob_loader is None:
         # Never negative-cache a missing blob: the scheduled scraper may create
@@ -182,6 +205,14 @@ def _adp_for_config(
     key = config_key(int(teams), float(ppr), bool(superflex))
     cfg = (blob.get("configs") or {}).get(key) or {}
     players = cfg.get("players")
+    if not isinstance(players, dict) and blob_loader is None:
+        # A partial/stale blob may have been cached while the scheduled source
+        # was still publishing. Reload once instead of serving a five-minute
+        # board with no ADP/source metadata.
+        _ADP_CACHE.pop(str(year), None)
+        blob = _load_adp_blob(year, force_reload=True) or {}
+        cfg = (blob.get("configs") or {}).get(key) or {}
+        players = cfg.get("players")
     return players if isinstance(players, dict) else {}
 
 
