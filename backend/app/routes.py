@@ -400,12 +400,15 @@ def draft_help_rankings():
         teams = int(request.args.get('teams', 12))
         ppr = float(request.args.get('ppr', 0.5))
         superflex = _parse_bool(request.args.get('sf'))
-        players = draft_help_summaries.rankings_config_players(year, teams, ppr, superflex)
+        profile_id = (request.args.get('profile') or '').strip() or None
+        players = draft_help_summaries.rankings_config_players(
+            year, teams, ppr, superflex, profile_id=profile_id,
+        )
         return jsonify({
             'year': str(year),
             'config': {'teams': teams, 'ppr': ppr, 'superflex': superflex},
             'sources': draft_help_summaries.rankings_config_sources(
-                year, teams, ppr, superflex,
+                year, teams, ppr, superflex, profile_id=profile_id,
             ),
             'players': players,
         }), 200
@@ -430,6 +433,7 @@ def draft_help_sim_route():
         my_slot = int(body.get('my_slot', 1))
         ppr = float(body.get('ppr', 0.5))
         superflex = bool(body.get('superflex', False))
+        profile_id = str(body.get('profile_id') or '').strip() or None
         use_provider_values = body.get('use_provider_values', True) is not False
         value_overrides = _parse_value_overrides(body.get('value_overrides'))
         avoid_ids = _parse_avoid_ids(body.get('avoid_ids'))
@@ -442,7 +446,7 @@ def draft_help_sim_route():
         if my_future_pick_numbers is not None:
             my_future_pick_numbers = sorted(my_future_pick_numbers)
         config_players = draft_help_summaries.rankings_config_players(
-            year, teams, ppr, superflex,
+            year, teams, ppr, superflex, profile_id=profile_id,
         )
         simulation_config_players = config_players
         if not use_provider_values:
@@ -494,6 +498,7 @@ def draft_help_sim_route():
             'version': 4,
             'year': str(year), 'teams': teams, 'rounds': rounds,
             'my_slot': my_slot, 'ppr': ppr, 'superflex': superflex,
+            'profile_id': profile_id,
             'use_provider_values': use_provider_values,
             'slots': slots, 'current_pick': body.get('current_pick'),
             'n_sims': n_sims, 'top_k': top_k, 'seed': body.get('seed'),

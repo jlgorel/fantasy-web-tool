@@ -61,6 +61,7 @@ import {
 } from '../utils/draftRoster';
 import { confidencePresentation } from '../utils/simConfidence';
 import {
+  centralizedProfileId,
   profileStorageSignature,
   providerProfileMatches,
 } from '../utils/draftValueProfile';
@@ -251,6 +252,16 @@ const LiveDraftView: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [autoRefresh, draftId, loadDirectDraft]);
 
+  const starterCount = Object.values(live?.config?.slots || {})
+    .reduce((total, count) => total + count, 0);
+  const liveBenchSize = Math.max(0, (live?.config?.rounds || 0) - starterCount - 2);
+  const requestedProfileId = centralizedProfileId(
+    live?.config?.slots || {},
+    Boolean(live?.config?.superflex),
+    liveBenchSize,
+    boardPassingTd,
+  );
+
   // Load the matching value/ADP board whenever Sleeper supplies a config.
   useEffect(() => {
     if (!live?.config || !live.season) return;
@@ -260,6 +271,7 @@ const LiveDraftView: React.FC = () => {
       live.config.teams,
       boardPpr,
       live.config.superflex,
+      requestedProfileId,
     ).then((response) => {
       if (cancelled) return;
       setPlayers(response.players || []);
@@ -268,7 +280,7 @@ const LiveDraftView: React.FC = () => {
       if (!cancelled) setError('Draft connected, but its rankings board could not load.');
     });
     return () => { cancelled = true; };
-  }, [boardPpr, live?.config, live?.season]);
+  }, [boardPassingTd, boardPpr, live?.config, live?.season, requestedProfileId]);
 
   const storageKey = useMemo(() => {
     if (!live?.config || !live.season) return null;
@@ -311,16 +323,13 @@ const LiveDraftView: React.FC = () => {
   const priorityIds = useMemo(() => Object.entries(customSettings.entries)
     .filter(([, entry]) => entry.source === 'manual' && entry.value !== undefined)
     .map(([pid]) => pid), [customSettings]);
-  const starterCount = Object.values(live?.config?.slots || {})
-    .reduce((total, count) => total + count, 0);
-  const liveBenchSize = Math.max(0, (live?.config?.rounds || 0) - starterCount - 2);
   const profileMatches = providerProfileMatches(
     sources?.values?.profile,
     live?.config?.slots || {},
     liveBenchSize,
     boardPassingTd,
   );
-  const useProviderValues = !sources?.values?.provider || profileMatches;
+  const useProviderValues = !sources ? true : profileMatches;
   const effectivePlayers = useMemo(() => players.map((player) => {
     const value = customSettings.entries[player.player_id]?.value;
     if (value !== undefined) return { ...player, vbd: value };
@@ -446,6 +455,7 @@ const LiveDraftView: React.FC = () => {
         seed: displayCurrentPick,
         value_overrides: valueOverrides,
         use_provider_values: useProviderValues,
+        profile_id: requestedProfileId || undefined,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityIds,
       });
@@ -455,7 +465,7 @@ const LiveDraftView: React.FC = () => {
     } finally {
       setSimLoading(false);
     }
-  }, [avoidIds, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, priorityIds, useProviderValues, valueOverrides, valuesReady]);
+  }, [avoidIds, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, priorityIds, requestedProfileId, useProviderValues, valueOverrides, valuesReady]);
 
   // Run once per changed on-clock state/value revision. Manual refresh remains.
   useEffect(() => {

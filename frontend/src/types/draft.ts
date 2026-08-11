@@ -178,6 +178,20 @@ export interface RankingsResponse {
       generated_at_utc?: string | null;
       retrieved_at_utc?: string | null;
       attribution?: string | null;
+      requested_profile_id?: string | null;
+      available_profiles?: Array<{
+        id: string;
+        blob_name: string;
+        profile: {
+          id?: string;
+          passing_td?: number;
+          bench_size?: number;
+          starters?: Record<string, number>;
+          superflex_mode?: string;
+        };
+        config_count?: number;
+        generated_at_utc?: string;
+      }>;
       profile?: {
         passing_td?: number;
         bench_size?: number;
@@ -288,6 +302,7 @@ export interface SimRequest {
   seed?: number;
   value_overrides?: Record<string, number>;
   use_provider_values?: boolean;
+  profile_id?: string;
   avoid_ids?: string[];
   priority_candidate_ids?: string[];
   my_future_pick_numbers?: number[];

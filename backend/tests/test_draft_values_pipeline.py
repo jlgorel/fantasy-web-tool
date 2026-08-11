@@ -64,6 +64,12 @@ def _candidate(values_module, *, required_keys=None, players_per_config=3):
         "year": "2026",
         "provider": "elboberto",
         "generated_at_utc": "2026-08-10T00:00:00+00:00",
+        "profile": {
+            "id": "qb1-rb2-wr2-te1-flex1-bn6-ptd4",
+            "starters": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+            "bench_size": 6,
+            "passing_td": 4,
+        },
         "configs": configs,
     }
 
@@ -126,3 +132,41 @@ def test_snapshots_prior_healthy_blob_before_publish(values_module):
     ]
     assert uploads[0][1] is previous
     assert uploads[1][1] is candidate
+
+
+def test_validates_profile_registry(values_module):
+    profile_id = "qb1-rb2-wr2-te1-flex1-bn6-ptd4"
+    registry = {
+        "schema_version": 1,
+        "year": "2026",
+        "default_profile_id": profile_id,
+        "profiles": {
+            profile_id: {
+                "id": profile_id,
+                "blob_name": f"draft_rankings_2026_elboberto_{profile_id}.json",
+                "profile": _candidate(values_module)["profile"],
+                "config_count": 24,
+            },
+        },
+    }
+    assert values_module.validate_profile_registry(registry, expected_year=2026) == []
+    registry["default_profile_id"] = "missing"
+    assert any(
+        "default_profile_id" in error
+        for error in values_module.validate_profile_registry(registry, expected_year=2026)
+    )
+
+
+def test_snapshots_profile_blob_before_publish(values_module):
+    uploads = []
+    result = values_module.publish_json_with_snapshot(
+        {"new": True},
+        "draft_value_profiles_2026.json",
+        upload=lambda data, name: uploads.append((name, data)),
+        load=lambda _name: {"old": True},
+    )
+    assert result is None
+    assert [name for name, _data in uploads] == [
+        "draft_value_profiles_2026_prev.json",
+        "draft_value_profiles_2026.json",
+    ]

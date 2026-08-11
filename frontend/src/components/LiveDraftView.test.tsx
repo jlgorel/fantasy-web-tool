@@ -158,7 +158,7 @@ it('allows scoring override and optimistic manual draft with undo', async () => 
     target: { value: '1' },
   });
   await waitFor(() => expect(mockedApi.getDraftHelpRankings).toHaveBeenCalledWith(
-    '2026', 12, 1, false,
+    '2026', 12, 1, false, 'qb1-rb2-wr2-te1-flex1-bn6-ptd4',
   ));
 
   fireEvent.click(screen.getByRole('button', { name: 'Mark drafted' }));

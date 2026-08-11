@@ -258,6 +258,33 @@ def test_rankings_config_players_fake_loader():
     assert {r["player_id"] for r in rows} == {"1", "2", "3"}
 
 
+def test_rankings_config_players_loads_requested_profile_blob():
+    profile_id = "qb1-rb2-wr3-te1-flex2-bn7-ptd6"
+    profile_blob = f"draft_rankings_2024_elboberto_{profile_id}.json"
+    calls = []
+
+    def loader(name):
+        calls.append(name)
+        if name == "draft_value_profiles_2024.json":
+            return {"profiles": {profile_id: {
+                "id": profile_id, "blob_name": profile_blob,
+            }}}
+        if name == profile_blob:
+            payload = _blob_loader(name)
+            payload["profile"] = {"id": profile_id}
+            payload["configs"][config_key(12, 0.5, False)]["players"][0]["vbd"] = 777
+            return payload
+        if name.startswith("draft_adp_"):
+            raise FileNotFoundError(name)
+        raise AssertionError(f"unexpected blob: {name}")
+
+    rows = summaries.rankings_config_players(
+        2024, 12, 0.5, False, profile_id=profile_id, blob_loader=loader,
+    )
+    assert rows[0]["vbd"] == 777
+    assert profile_blob in calls
+
+
 def test_rankings_config_players_merges_adp():
     def loader(name):
         if name.startswith("draft_adp_"):
@@ -342,7 +369,7 @@ def test_partial_cached_adp_config_is_reloaded(monkeypatch):
 
 def test_missing_rankings_blob_is_not_negative_cached(monkeypatch):
     year = "2098"
-    summaries._REPO_CACHE.pop(year, None)
+    summaries._REPO_CACHE.pop(f"{year}:draft_rankings_{year}.json", None)
     calls = []
 
     def loader(_name):

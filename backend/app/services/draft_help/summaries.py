@@ -29,6 +29,7 @@ from app.services.draft_help.rankings_source import (
     RankingsRepository,
     adp_blob_name,
     config_key,
+    profile_registry_blob_name,
     rankings_blob_name,
 )
 from app.services.sleeper_league_lookup import get_league_season_chain
@@ -39,6 +40,7 @@ DEFAULT_SEASONS = 3
 
 _SOURCE_CACHE_TTL_SECONDS = 300
 _REPO_CACHE: Dict[str, Tuple[float, RankingsRepository]] = {}
+_PROFILE_REGISTRY_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 # Drafts/value pair fed to the aggregators.
 DraftCtx = Tuple[NormalizedDraft, Dict[str, RankingPlayer]]
@@ -48,27 +50,60 @@ DraftCtx = Tuple[NormalizedDraft, Dict[str, RankingPlayer]]
 # Rankings repo loading
 # ---------------------------------------------------------------------------
 def load_rankings_repo(
-    year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None
+    year: Any, *, profile_id: Optional[str] = None,
+    blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> Optional[RankingsRepository]:
     """Load (and cache) the ``draft_rankings_{year}.json`` repo for a season."""
     year = str(year)
+    blob_name = rankings_blob_name(year)
+    if profile_id:
+        registry = load_profile_registry(year, blob_loader=blob_loader) or {}
+        entry = (registry.get("profiles") or {}).get(str(profile_id)) or {}
+        candidate_name = entry.get("blob_name")
+        if not candidate_name:
+            return None
+        blob_name = str(candidate_name)
     if blob_loader is not None:  # tests: bypass cache
         try:
-            return RankingsRepository(blob_loader(rankings_blob_name(year)))
+            return RankingsRepository(blob_loader(blob_name))
         except Exception:
             return None
-    cached = _REPO_CACHE.get(year)
+    cache_key = f"{year}:{blob_name}"
+    cached = _REPO_CACHE.get(cache_key)
     if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
         return cached[1]
     try:
-        repo: Optional[RankingsRepository] = RankingsRepository(load_blob(rankings_blob_name(year)))
+        repo: Optional[RankingsRepository] = RankingsRepository(load_blob(blob_name))
     except Exception:
         repo = None
     if repo is not None:
-        _REPO_CACHE[year] = (time.monotonic(), repo)
+        _REPO_CACHE[cache_key] = (time.monotonic(), repo)
     else:
-        _REPO_CACHE.pop(year, None)
+        _REPO_CACHE.pop(cache_key, None)
     return repo
+
+
+def load_profile_registry(
+    year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    year = str(year)
+    name = profile_registry_blob_name(year)
+    loader = blob_loader or load_blob
+    if blob_loader is None:
+        cached = _PROFILE_REGISTRY_CACHE.get(year)
+        if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
+            return cached[1]
+    try:
+        registry = loader(name)
+    except Exception:
+        registry = None
+    if isinstance(registry, dict) and isinstance(registry.get("profiles"), dict):
+        if blob_loader is None:
+            _PROFILE_REGISTRY_CACHE[year] = (time.monotonic(), registry)
+        return registry
+    if blob_loader is None:
+        _PROFILE_REGISTRY_CACHE.pop(year, None)
+    return None
 
 
 def value_map_for(repo: Optional[RankingsRepository], league_cfg: Dict[str, Any]) -> Dict[str, RankingPlayer]:
@@ -84,14 +119,15 @@ def value_map_for(repo: Optional[RankingsRepository], league_cfg: Dict[str, Any]
 
 def rankings_config_players(
     year: Any, teams: int, ppr: float, superflex: bool,
-    *, blob_loader: Optional[Callable[[str], Any]] = None,
+    *, profile_id: Optional[str] = None,
+    blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Player rows for a (year, teams, ppr, superflex) config -- drives the
     mock draft board + the sim. Real ADP (``adp``/``adp_stdev``, from the FFC
     blob) is merged in when available; absent it, the sim falls back to VBD
     order. When the season value sheet is absent, a current ADP-only pool is
     returned if available so the browser can attach uploaded values."""
-    repo = load_rankings_repo(year, blob_loader=blob_loader)
+    repo = load_rankings_repo(year, profile_id=profile_id, blob_loader=blob_loader)
     if not repo:
         return _adp_only_config_players(
             year, teams, ppr, superflex, blob_loader=blob_loader,
@@ -117,10 +153,12 @@ def rankings_config_players(
 
 def rankings_config_sources(
     year: Any, teams: int, ppr: float, superflex: bool,
-    *, blob_loader: Optional[Callable[[str], Any]] = None,
+    *, profile_id: Optional[str] = None,
+    blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> Dict[str, Any]:
     """Source/freshness metadata for a board configuration."""
-    repo = load_rankings_repo(year, blob_loader=blob_loader)
+    repo = load_rankings_repo(year, profile_id=profile_id, blob_loader=blob_loader)
+    registry = load_profile_registry(year, blob_loader=blob_loader) or {}
     blob = _load_adp_blob(year, blob_loader=blob_loader) or {}
     if repo:
         value_source = repo.source or repo.source_file or "draft rankings"
@@ -144,6 +182,8 @@ def rankings_config_sources(
             "retrieved_at_utc": repo.retrieved_at_utc if repo else None,
             "attribution": repo.attribution if repo else None,
             "profile": repo.profile if repo else None,
+            "requested_profile_id": profile_id,
+            "available_profiles": list((registry.get("profiles") or {}).values()),
         },
         "adp": {
             "source": blob.get("source"),

@@ -54,6 +54,7 @@ assign_overall_ranks = rankings_source.assign_overall_ranks
 config_key = rankings_source.config_key
 parse_position_sheet = rankings_source.parse_position_sheet
 rankings_blob_name = rankings_source.rankings_blob_name
+value_profile_id = rankings_source.value_profile_id
 
 DEFAULT_SOURCE_DIR = REPO / "tests" / "fixtures" / "drafthelp"
 DEFAULT_OUT_DIR = REPO / "tests" / "fixtures" / "blobs"
@@ -102,16 +103,18 @@ def _read_position_rows(ws) -> List[List[Any]]:
 def _build_config(
     wb, resolver: NameResolver, teams: int, ppr: float, superflex: bool,
     budget: int, max_overall: int, passing_td: int = 4, bench_size: int = 6,
+    starters: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """Set LeagueInfo inputs, recalc, and extract one configuration."""
     li = wb.sheets["LeagueInfo"]
+    starters = starters or {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
     li.range(CELL_TEAMS).value = teams
     li.range(CELL_BUDGET).value = budget
-    li.range(CELL_QB_STARTERS).value = 2 if superflex else 1
-    li.range(CELL_RB_STARTERS).value = 2
-    li.range(CELL_WR_STARTERS).value = 2
-    li.range(CELL_TE_STARTERS).value = 1
-    li.range(CELL_FLEX_STARTERS).value = 1
+    li.range(CELL_QB_STARTERS).value = 2 if superflex else int(starters.get("QB", 1))
+    li.range(CELL_RB_STARTERS).value = int(starters.get("RB", 0))
+    li.range(CELL_WR_STARTERS).value = int(starters.get("WR", 0))
+    li.range(CELL_TE_STARTERS).value = int(starters.get("TE", 0))
+    li.range(CELL_FLEX_STARTERS).value = int(starters.get("FLEX", 0))
     li.range(CELL_SECOND_FLEX_STARTERS).value = 0
     li.range(CELL_BENCH_SIZE).value = bench_size
     li.range(CELL_FLEX_TYPE).value = "WR/RB/TE"
@@ -156,6 +159,7 @@ def build_year(
     source_metadata: Optional[Dict[str, Any]] = None,
     passing_td: int = 4,
     bench_size: int = 6,
+    starters: Optional[Dict[str, int]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Drive Excel for one workbook across the requested configurations."""
     import xlwings as xw
@@ -176,7 +180,7 @@ def build_year(
         for i, cfg in enumerate(configs, start=1):
             built = _build_config(
                 wb, resolver, cfg["teams"], cfg["ppr"], cfg["superflex"],
-                budget, max_overall, passing_td, bench_size,
+                budget, max_overall, passing_td, bench_size, starters,
             )
             key = built.pop("key")
             unmatched = built.pop("unmatched")
@@ -191,15 +195,17 @@ def build_year(
     finally:
         app.quit()
 
+    starters = starters or {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
     result = {
         "schema_version": SCHEMA_VERSION,
         "year": str(year),
         "source_file": src.name,
         "budget": budget,
         "profile": {
+            "id": value_profile_id(starters, bench_size, passing_td),
             "passing_td": passing_td,
             "bench_size": bench_size,
-            "starters": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+            "starters": dict(starters),
             "superflex_mode": "2qb",
         },
         "generated_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
@@ -209,6 +215,78 @@ def build_year(
     if source_metadata:
         result.update(source_metadata)
     return result
+
+
+def build_profiles(
+    year: str,
+    source_file: Path,
+    resolver: NameResolver,
+    configs: List[Dict[str, Any]],
+    profiles: List[Dict[str, Any]],
+    *,
+    budget: int,
+    max_overall: int,
+    visible: bool,
+    source_metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Build many exact profiles while opening Excel/the workbook only once."""
+    import xlwings as xw
+
+    if not source_file.exists():
+        raise FileNotFoundError(source_file)
+    app = xw.App(visible=visible, add_book=False)
+    app.display_alerts = False
+    app.screen_updating = False
+    results: Dict[str, Dict[str, Any]] = {}
+    try:
+        wb = app.books.open(str(source_file), update_links=False)
+        total = len(profiles) * len(configs)
+        completed = 0
+        for profile in profiles:
+            starters = dict(profile["starters"])
+            bench_size = int(profile["bench_size"])
+            passing_td = int(profile["passing_td"])
+            profile_id = value_profile_id(starters, bench_size, passing_td)
+            blob_configs: Dict[str, Any] = {}
+            unmatched_by_key: Dict[str, List[str]] = {}
+            for cfg in configs:
+                built = _build_config(
+                    wb, resolver, cfg["teams"], cfg["ppr"], cfg["superflex"],
+                    budget, max_overall, passing_td, bench_size, starters,
+                )
+                key = built.pop("key")
+                unmatched = built.pop("unmatched")
+                blob_configs[key] = built
+                if unmatched:
+                    unmatched_by_key[key] = sorted(set(unmatched))
+                completed += 1
+                print(
+                    f"    [{completed:>3}/{total}] {profile_id:<36} {key:<10} "
+                    f"players={len(built['players']):>3} unmatched={len(set(unmatched))}"
+                )
+            candidate: Dict[str, Any] = {
+                "schema_version": SCHEMA_VERSION,
+                "year": str(year),
+                "source_file": source_file.name,
+                "budget": budget,
+                "profile": {
+                    "id": profile_id,
+                    "passing_td": passing_td,
+                    "bench_size": bench_size,
+                    "starters": starters,
+                    "superflex_mode": "2qb",
+                },
+                "generated_at_utc": _dt.datetime.utcnow().isoformat() + "Z",
+                "configs": blob_configs,
+                "unmatched_names": unmatched_by_key,
+            }
+            if source_metadata:
+                candidate.update(source_metadata)
+            results[profile_id] = candidate
+        wb.close()
+    finally:
+        app.quit()
+    return results
 
 
 def _resolve_configs(args) -> List[Dict[str, Any]]:

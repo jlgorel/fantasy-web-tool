@@ -90,6 +90,33 @@ def rankings_blob_name(year: Any) -> str:
     return f"draft_rankings_{year}.json"
 
 
+def value_profile_id(
+    starters: Dict[str, Any], bench_size: int, passing_td: int,
+) -> str:
+    """Canonical exact-profile id used by registry entries and blob names."""
+    return "-".join([
+        f"qb{int(starters.get('QB') or 0)}",
+        f"rb{int(starters.get('RB') or 0)}",
+        f"wr{int(starters.get('WR') or 0)}",
+        f"te{int(starters.get('TE') or 0)}",
+        f"flex{int(starters.get('FLEX') or 0)}",
+        f"bn{int(bench_size)}",
+        f"ptd{int(passing_td)}",
+    ])
+
+
+def profile_rankings_blob_name(year: Any, profile_id: str) -> str:
+    """Independent provider-value blob for one exact league profile."""
+    safe = str(profile_id).strip().lower()
+    if not safe or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-" for ch in safe):
+        raise ValueError(f"Invalid value profile id: {profile_id!r}")
+    return f"draft_rankings_{year}_elboberto_{safe}.json"
+
+
+def profile_registry_blob_name(year: Any) -> str:
+    return f"draft_value_profiles_{year}.json"
+
+
 def adp_blob_name(year: Any) -> str:
     """Blob/fixture file name for a season's ADP (FantasyFootballCalculator)."""
     return f"draft_adp_{year}.json"

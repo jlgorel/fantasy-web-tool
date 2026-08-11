@@ -28,6 +28,26 @@ ELBOBERTO_POST_URL = (
 )
 
 
+def value_profile_id(starters: Dict[str, Any], bench_size: int, passing_td: int) -> str:
+    return "-".join([
+        f"qb{int(starters.get('QB') or 0)}",
+        f"rb{int(starters.get('RB') or 0)}",
+        f"wr{int(starters.get('WR') or 0)}",
+        f"te{int(starters.get('TE') or 0)}",
+        f"flex{int(starters.get('FLEX') or 0)}",
+        f"bn{int(bench_size)}",
+        f"ptd{int(passing_td)}",
+    ])
+
+
+def profile_rankings_blob_name(year: Any, profile_id: str) -> str:
+    return f"draft_rankings_{year}_elboberto_{profile_id}.json"
+
+
+def profile_registry_blob_name(year: Any) -> str:
+    return f"draft_value_profiles_{year}.json"
+
+
 def _ppr_label(ppr: float) -> str:
     value = float(ppr)
     return str(int(value)) if value.is_integer() else str(value)
@@ -119,6 +139,21 @@ def validate_rankings_blob(
         errors.append("provider metadata is missing")
     if not str(blob.get("generated_at_utc") or "").strip():
         errors.append("generated_at_utc is missing")
+    profile = blob.get("profile")
+    if not isinstance(profile, dict):
+        errors.append("profile metadata is missing")
+    else:
+        starters = profile.get("starters")
+        try:
+            expected_profile_id = value_profile_id(
+                starters if isinstance(starters, dict) else {},
+                int(profile.get("bench_size")),
+                int(profile.get("passing_td")),
+            )
+        except (TypeError, ValueError):
+            expected_profile_id = ""
+        if not expected_profile_id or profile.get("id") not in (None, expected_profile_id):
+            errors.append("profile id/settings are invalid")
 
     configs = blob.get("configs")
     if not isinstance(configs, dict) or not configs:
@@ -175,6 +210,53 @@ def validate_rankings_blob(
             )
 
     return errors
+
+
+def validate_profile_registry(registry: Any, *, expected_year: Any) -> List[str]:
+    if not isinstance(registry, dict):
+        return ["profile registry is not an object"]
+    errors: List[str] = []
+    if int(registry.get("schema_version") or 0) != 1:
+        errors.append("unsupported profile registry schema_version")
+    if str(registry.get("year")) != str(expected_year):
+        errors.append("profile registry year mismatch")
+    profiles = registry.get("profiles")
+    if not isinstance(profiles, dict) or not profiles:
+        errors.append("profile registry has no profiles")
+        return errors
+    default_id = registry.get("default_profile_id")
+    if default_id not in profiles:
+        errors.append("default_profile_id is missing from profiles")
+    for profile_id, entry in profiles.items():
+        if not isinstance(entry, dict):
+            errors.append(f"{profile_id}: registry entry is not an object")
+            continue
+        settings = entry.get("profile")
+        if not isinstance(settings, dict):
+            errors.append(f"{profile_id}: profile settings are missing")
+            continue
+        expected_id = value_profile_id(
+            settings.get("starters") or {},
+            settings.get("bench_size") or 0,
+            settings.get("passing_td") or 0,
+        )
+        if profile_id != expected_id:
+            errors.append(f"{profile_id}: id does not match settings")
+        if not str(entry.get("blob_name") or "").endswith(".json"):
+            errors.append(f"{profile_id}: blob_name is invalid")
+    return errors
+
+
+def publish_json_with_snapshot(
+    candidate: Dict[str, Any], blob_name: str, *,
+    upload: Callable[[Any, str], None],
+    load: Callable[[str], Optional[Any]],
+) -> None:
+    existing = load(blob_name)
+    if isinstance(existing, dict):
+        previous_name = blob_name[:-5] + "_prev.json" if blob_name.endswith(".json") else blob_name + "_prev"
+        upload(existing, previous_name)
+    upload(candidate, blob_name)
 
 
 def publish_rankings_candidate(

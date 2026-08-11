@@ -35,6 +35,22 @@ AZURE_DIR = REPO / "azure-functions"
 DEFAULT_OUT_DIR = REPO / "tests" / "fixtures" / "blobs"
 DEFAULT_LOCAL_SETTINGS = AZURE_DIR / "local.settings.json"
 DEFAULT_CONTAINER = "fantasyjsons"
+DEFAULT_STARTERS = {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
+
+
+def common_profiles():
+    """Curated centralized grid: WR2/3 × FLEX1/2 × BN5/6/7 × pass-TD4/6."""
+    return [
+        {
+            "starters": {"QB": 1, "RB": 2, "WR": wr, "TE": 1, "FLEX": flex},
+            "bench_size": bench,
+            "passing_td": passing_td,
+        }
+        for wr in (2, 3)
+        for flex in (1, 2)
+        for bench in (5, 6, 7)
+        for passing_td in (4, 6)
+    ]
 
 sys.path.insert(0, str(TOOLS))
 import build_draft_rankings as builder  # noqa: E402
@@ -172,6 +188,10 @@ def parse_args(argv=None):
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--passing-td", type=int, choices=(4, 6), default=4)
     parser.add_argument("--bench-size", type=int, default=6)
+    parser.add_argument("--wr-starters", type=int, choices=(2, 3), default=2)
+    parser.add_argument("--flex-starters", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--all-profiles", action="store_true",
+                        help="Generate the curated 24-profile registry in one Excel session.")
     parser.add_argument("--budget", type=int, default=builder.DEFAULT_AUCTION_BUDGET)
     parser.add_argument("--max-overall", type=int, default=300)
     parser.add_argument("--visible", action="store_true")
@@ -185,13 +205,6 @@ def parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    if args.passing_td != 4 and args.upload:
-        print(
-            "FATAL: the current production config key represents the 4-point passing-TD "
-            "profile. A 6-point profile needs the planned schema migration.",
-            file=sys.stderr,
-        )
-        return 2
 
     connection = _connection_string(args.connection_string, args.local_settings)
     upload_blob = None
@@ -245,56 +258,93 @@ def main(argv=None) -> int:
                 f"version {source_metadata.get('source_version') or 'unknown'})."
             )
 
-        candidate = builder.build_year(
-            str(args.year),
-            source_path.parent,
-            resolver,
-            configs,
-            args.budget,
-            args.max_overall,
-            args.visible,
-            source_file=source_path,
-            source_metadata=source_metadata,
-            passing_td=args.passing_td,
-            bench_size=args.bench_size,
+        profiles = common_profiles() if args.all_profiles else [{
+            "starters": {
+                "QB": 1, "RB": 2, "WR": args.wr_starters,
+                "TE": 1, "FLEX": args.flex_starters,
+            },
+            "bench_size": args.bench_size,
+            "passing_td": args.passing_td,
+        }]
+        candidates = builder.build_profiles(
+            str(args.year), source_path, resolver, configs, profiles,
+            budget=args.budget, max_overall=args.max_overall,
+            visible=args.visible, source_metadata=source_metadata,
         )
-        if candidate is None:
-            return 1
 
     required = draft_values.expected_config_keys()
-    errors = draft_values.validate_rankings_blob(
-        candidate,
-        expected_year=args.year,
-        required_keys=required,
-        min_players_per_config=100,
-    )
-    if errors:
-        print("REJECTED: generated rankings did not pass validation:", file=sys.stderr)
-        for error in errors[:20]:
-            print(f"  - {error}", file=sys.stderr)
-        return 1
-
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    output = args.out_dir / f"draft_rankings_{args.year}.json"
-    output.write_text(json.dumps(candidate, separators=(",", ":"), allow_nan=False), encoding="utf-8")
-    print(f"Validated {len(candidate['configs'])} configs; wrote {output}.")
-
-    if args.upload:
-        assert upload_blob is not None and load_blob is not None
-        errors = draft_values.publish_rankings_candidate(
-            candidate,
-            year=args.year,
-            upload=upload_blob,
-            load=load_blob,
-            required_keys=required,
+    registry_entries: Dict[str, Any] = {}
+    standard_default_id = draft_values.value_profile_id(DEFAULT_STARTERS, 6, 4)
+    for profile_id, candidate in candidates.items():
+        errors = draft_values.validate_rankings_blob(
+            candidate, expected_year=args.year, required_keys=required,
             min_players_per_config=100,
         )
         if errors:
-            print("REJECTED before upload: " + "; ".join(errors[:10]), file=sys.stderr)
+            print(f"REJECTED {profile_id}: " + "; ".join(errors[:20]), file=sys.stderr)
             return 1
-        print(f"Published guarded ElBoberto values for {args.year}.")
+        blob_name = draft_values.profile_rankings_blob_name(args.year, profile_id)
+        output = args.out_dir / blob_name
+        output.write_text(
+            json.dumps(candidate, separators=(",", ":"), allow_nan=False),
+            encoding="utf-8",
+        )
+        registry_entries[profile_id] = {
+            "id": profile_id,
+            "blob_name": blob_name,
+            "profile": candidate["profile"],
+            "config_count": len(candidate["configs"]),
+            "generated_at_utc": candidate["generated_at_utc"],
+        }
+        print(f"Validated {profile_id}; wrote {output}.")
+
+    default_profile_id = (
+        standard_default_id if standard_default_id in registry_entries
+        else next(iter(registry_entries))
+    )
+    registry = {
+        "schema_version": 1,
+        "year": str(args.year),
+        "provider": draft_values.ELBOBERTO_PROVIDER,
+        "default_profile_id": default_profile_id,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "profiles": registry_entries,
+    }
+    registry_errors = draft_values.validate_profile_registry(
+        registry, expected_year=args.year,
+    )
+    if registry_errors:
+        print("REJECTED registry: " + "; ".join(registry_errors), file=sys.stderr)
+        return 1
+    registry_path = args.out_dir / draft_values.profile_registry_blob_name(args.year)
+    registry_path.write_text(json.dumps(registry, separators=(",", ":")), encoding="utf-8")
+
+    if args.upload:
+        assert upload_blob is not None and load_blob is not None
+        for profile_id, candidate in candidates.items():
+            blob_name = registry_entries[profile_id]["blob_name"]
+            draft_values.publish_json_with_snapshot(
+                candidate, blob_name, upload=upload_blob, load=load_blob,
+            )
+        if standard_default_id in candidates:
+            errors = draft_values.publish_rankings_candidate(
+                candidates[standard_default_id], year=args.year,
+                upload=upload_blob, load=load_blob, required_keys=required,
+                min_players_per_config=100,
+            )
+            if errors:
+                print("REJECTED default publish: " + "; ".join(errors[:10]), file=sys.stderr)
+                return 1
+        # Registry goes last: readers cannot discover a profile until every
+        # referenced profile blob has been safely published.
+        draft_values.publish_json_with_snapshot(
+            registry, draft_values.profile_registry_blob_name(args.year),
+            upload=upload_blob, load=load_blob,
+        )
+        print(f"Published {len(candidates)} ElBoberto profiles for {args.year}.")
     else:
-        print("Dry publish: add --upload to snapshot and publish the validated blob.")
+        print(f"Dry publish: validated {len(candidates)} profile(s); add --upload to publish.")
     return 0
 
 

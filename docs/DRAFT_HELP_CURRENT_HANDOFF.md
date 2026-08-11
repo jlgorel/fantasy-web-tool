@@ -2,9 +2,9 @@
 
 > **Created:** 2026-08-10  
 > **Current branch:** `dev/jgorel/addinbacktestingandproof`  
-> **Status:** Phases 1, 2, A, B, and C are implemented. The first current-year
-> external value source (ElBoberto) is now generated and published, with an
-> exact-profile ElBoberto CheatSheet paste workflow. The working tree
+> **Status:** Phases 1, 2, A, B, C, and D3 are implemented. ElBoberto now has
+> a published 24-profile exact-profile registry, with an exact-profile
+> CheatSheet paste fallback for unsupported league shapes. The working tree
 > has new uncommitted source-ingestion/UI work.
 > **Use this document as the authoritative starting point for the next thread.**
 > `docs/DRAFT_HELP_HANDOFF.md` describes an older state and contains obsolete
@@ -60,16 +60,16 @@ players.
 
 ## 1. Current validation baseline
 
-The final validation run after Phase C cleanup reported:
+The final validation run after Phase D3 reported:
 
-- **Backend:** 518 tests passed.
-- **Frontend:** 13 tests passed.
+- **Backend:** 521 tests passed.
+- **Frontend:** 14 tests passed.
 - **TypeScript:** `npx tsc --noEmit -p tsconfig.json` passed.
 - **Production frontend build:** passed.
 - **Whitespace/patch integrity:** `git diff --check` passed.
-- **Browser validation:** Custom Draft Room loaded a historical board, displayed
-  player headshots/team logos, returned confidence and middle-50% ranges, and
-  showed `cached state` on an unchanged second request.
+- **Browser validation:** a centralized non-default WR3/FLEX2/bench-7/6-point
+  passing-TD board loaded automatically from ElBoberto; changing to unsupported
+  RB3 correctly disabled provider VBD and required an exact pasted sheet.
 - **Website-sized sim benchmark:** approximately 2.344 seconds uncached for a
   300-player board, 60 rollouts, and an eight-player candidate request. An exact
   repeated state is served from the five-minute recommendation cache.
@@ -238,6 +238,16 @@ Production refresh:
 - `daily_draft_adp_refresh` runs at 10:00 UTC only in July, August, and September.
 - Invalid or partial upstream output is rejected rather than replacing a healthy
   production blob.
+- **2026-08-11 Azure incident:** the production container did not contain
+  `draft_adp_2026.json`, and the deployed Function App did not yet list
+  `daily_draft_adp_refresh`, so Azure-backed boards correctly fell through to
+  rank fallback. A fresh FantasyPros candidate was built against production
+  `players.json`, validated, and published (24 configurations, 5,736 total
+  matched rows; 306 in 12-team half-PPR 1QB). The current Function App was then
+  deployed to `fantasydatascraperv2`; Azure now registers the daily timer and
+  has its required storage setting. Backend and browser readback showed
+  `fantasypros_draftwizard`, 255/300 ElBoberto-board players with ADP, and no
+  rank-fallback badge.
 
 Historical ADP:
 
@@ -264,9 +274,14 @@ Current values:
   the Azure connection string from the environment or the ignored local Azure
   settings file without logging the credential.
 - The generator still uses the provider's finished `AvgVBD`; it does not
-  recreate or alter ElBoberto's VBD methodology. The current production profile
-  is 4-point passing TD, six bench spots, 1 QB/2 RB/2 WR/1 TE/1 FLEX, with the
-  existing 1QB-or-2QB configuration dimension.
+  recreate or alter ElBoberto's VBD methodology. Production now has 24 exact
+  profiles: WR2/WR3 × FLEX1/FLEX2 × bench 5/6/7 × 4/6-point passing TD. Each
+  profile contains all 24 team/PPR/1QB-or-superflex configurations.
+- Exact values are independently published as
+  `draft_rankings_2026_elboberto_{profile_id}.json`. The registry is
+  `draft_value_profiles_2026.json`; it is published last so readers cannot
+  discover an incomplete profile rollout. The legacy `draft_rankings_2026.json`
+  remains the standard WR2/FLEX1/bench-6/4-point profile.
 - This refresh is automated as a local one-command workflow but still requires
   Windows desktop Excel/`xlwings`. It cannot yet run inside Azure Functions.
 - Representative 12-team half-PPR source cells are pinned by regression:
@@ -300,8 +315,9 @@ Browser-local custom value support:
   passing-TD setting so values cannot leak across materially different leagues.
 - Custom-room dropdowns cover QB 1–2, RB 1–3, WR 1–3, TE 0–3, FLEX 0–3, bench
   3–8, 4/6-point passing TD, 8/10/12/14 teams, three PPR settings, and optional
-  superflex. Only the published profile uses centralized provider VBD; every
-  mismatch disables provider VBD and requires at least 50 pasted/manual values.
+  superflex. The 24-profile centralized grid loads automatically. Every shape
+  outside that grid disables provider VBD and requires at least 50 exact
+  pasted/manual values rather than silently selecting a nearby profile.
 - `Avoid` excludes a player from the user's candidate/pick policy.
 - Manually valued players are force-evaluated as priority candidates even when
   outside the normal shortlist.
@@ -313,6 +329,28 @@ Browser-local custom value support:
   clip all but the first result.
 - Local backend settings load with values redacted; storage keys and other
   credentials must never be printed to logs or handoffs.
+
+### Phase D3 — centralized exact-profile registry
+
+- `tools/build_draft_rankings.py` opens Excel once and generates all profiles
+  and their configurations in one session. The completed production run made
+  576 recalculations, each with 300 matched players and zero unmatched names.
+- `tools/refresh_elboberto_values.py --all-profiles --upload` validates every
+  independent blob, snapshots prior blobs, preserves the standard legacy blob,
+  and publishes the registry last.
+- Backend registry/repository caches are profile-aware. A requested profile that
+  is absent from the registry fails closed to ADP-only data; it never falls back
+  to the legacy value board.
+- `GET /draft-help/rankings` accepts `profile`, reports the selected/requested
+  profile and all available profiles, and returns the exact profile board.
+  Simulation requests carry the same `profile_id` into board loading and cache
+  identity.
+- Mock and live rooms produce the same canonical profile ID as Python. Common
+  profiles load centrally; unsupported profiles retain the exact ElBoberto paste
+  fallback and the 50-value safety threshold.
+- Azure readback verified 24 registry entries, the correct standard default,
+  and a non-default WR3/FLEX2/bench-7/6-point blob with 24 configurations and
+  300 players in the sampled configuration.
 
 Useful files:
 
@@ -639,12 +677,9 @@ No commit was created by the assistant.
   Google copy or desktop spreadsheet engine is not solved.
 - Football Absurdity is no longer exposed in the product. Do not restore it or
   make production depend on Playwright scraping of its zero-heavy generator.
-- Side-by-side source comparison and explicit simulation source selection are
-  not implemented yet; the current backend still exposes one canonical value
-  blob per year.
-- The current published profile is 4-point passing TD. A 6-point passing-TD
-  selector requires an exact-profile schema/cache/UI migration rather than
-  overloading the existing 24 configuration keys.
+- Side-by-side provider comparison and explicit simulation provider selection
+  are not implemented yet. ElBoberto has independent profile blobs, but there
+  is still only one centralized provider.
 - Any additional default source must provide finished cross-position values;
   rankings-only or projection-only sources are insufficient.
 - Automated retrieval may be blocked by licensing, redistribution terms,
@@ -715,7 +750,7 @@ For each candidate, verify:
 Deliver the source survey and recommendation to the user before writing a
 provider-specific scraper if the choice is not obvious.
 
-### Step 2 — provider registry and exact-profile blobs
+### Step 2 — provider registry and exact-profile blobs (completed for ElBoberto)
 
 The adapter should output finished source values without changing their
 meaning. The canonical blob should include, at minimum:
@@ -803,18 +838,19 @@ Use the following in the next thread:
 
 > Read `docs/DRAFT_HELP_CURRENT_HANDOFF.md` completely before making changes.
 > ElBoberto v0.4 is the provisional default 2026 finished-value source and is
-> live in `draft_rankings_2026.json`. The refresh tool with `--upload` discovers
-> the current public workbook, uses desktop Excel to build
-> and validate all 24 configurations, snapshots the prior healthy blob, and
-> publishes it. The remaining blocker is unattended cloud recalculation;
+> live in a 24-profile registry plus a legacy default blob. The refresh tool
+> with `--all-profiles --upload` uses desktop Excel to build and validate 576
+> profile/config combinations, snapshots prior healthy blobs, publishes exact
+> profile blobs, and publishes the registry last. The remaining blocker is
+> unattended cloud recalculation;
 > DraftSheets is the main comparison candidate, while unsupported profiles use
 > a browser-local ElBoberto CheatSheet paste workflow. Do not recreate or blend
 > provider VBD/VORP from
 > projections, man-games, ECR, Vegas, or ADP unless the user explicitly reverses
 > that decision. Keep FantasyPros DraftWizard as independent ADP, preserve
-> manual/Avoid overrides and Phase C semantics, and design exact profiles before
-> adding centralized 6-point passing TD profiles or source selection. The
-> validated baseline is 518 backend tests, 13 frontend tests, clean TypeScript,
+> manual/Avoid overrides and Phase C semantics. D3 exact profiles are complete;
+> the next phase is D4 provider comparison/selection or unattended refresh. The
+> validated baseline is 521 backend tests, 14 frontend tests, clean TypeScript,
 > a successful production build, and a regenerated 960-draft proof.
 
 ---

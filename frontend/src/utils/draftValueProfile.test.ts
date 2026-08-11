@@ -1,4 +1,5 @@
 import {
+  centralizedProfileId,
   derivedRounds,
   profileStorageSignature,
   providerProfileMatches,
@@ -17,6 +18,18 @@ it('matches only the exact published starter, bench and passing-TD profile', () 
   expect(providerProfileMatches(profile, { ...starters, RB: 3 }, 6, 4)).toBe(false);
   expect(providerProfileMatches(profile, starters, 7, 4)).toBe(false);
   expect(providerProfileMatches(profile, starters, 6, 6)).toBe(false);
+});
+
+it('selects only curated centralized profiles', () => {
+  expect(centralizedProfileId(
+    { QB: 1, RB: 2, WR: 3, TE: 1, FLEX: 2 }, false, 7, 6,
+  )).toBe('qb1-rb2-wr3-te1-flex2-bn7-ptd6');
+  expect(centralizedProfileId(
+    { QB: 1, RB: 3, WR: 3, TE: 1, FLEX: 2 }, false, 7, 6,
+  )).toBeNull();
+  expect(centralizedProfileId(
+    { QB: 2, RB: 2, WR: 3, TE: 1, FLEX: 2 }, true, 7, 6,
+  )).toBeNull();
 });
 
 it('keys browser values to the exact profile and derives K/DEF-inclusive rounds', () => {

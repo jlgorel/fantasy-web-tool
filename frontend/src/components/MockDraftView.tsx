@@ -64,6 +64,7 @@ import {
 } from '../utils/draftRoster';
 import { confidencePresentation } from '../utils/simConfidence';
 import {
+  centralizedProfileId,
   derivedRounds,
   normalizedStarterSlots,
   profileStorageSignature,
@@ -183,7 +184,10 @@ const MockDraftView: React.FC = () => {
   const profileMatches = providerProfileMatches(
     sources?.values?.profile, starterSlots, benchSize, passingTd,
   );
-  const useProviderValues = !sources?.values?.provider || profileMatches;
+  const requestedProfileId = centralizedProfileId(
+    starterSlots, superflex, benchSize, passingTd,
+  );
+  const useProviderValues = !sources ? true : profileMatches;
   const effectivePlayers = useMemo(() => (players || []).map((player) => {
     const custom = customSettings.entries[player.player_id];
     if (custom?.value !== undefined) return { ...player, vbd: custom.value };
@@ -255,7 +259,9 @@ const MockDraftView: React.FC = () => {
     setError(null);
     setSim(null);
     try {
-      const resp = await api.getDraftHelpRankings(year, teams, ppr, superflex);
+      const resp = await api.getDraftHelpRankings(
+        year, teams, ppr, superflex, requestedProfileId,
+      );
       if (!resp.players.length) {
         setError('No rankings available for that season/config.');
       }
@@ -384,6 +390,7 @@ const MockDraftView: React.FC = () => {
         n_sims: 60, top_k: 8, seed: 1,
         value_overrides: valueOverrides,
         use_provider_values: useProviderValues,
+        profile_id: requestedProfileId || undefined,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityCandidateIds,
       });

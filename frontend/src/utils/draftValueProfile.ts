@@ -33,6 +33,28 @@ export function profileStorageSignature(
   return `${slotPart}:bn${benchSize}:ptd${passingTd}`;
 }
 
+export function centralizedProfileId(
+  starterSlots: Record<string, number>,
+  superflex: boolean,
+  benchSize: number,
+  passingTd: number,
+): string | null {
+  const qb = Number(starterSlots.QB || 0);
+  const rb = Number(starterSlots.RB || 0);
+  const wr = Number(starterSlots.WR || 0);
+  const te = Number(starterSlots.TE || 0);
+  const flex = Number(starterSlots.FLEX || 0);
+  const unsupportedFlex = ['REC_FLEX', 'WRRB_FLEX'].some(
+    (slot) => Number(starterSlots[slot] || 0) > 0,
+  );
+  if (
+    qb !== 1 || rb !== 2 || ![2, 3].includes(wr) || te !== 1
+    || ![1, 2].includes(flex) || ![5, 6, 7].includes(benchSize)
+    || ![4, 6].includes(passingTd) || unsupportedFlex
+  ) return null;
+  return `qb1-rb2-wr${wr}-te1-flex${flex}-bn${benchSize}-ptd${passingTd}`;
+}
+
 export function providerProfileMatches(
   profile: ValueProfile,
   starterSlots: Record<string, number>,
