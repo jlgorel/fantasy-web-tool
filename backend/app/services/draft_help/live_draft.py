@@ -17,6 +17,7 @@ class LiveDraftError(ValueError):
 class LiveDraftConfig:
     teams: int
     rounds: int
+    bench_size: int
     ppr: float
     superflex: bool
     slots: Dict[str, int]
@@ -25,6 +26,7 @@ class LiveDraftConfig:
         return {
             "teams": self.teams,
             "rounds": self.rounds,
+            "bench_size": self.bench_size,
             "ppr": self.ppr,
             "superflex": self.superflex,
             "slots": self.slots,
@@ -35,6 +37,7 @@ def infer_draft_config(detail: Mapping[str, Any]) -> LiveDraftConfig:
     settings = detail.get("settings") or {}
     teams = int(settings.get("teams") or 0)
     rounds = int(settings.get("rounds") or 0)
+    bench_size = max(0, int(settings.get("slots_bn") or 0))
     if teams < 2 or rounds < 1:
         raise LiveDraftError("Draft is missing a valid team count or round count.")
 
@@ -69,7 +72,7 @@ def infer_draft_config(detail: Mapping[str, Any]) -> LiveDraftConfig:
     )
     if superflex and not slots.get("SUPER_FLEX") and slots.get("QB", 0) < 2:
         slots["SUPER_FLEX"] = 1
-    return LiveDraftConfig(teams, rounds, ppr, superflex, slots)
+    return LiveDraftConfig(teams, rounds, bench_size, ppr, superflex, slots)
 
 
 def validate_supported_draft(detail: Mapping[str, Any]) -> LiveDraftConfig:

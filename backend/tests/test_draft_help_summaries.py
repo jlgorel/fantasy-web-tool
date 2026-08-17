@@ -258,6 +258,13 @@ def test_rankings_config_players_fake_loader():
     assert {r["player_id"] for r in rows} == {"1", "2", "3"}
 
 
+def test_rankings_config_players_never_uses_nearest_provider_config():
+    rows = summaries.rankings_config_players(
+        2024, 10, 1.0, False, blob_loader=_blob_loader,
+    )
+    assert rows == []
+
+
 def test_rankings_config_players_loads_requested_profile_blob():
     profile_id = "qb1-rb2-wr3-te1-flex2-bn7-ptd6"
     profile_blob = f"draft_rankings_2024_elboberto_{profile_id}.json"
@@ -283,6 +290,52 @@ def test_rankings_config_players_loads_requested_profile_blob():
     )
     assert rows[0]["vbd"] == 777
     assert profile_blob in calls
+
+
+def test_rankings_config_players_joins_provider_values_without_blending():
+    profile_id = "qb1-rb2-wr2-te1-flex1-bn5-ptd4"
+    key = config_key(12, 0.5, False)
+
+    def provider_blob(provider, value):
+        return {
+            "year": "2026", "provider": provider, "profile": {"id": profile_id},
+            "configs": {key: {
+                "teams": 12, "ppr": 0.5, "superflex": False,
+                "players": [{
+                    "player_id": "1", "name": "Shared Player", "pos": "RB",
+                    "vbd": value, "overall_rank": 1,
+                }],
+            }},
+        }
+
+    def loader(name):
+        if name == "draft_value_providers_2026.json":
+            return {"providers": {
+                "elboberto": {"id": "elboberto", "profile_registry_blob_name": "elb_profiles.json"},
+                "draftsheets": {"id": "draftsheets", "profile_registry_blob_name": "ds_profiles.json"},
+            }}
+        if name in {"elb_profiles.json", "ds_profiles.json"}:
+            provider = "elboberto" if name.startswith("elb") else "draftsheets"
+            return {"profiles": {profile_id: {
+                "id": profile_id, "blob_name": f"{provider}.json",
+            }}}
+        if name == "elboberto.json":
+            return provider_blob("elboberto", 200.0)
+        if name == "draftsheets.json":
+            return provider_blob("draftsheets", 125.0)
+        if name.startswith("draft_adp_"):
+            raise FileNotFoundError(name)
+        raise AssertionError(name)
+
+    rows = summaries.rankings_config_players(
+        2026, 12, 0.5, False,
+        profile_id=profile_id, provider_id="draftsheets", blob_loader=loader,
+    )
+    assert rows[0]["vbd"] == 125.0
+    assert rows[0]["provider_values"] == {
+        "elboberto": {"value": 200.0, "rank": 1, "points": None, "tier": None},
+        "draftsheets": {"value": 125.0, "rank": 1, "points": None, "tier": None},
+    }
 
 
 def test_rankings_config_players_merges_adp():
@@ -393,6 +446,38 @@ def test_route_rankings_from_fixture(client):
     assert "overall_rank" in body["players"][0] and "fpts" in body["players"][0]
     assert body["sources"]["values"]["source"]
     assert body["sources"]["adp"]["source"] == "fantasyfootballcalculator"
+    assert body["sources"]["values"]["selected_provider_id"] == "elboberto"
+    assert body["sources"]["values"]["available_providers"][0]["id"] == "elboberto"
+
+
+def test_route_rejects_unknown_explicit_provider(client, monkeypatch):
+    monkeypatch.setattr(
+        summaries, "load_value_providers_registry",
+        lambda *args, **kwargs: {"providers": {"elboberto": {"id": "elboberto"}}},
+    )
+    response = client.get(
+        "/draft-help/rankings?year=2026&teams=12&ppr=0.5&provider=unknown"
+    )
+    assert response.status_code == 409
+    assert response.get_json()["error"] == "value provider unavailable"
+
+
+def test_route_rejects_profile_that_disagrees_with_sim_settings(client, monkeypatch):
+    monkeypatch.setattr(
+        summaries, "load_value_providers_registry",
+        lambda *args, **kwargs: {"providers": {"elboberto": {"id": "elboberto"}}},
+    )
+    response = client.post("/draft-help/sim", json={
+        "year": "2026", "teams": 12, "rounds": 15, "my_slot": 1,
+        "ppr": 0.5, "superflex": False,
+        "simulation_provider_id": "elboberto",
+        "profile_id": "qb1-rb2-wr2-te1-flex1-bn6-ptd4",
+        "bench_size": 7, "passing_td": 4,
+        "slots": {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1},
+        "drafted_ids": [], "my_roster_ids": [],
+    })
+    assert response.status_code == 400
+    assert response.get_json()["expected_profile_id"].endswith("bn7-ptd4")
 
 
 def test_route_sim_from_fixture(client):
@@ -500,7 +585,7 @@ def test_route_custom_profile_ignores_provider_values(client, monkeypatch):
     assert accepted.status_code == 200
     assert captured["1"] == pytest.approx(99)
     assert captured["50"] == pytest.approx(50)
-    assert captured["60"] == 0  # provider VBD/fpts were deliberately stripped
+    assert "60" not in captured  # no provider value/override means no sim currency
 
 
 def test_route_sim_exact_state_cache_and_invalidation(client, monkeypatch):

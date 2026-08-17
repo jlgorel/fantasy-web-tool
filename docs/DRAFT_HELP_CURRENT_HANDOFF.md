@@ -2,9 +2,10 @@
 
 > **Created:** 2026-08-10  
 > **Current branch:** `dev/jgorel/addinbacktestingandproof`  
-> **Status:** Phases 1, 2, A, B, C, and D3 are implemented. ElBoberto now has
-> a published 24-profile exact-profile registry, with an exact-profile
-> CheatSheet paste fallback for unsupported league shapes. The working tree
+> **Status:** Phases 1, 2, A, B, C, D3, and the first D4 multi-provider slice
+> are implemented. ElBoberto has a 24-profile registry; DraftSheets is live for
+> its one verified public exact configuration, with explicit source selection
+> and no blending. The working tree
 > has new uncommitted source-ingestion/UI work.
 > **Use this document as the authoritative starting point for the next thread.**
 > `docs/DRAFT_HELP_HANDOFF.md` describes an older state and contains obsolete
@@ -60,16 +61,18 @@ players.
 
 ## 1. Current validation baseline
 
-The final validation run after Phase D3 reported:
+The final validation run after the first Phase D4 provider slice reported:
 
-- **Backend:** 521 tests passed.
-- **Frontend:** 14 tests passed.
+- **Backend:** 533 tests passed.
+- **Frontend:** 15 tests passed.
 - **TypeScript:** `npx tsc --noEmit -p tsconfig.json` passed.
 - **Production frontend build:** passed.
 - **Whitespace/patch integrity:** `git diff --check` passed.
-- **Browser validation:** a centralized non-default WR3/FLEX2/bench-7/6-point
-  passing-TD board loaded automatically from ElBoberto; changing to unsupported
-  RB3 correctly disabled provider VBD and required an exact pasted sheet.
+- **Browser validation:** the exact 12-team half-PPR 1QB/2RB/2WR/1TE/1FLEX,
+  bench-5, 4-point passing-TD room displayed ElBoberto and DraftSheets raw
+  Value/rank side by side. Selecting DraftSheets changed Used VBD and the sim
+  request; Puka Nacua was recommended with DraftSheets Value 140. Unsupported
+  DraftSheets configurations returned 409 instead of substituting another board.
 - **Website-sized sim benchmark:** approximately 2.344 seconds uncached for a
   300-player board, 60 rollouts, and an eight-player candidate request. An exact
   repeated state is served from the five-minute recommendation cache.
@@ -263,7 +266,7 @@ Current values:
 - Historical ranking fixtures exist for 2022–2025 and came from external
   BeerSheets/ElBoberto-style workbooks.
 - ElBoberto is the selected provisional default external 2026 value source.
-- Version 0.4 of the public 2026 workbook was discovered from the creator's
+- Version 0.5 of the public 2026 workbook was discovered from the creator's
   Reddit post, downloaded from Dropbox, recalculated in desktop Excel for all
   24 supported configurations, conservatively matched to the production
   Sleeper player map, validated at 300 players/config with zero unmatched
@@ -285,8 +288,8 @@ Current values:
 - This refresh is automated as a local one-command workflow but still requires
   Windows desktop Excel/`xlwings`. It cannot yet run inside Azure Functions.
 - Representative 12-team half-PPR source cells are pinned by regression:
-  Jahmyr Gibbs 211.01, Bijan Robinson 206.53, Christian McCaffrey 169.73,
-  and Derrick Henry 138.38. These are ElBoberto `AvgVBD` values, not an
+  Jahmyr Gibbs 211.58, Bijan Robinson 206.96, Christian McCaffrey 170.12,
+  and Derrick Henry 138.56. These are ElBoberto `AvgVBD` values, not an
   inverted rank sequence.
 - The board displays independent `ADP`, provider `Source VBD`, and effective
   `Used VBD` columns. Saved pasted/provider imports can no longer silently hide
@@ -351,6 +354,58 @@ Browser-local custom value support:
 - Azure readback verified 24 registry entries, the correct standard default,
   and a non-default WR3/FLEX2/bench-7/6-point blob with 24 configurations and
   300 players in the sampled configuration.
+
+### Phase D4 — provider comparison and explicit simulation source
+
+- `draft_value_providers_{year}.json` is the provider-level discoverability
+  registry. Provider profile registries and exact provider blobs remain
+  independent; the provider registry is published last.
+- Backend rankings requests accept explicit `provider`; simulations accept
+  `simulation_provider_id`, `profile_id`, bench, and passing-TD settings. Unknown
+  providers, unavailable exact configurations, and mismatched profile/settings
+  fail explicitly. The recommendation cache is v5 and includes provider identity.
+- Provider repositories now require the exact team/PPR/1QB-or-SF configuration.
+  The nearest-config helper remains available for historical habit analysis but
+  is never used for a current provider board.
+- Player rows expose each exact provider's raw Value and within-source rank under
+  `provider_values`. The UI shows them side by side and states that raw scales
+  are provider-specific and never blended. One highlighted source supplies Used
+  VBD and the simulation currency.
+- Raw projected points no longer fill a missing finished provider Value. A row
+  without selected-provider Value or a user override is excluded from simulation.
+- Sleeper live state now carries actual `slots_bn`; the frontend no longer guesses
+  bench size by subtracting two reserved K/DEF rounds.
+- DraftSheets public Scoring/DraftSheet CSV and XLSX exports are parsed by a pure
+  adapter. Desktop Excel is driven across WR2/3 × FLEX1/2 × bench 5/6/7 ×
+  4/6-point passing TD, with every 8/10/12/14-team, standard/half/full-PPR,
+  1QB/superflex configuration: 24 profiles and 576 combinations. Each sampled
+  config has 237 matched players and all four QB/RB/WR/TE position groups.
+- DraftSheets provider companions (`PTS`, `PS`, `ECR`, tier, original team/bye)
+  are preserved for audit, but only its published `VALUE` enters simulation.
+- `tools/refresh_draftsheets_values.py --all-profiles --upload` is the chosen
+  weekly workflow. It downloads the current public workbook, opens Excel once,
+  generates and validates all 576 combinations, proves all 237 players in the
+  public config match Google's displayed Value/position output, snapshots prior
+  blobs, uploads all profiles, and publishes profile/provider registries last.
+  Transient Azure uploads have bounded timeouts and three retries.
+- Azure readback verifies all 24 DraftSheets profiles, 24 configs per profile,
+  and 237 players in a nondefault WR3/FLEX2/bench-7/6-point sample. A browser
+  test selected DraftSheets for 10-team full-PPR superflex and recommended Puka
+  Nacua using the exact generated Value 187.
+- `daily_draftsheets_update_check` downloads and hashes the public workbook but
+  never overwrites generated profiles; the UI warns when the weekly laptop run
+  is needed.
+- `daily_elboberto_update_check` is deployed. It discovers/downloads the current
+  Reddit→Dropbox workbook, compares its hash/version with the published grid,
+  and exposes status to the backend/UI. Current readback is v0.5 vs v0.5 with no
+  update available. Full online ElBoberto regeneration remains unsolved because
+  Azure Linux cannot run desktop Excel; source discovery is automatic, profile
+  recalculation is not.
+- DraftSheets contains 16,316 formulas across 10 calculated sheets, including
+  thousands of VLOOKUP/INDEX/MATCH/IFERROR formulas and provider-specific
+  baseline/man-games logic. Reimplementing it from FantasyPros ECR would be a
+  new rankings methodology, not a small adapter. The product decision remains
+  to outsource finished values and optimize drafts against the selected source.
 
 Useful files:
 
@@ -671,15 +726,13 @@ No commit was created by the assistant.
 
 - **ElBoberto 2026 values are live**, but the refresh currently depends on local
   desktop Excel and is not yet an unattended Azure schedule.
-- DraftSheets remains the strongest cloud-oriented comparison candidate. Its
-  public Google XLSX export and finished cross-position `Value` field are
-  verified, but changing settings and recalculating formulas without a writable
-  Google copy or desktop spreadsheet engine is not solved.
+- DraftSheets is live for the curated 24-profile grid but, like ElBoberto, its
+  generated values depend on a weekly Windows desktop Excel run.
 - Football Absurdity is no longer exposed in the product. Do not restore it or
   make production depend on Playwright scraping of its zero-heavy generator.
-- Side-by-side provider comparison and explicit simulation provider selection
-  are not implemented yet. ElBoberto has independent profile blobs, but there
-  is still only one centralized provider.
+- Profiles outside WR2/3, FLEX1/2, bench 5/6/7, and 4/6-point passing TD remain
+  unsupported rather than approximated. DraftSheets uses -1 interception
+  scoring, a dimension the current room does not expose.
 - Any additional default source must provide finished cross-position values;
   rankings-only or projection-only sources are insufficient.
 - Automated retrieval may be blocked by licensing, redistribution terms,
@@ -705,19 +758,19 @@ No commit was created by the assistant.
 
 ---
 
-## 7. Next phase — operationalize and compare external finished values
+## 7. Next phase — provider accountability and operational polish
 
-The first source is now published. The highest-priority remaining work is to
-remove the desktop-only operational dependency and implement explicit
-multi-source comparison without blending values.
+Two sources now share the curated 24-profile grid and are selectable without
+blending. The highest-priority remaining work is provider-quality evidence,
+freshness/change reporting, and simplifying weekly operations.
 
 ### Step 1 — completed source selection/proof
 
 Current source roles:
 
 1. ElBoberto — provisional default; current 2026 blob published.
-2. DraftSheets — comparison/cloud-fallback candidate; public export verified,
-   unattended setting recalculation still unresolved.
+2. DraftSheets — live comparison source across the curated 24-profile grid;
+  refreshed weekly through desktop Excel, with daily online change detection.
 3. Custom ElBoberto — browser-local exact-profile CheatSheet paste source.
 
 Do not recreate these providers' man-games/VOR/VBD methodology locally merely
@@ -772,7 +825,7 @@ into one opaque source. Move toward independently versioned provider artifacts
 and exact profile matching so 4-point/6-point passing TD and future source
 selection cannot silently reuse a nearby board.
 
-### Step 3 — guarded scheduled/cloud refresh
+### Step 3 — guarded scheduled/cloud refresh (DraftSheets complete; ElBoberto local)
 
 Follow the current ADP safety pattern:
 
@@ -795,7 +848,7 @@ testable without Azure or network access. Until a headless recalculation path is
 proven equivalent to Excel, the guarded local ElBoberto publisher is the
 authoritative refresh mechanism.
 
-### Step 4 — backend/frontend integration
+### Step 4 — backend/frontend integration (completed for two providers)
 
 - Make `rankings_config_players()` use the new external current-year values and
   existing independent ADP.
@@ -837,20 +890,21 @@ Only after the daily value source is stable:
 Use the following in the next thread:
 
 > Read `docs/DRAFT_HELP_CURRENT_HANDOFF.md` completely before making changes.
-> ElBoberto v0.4 is the provisional default 2026 finished-value source and is
+> ElBoberto v0.5 is the provisional default 2026 finished-value source and is
 > live in a 24-profile registry plus a legacy default blob. The refresh tool
 > with `--all-profiles --upload` uses desktop Excel to build and validate 576
 > profile/config combinations, snapshots prior healthy blobs, publishes exact
-> profile blobs, and publishes the registry last. The remaining blocker is
-> unattended cloud recalculation;
-> DraftSheets is the main comparison candidate, while unsupported profiles use
-> a browser-local ElBoberto CheatSheet paste workflow. Do not recreate or blend
+> profile blobs, and publishes the registry last. DraftSheets now has the same
+> curated 24-profile/576-config coverage through its own weekly local Excel
+> command; daily Azure monitors detect when either source needs a laptop refresh.
+> Profiles outside the curated grid use the browser-local ElBoberto CheatSheet
+> fallback. Do not recreate or blend
 > provider VBD/VORP from
 > projections, man-games, ECR, Vegas, or ADP unless the user explicitly reverses
 > that decision. Keep FantasyPros DraftWizard as independent ADP, preserve
-> manual/Avoid overrides and Phase C semantics. D3 exact profiles are complete;
-> the next phase is D4 provider comparison/selection or unattended refresh. The
-> validated baseline is 521 backend tests, 14 frontend tests, clean TypeScript,
+> manual/Avoid overrides and Phase C semantics. D3/D4 coverage and source
+> selection are complete; next add provider accountability and operational
+> polish. The validated baseline is 533 backend tests, 15 frontend tests, clean TypeScript,
 > a successful production build, and a regenerated 960-draft proof.
 
 ---

@@ -698,9 +698,9 @@ def sim_players_from_config_players(
     ``adp`` uses real ADP (``adp`` field, from the FantasyFootballCalculator
     blob) when present, else falls back to ``overall_rank`` (VBD order).
     ``adp_stdev`` uses the real ADP stdev when present, else a modeled value.
-    ``proj`` is the **VBD** (value over replacement) when available, falling
-    back to raw ``fpts`` -- VBD is the right currency for the dedicated,
-    position-locked slots. ``flex_proj`` is the player's value in a *flex* slot:
+    ``proj`` is the selected provider's finished **VBD/Value** or an explicit
+    user override. Rows missing both are excluded; raw ``fpts`` is never used
+    as cross-position simulation currency. ``flex_proj`` is the player's value in a *flex* slot:
     raw points over the shared flex replacement baseline, so a cross-positional
     flex is decided on who actually scores more, not on each position's own VBD
     baseline (which over-credits TEs). Separating ADP (who comes off the board,
@@ -729,9 +729,9 @@ def sim_players_from_config_players(
         fpts_val = p.get("fpts")
         fpts = float(fpts_val) if fpts_val is not None else 0.0
         override = overrides.get(str(pid))
-        proj = float(override) if override is not None else (
-            float(vbd) if vbd is not None else fpts
-        )
+        if override is None and vbd is None:
+            continue
+        proj = float(override) if override is not None else float(vbd)
         pos = str(p.get("pos") or "").upper()
         # Only a flex "guest" (TE) is judged at the shared RB/WR flex level; the
         # natural flex positions (RB/WR) and QB keep their own VBD so their

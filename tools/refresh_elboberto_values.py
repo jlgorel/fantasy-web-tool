@@ -319,6 +319,47 @@ def main(argv=None) -> int:
         return 1
     registry_path = args.out_dir / draft_values.profile_registry_blob_name(args.year)
     registry_path.write_text(json.dumps(registry, separators=(",", ":")), encoding="utf-8")
+    if standard_default_id in candidates:
+        legacy_path = args.out_dir / f"draft_rankings_{args.year}.json"
+        legacy_path.write_text(
+            json.dumps(
+                candidates[standard_default_id],
+                separators=(",", ":"),
+                allow_nan=False,
+            ),
+            encoding="utf-8",
+        )
+        print(f"Wrote legacy default {legacy_path}.")
+
+    provider_entry = {
+        "id": draft_values.ELBOBERTO_PROVIDER,
+        "name": "ElBoberto Custom Auction Value Generator",
+        "attribution": source_metadata.get("attribution"),
+        "source_url": source_metadata.get("source_url"),
+        "source_version": source_metadata.get("source_version"),
+        "generated_at_utc": registry["generated_at_utc"],
+        "profile_registry_blob_name": draft_values.profile_registry_blob_name(args.year),
+        "profile_count": len(registry_entries),
+    }
+    provider_registry = {
+        "schema_version": 1,
+        "year": str(args.year),
+        "default_provider_id": draft_values.ELBOBERTO_PROVIDER,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "providers": {draft_values.ELBOBERTO_PROVIDER: provider_entry},
+    }
+    provider_errors = draft_values.validate_provider_registry(
+        provider_registry, expected_year=args.year,
+    )
+    if provider_errors:
+        print("REJECTED provider registry: " + "; ".join(provider_errors), file=sys.stderr)
+        return 1
+    provider_registry_path = (
+        args.out_dir / draft_values.value_providers_registry_blob_name(args.year)
+    )
+    provider_registry_path.write_text(
+        json.dumps(provider_registry, separators=(",", ":")), encoding="utf-8",
+    )
 
     if args.upload:
         assert upload_blob is not None and load_blob is not None
@@ -336,10 +377,35 @@ def main(argv=None) -> int:
             if errors:
                 print("REJECTED default publish: " + "; ".join(errors[:10]), file=sys.stderr)
                 return 1
-        # Registry goes last: readers cannot discover a profile until every
-        # referenced profile blob has been safely published.
+        # The profile registry follows its blobs; the provider registry below
+        # is the final discoverability boundary.
         draft_values.publish_json_with_snapshot(
             registry, draft_values.profile_registry_blob_name(args.year),
+            upload=upload_blob, load=load_blob,
+        )
+        existing_providers = load_blob(
+            draft_values.value_providers_registry_blob_name(args.year)
+        )
+        if isinstance(existing_providers, dict):
+            merged = dict(existing_providers.get("providers") or {})
+            merged[draft_values.ELBOBERTO_PROVIDER] = provider_entry
+            provider_registry["providers"] = merged
+            if provider_registry.get("default_provider_id") not in merged:
+                provider_registry["default_provider_id"] = draft_values.ELBOBERTO_PROVIDER
+        provider_errors = draft_values.validate_provider_registry(
+            provider_registry, expected_year=args.year,
+        )
+        if provider_errors:
+            print(
+                "REJECTED provider registry publish: " + "; ".join(provider_errors),
+                file=sys.stderr,
+            )
+            return 1
+        # Provider registry is the final discoverability boundary. It cannot
+        # reference this provider until both profile blobs and profile registry exist.
+        draft_values.publish_json_with_snapshot(
+            provider_registry,
+            draft_values.value_providers_registry_blob_name(args.year),
             upload=upload_blob, load=load_blob,
         )
         print(f"Published {len(candidates)} ElBoberto profiles for {args.year}.")

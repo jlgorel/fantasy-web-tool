@@ -203,12 +203,13 @@ export const api = {
 
   getDraftHelpRankings(
     year: string, teams: number, ppr: number, superflex: boolean,
-    profileId?: string | null,
+    profileId?: string | null, providerId?: string | null,
   ): Promise<RankingsResponse> {
     const params = new URLSearchParams({
       year, teams: String(teams), ppr: String(ppr), sf: superflex ? '1' : '0',
     });
     if (profileId) params.set('profile', profileId);
+    if (providerId) params.set('provider', providerId);
     return request<RankingsResponse>(`/draft-help/rankings?${params.toString()}`);
   },
 

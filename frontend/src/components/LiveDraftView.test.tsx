@@ -23,7 +23,7 @@ const fullState: any = {
   status: 'paused',
   last_picked: 1786273359868,
   config: {
-    teams: 12, rounds: 15, ppr: 0.5, superflex: false,
+    teams: 12, rounds: 15, bench_size: 6, ppr: 0.5, superflex: false,
     slots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1 },
   },
   available_slots: [1, 2, 3],
@@ -158,7 +158,7 @@ it('allows scoring override and optimistic manual draft with undo', async () => 
     target: { value: '1' },
   });
   await waitFor(() => expect(mockedApi.getDraftHelpRankings).toHaveBeenCalledWith(
-    '2026', 12, 1, false, 'qb1-rb2-wr2-te1-flex1-bn6-ptd4',
+    '2026', 12, 1, false, 'qb1-rb2-wr2-te1-flex1-bn6-ptd4', 'elboberto',
   ));
 
   fireEvent.click(screen.getByRole('button', { name: 'Mark drafted' }));
@@ -166,6 +166,42 @@ it('allows scoring override and optimistic manual draft with undo', async () => 
   expect(screen.getByText('1 awaiting Sleeper')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Undo local pick' }));
   expect(screen.getByText('Pick 8/180')).toBeInTheDocument();
+});
+
+it('reloads the exact board when the simulation provider changes', async () => {
+  jest.useRealTimers();
+  mockedApi.getLiveDraft.mockResolvedValue(fullState);
+  mockedApi.getDraftHelpRankings.mockResolvedValue({
+    year: '2026', config: { teams: 12, ppr: 0.5, superflex: false },
+    sources: {
+      values: {
+        source: 'ElBoberto',
+        available_providers: [
+          { id: 'elboberto', name: 'ElBoberto', available: true },
+          { id: 'draftsheets', name: 'DraftSheets', available: true },
+        ],
+      },
+      adp: { source: 'fantasypros_draftwizard' },
+    },
+    players: [{
+      player_id: 'other', name: 'Available Player', pos: 'WR', adp: 8, vbd: 80,
+      provider_values: {
+        elboberto: { value: 80, rank: 1 },
+        draftsheets: { value: 55, rank: 2 },
+      },
+    }],
+  });
+  render(<LiveDraftView />);
+  fireEvent.change(screen.getByPlaceholderText('1392134959602356224'), {
+    target: { value: fullState.draft_id },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+  const provider = await screen.findByLabelText('Simulation value provider');
+  fireEvent.change(provider, { target: { value: 'draftsheets' } });
+  await waitFor(() => expect(mockedApi.getDraftHelpRankings).toHaveBeenCalledWith(
+    '2026', 12, 0.5, false,
+    'qb1-rb2-wr2-te1-flex1-bn6-ptd4', 'draftsheets',
+  ));
 });
 
 it('reconciles a manually advanced pick when Sleeper confirms it', async () => {

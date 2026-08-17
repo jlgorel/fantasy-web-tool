@@ -157,6 +157,26 @@ def test_validates_profile_registry(values_module):
     )
 
 
+def test_validates_provider_registry(values_module):
+    registry = {
+        "schema_version": 1,
+        "year": "2026",
+        "default_provider_id": "elboberto",
+        "providers": {
+            "elboberto": {
+                "id": "elboberto",
+                "profile_registry_blob_name": "draft_value_profiles_2026.json",
+            },
+        },
+    }
+    assert values_module.validate_provider_registry(registry, expected_year=2026) == []
+    registry["default_provider_id"] = "missing"
+    assert any(
+        "default_provider_id" in error
+        for error in values_module.validate_provider_registry(registry, expected_year=2026)
+    )
+
+
 def test_snapshots_profile_blob_before_publish(values_module):
     uploads = []
     result = values_module.publish_json_with_snapshot(

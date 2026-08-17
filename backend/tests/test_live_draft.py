@@ -35,6 +35,7 @@ def test_supplied_paused_mock_builds_expected_state(supplied):
     assert state["config"] == {
         "teams": 12,
         "rounds": 15,
+        "bench_size": 6,
         "ppr": 0.5,
         "superflex": False,
         "slots": {

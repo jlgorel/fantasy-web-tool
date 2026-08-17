@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 # Config grid (must match tools/build_draft_rankings.py)
 # ---------------------------------------------------------------------------
 SCHEMA_VERSION = 1
+DEFAULT_VALUE_PROVIDER_ID = "elboberto"
 
 SUPPORTED_TEAM_SIZES: Tuple[int, ...] = (8, 10, 12, 14)
 SUPPORTED_PPR: Tuple[float, ...] = (0.0, 0.5, 1.0)
@@ -105,16 +106,40 @@ def value_profile_id(
     ])
 
 
-def profile_rankings_blob_name(year: Any, profile_id: str) -> str:
-    """Independent provider-value blob for one exact league profile."""
-    safe = str(profile_id).strip().lower()
+def _safe_provider_component(value: Any, label: str) -> str:
+    safe = str(value).strip().lower()
     if not safe or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789-" for ch in safe):
-        raise ValueError(f"Invalid value profile id: {profile_id!r}")
-    return f"draft_rankings_{year}_elboberto_{safe}.json"
+        raise ValueError(f"Invalid {label}: {value!r}")
+    return safe
+
+
+def provider_profile_rankings_blob_name(
+    year: Any, provider_id: str, profile_id: str,
+) -> str:
+    """Independent finished-value blob for one provider and exact profile."""
+    provider = _safe_provider_component(provider_id, "value provider id")
+    profile = _safe_provider_component(profile_id, "value profile id")
+    return f"draft_rankings_{year}_{provider}_{profile}.json"
+
+
+def profile_rankings_blob_name(year: Any, profile_id: str) -> str:
+    """Backward-compatible ElBoberto exact-profile blob name."""
+    return provider_profile_rankings_blob_name(
+        year, DEFAULT_VALUE_PROVIDER_ID, profile_id,
+    )
 
 
 def profile_registry_blob_name(year: Any) -> str:
     return f"draft_value_profiles_{year}.json"
+
+
+def value_providers_registry_blob_name(year: Any) -> str:
+    return f"draft_value_providers_{year}.json"
+
+
+def value_provider_status_blob_name(year: Any, provider_id: str) -> str:
+    provider = _safe_provider_component(provider_id, "value provider id")
+    return f"draft_value_provider_status_{year}_{provider}.json"
 
 
 def adp_blob_name(year: Any) -> str:
@@ -199,6 +224,11 @@ class RankingPlayer:
     tier: Optional[str] = None
     pos_rank: Optional[int] = None
     overall_rank: Optional[int] = None
+    source_name: Optional[str] = None
+    source_team_bye: Optional[str] = None
+    provider_points: Optional[float] = None
+    provider_ps: Optional[float] = None
+    provider_ecr: Optional[float] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -213,6 +243,11 @@ class RankingPlayer:
             "tier": self.tier,
             "pos_rank": self.pos_rank,
             "overall_rank": self.overall_rank,
+            "source_name": self.source_name,
+            "source_team_bye": self.source_team_bye,
+            "provider_points": self.provider_points,
+            "provider_ps": self.provider_ps,
+            "provider_ecr": self.provider_ecr,
         }
 
     @classmethod
@@ -229,6 +264,11 @@ class RankingPlayer:
             tier=d.get("tier"),
             pos_rank=d.get("pos_rank"),
             overall_rank=d.get("overall_rank"),
+            source_name=d.get("source_name"),
+            source_team_bye=d.get("source_team_bye"),
+            provider_points=d.get("provider_points"),
+            provider_ps=d.get("provider_ps"),
+            provider_ecr=d.get("provider_ecr"),
         )
 
 
@@ -360,6 +400,7 @@ class RankingsRepository:
         self.source = blob.get("source")
         self.source_url = blob.get("source_url")
         self.source_version = blob.get("source_version")
+        self.source_content_sha256 = blob.get("source_content_sha256")
         self.generated_at_utc = blob.get("generated_at_utc")
         self.retrieved_at_utc = blob.get("retrieved_at_utc")
         self.attribution = blob.get("attribution")

@@ -25,12 +25,15 @@ from app.services.draft_help import habits
 from app.services.draft_help.draft_fetch import NormalizedDraft, NormalizedPick, infer_league_config
 from app.services.draft_help.rankings_source import (
     DEFAULT_AUCTION_BUDGET,
+    DEFAULT_VALUE_PROVIDER_ID,
     RankingPlayer,
     RankingsRepository,
     adp_blob_name,
     config_key,
     profile_registry_blob_name,
     rankings_blob_name,
+    value_providers_registry_blob_name,
+    value_provider_status_blob_name,
 )
 from app.services.sleeper_league_lookup import get_league_season_chain
 
@@ -41,6 +44,8 @@ DEFAULT_SEASONS = 3
 _SOURCE_CACHE_TTL_SECONDS = 300
 _REPO_CACHE: Dict[str, Tuple[float, RankingsRepository]] = {}
 _PROFILE_REGISTRY_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_PROVIDER_REGISTRY_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_PROVIDER_STATUS_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 # Drafts/value pair fed to the aggregators.
 DraftCtx = Tuple[NormalizedDraft, Dict[str, RankingPlayer]]
@@ -51,18 +56,24 @@ DraftCtx = Tuple[NormalizedDraft, Dict[str, RankingPlayer]]
 # ---------------------------------------------------------------------------
 def load_rankings_repo(
     year: Any, *, profile_id: Optional[str] = None,
+    provider_id: str = DEFAULT_VALUE_PROVIDER_ID,
     blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> Optional[RankingsRepository]:
     """Load (and cache) the ``draft_rankings_{year}.json`` repo for a season."""
     year = str(year)
+    provider_id = str(provider_id or DEFAULT_VALUE_PROVIDER_ID).strip().lower()
     blob_name = rankings_blob_name(year)
     if profile_id:
-        registry = load_profile_registry(year, blob_loader=blob_loader) or {}
+        registry = load_profile_registry(
+            year, provider_id=provider_id, blob_loader=blob_loader,
+        ) or {}
         entry = (registry.get("profiles") or {}).get(str(profile_id)) or {}
         candidate_name = entry.get("blob_name")
         if not candidate_name:
             return None
         blob_name = str(candidate_name)
+    elif provider_id != DEFAULT_VALUE_PROVIDER_ID:
+        return None
     if blob_loader is not None:  # tests: bypass cache
         try:
             return RankingsRepository(blob_loader(blob_name))
@@ -84,13 +95,23 @@ def load_rankings_repo(
 
 
 def load_profile_registry(
-    year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None,
+    year: Any, *, provider_id: str = DEFAULT_VALUE_PROVIDER_ID,
+    blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     year = str(year)
-    name = profile_registry_blob_name(year)
+    provider_id = str(provider_id or DEFAULT_VALUE_PROVIDER_ID).strip().lower()
+    providers = load_value_providers_registry(year, blob_loader=blob_loader) or {}
+    provider = (providers.get("providers") or {}).get(provider_id) or {}
+    name = provider.get("profile_registry_blob_name")
+    if not name and provider_id == DEFAULT_VALUE_PROVIDER_ID:
+        name = profile_registry_blob_name(year)
+    if not name:
+        return None
+    name = str(name)
     loader = blob_loader or load_blob
+    cache_key = f"{year}:{provider_id}:{name}"
     if blob_loader is None:
-        cached = _PROFILE_REGISTRY_CACHE.get(year)
+        cached = _PROFILE_REGISTRY_CACHE.get(cache_key)
         if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
             return cached[1]
     try:
@@ -99,10 +120,96 @@ def load_profile_registry(
         registry = None
     if isinstance(registry, dict) and isinstance(registry.get("profiles"), dict):
         if blob_loader is None:
-            _PROFILE_REGISTRY_CACHE[year] = (time.monotonic(), registry)
+            _PROFILE_REGISTRY_CACHE[cache_key] = (time.monotonic(), registry)
         return registry
     if blob_loader is None:
-        _PROFILE_REGISTRY_CACHE.pop(year, None)
+        _PROFILE_REGISTRY_CACHE.pop(cache_key, None)
+    return None
+
+
+def load_value_providers_registry(
+    year: Any, *, blob_loader: Optional[Callable[[str], Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Load provider capabilities, synthesizing ElBoberto during migration."""
+    year = str(year)
+    loader = blob_loader or load_blob
+    if blob_loader is None:
+        cached = _PROVIDER_REGISTRY_CACHE.get(year)
+        if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
+            return cached[1]
+    try:
+        registry = loader(value_providers_registry_blob_name(year))
+    except Exception:
+        registry = None
+    if not isinstance(registry, dict) or not isinstance(registry.get("providers"), dict):
+        try:
+            legacy = loader(profile_registry_blob_name(year))
+        except Exception:
+            legacy = None
+        if isinstance(legacy, dict) and isinstance(legacy.get("profiles"), dict):
+            registry = {
+                "schema_version": 1,
+                "year": year,
+                "default_provider_id": DEFAULT_VALUE_PROVIDER_ID,
+                "providers": {
+                    DEFAULT_VALUE_PROVIDER_ID: {
+                        "id": DEFAULT_VALUE_PROVIDER_ID,
+                        "name": "ElBoberto Custom Auction Value Generator",
+                        "profile_registry_blob_name": profile_registry_blob_name(year),
+                        "profile_count": len(legacy["profiles"]),
+                    },
+                },
+            }
+        else:
+            try:
+                legacy_rankings = loader(rankings_blob_name(year))
+            except Exception:
+                legacy_rankings = None
+            if isinstance(legacy_rankings, dict) and isinstance(
+                legacy_rankings.get("configs"), dict
+            ):
+                registry = {
+                    "schema_version": 1,
+                    "year": year,
+                    "default_provider_id": DEFAULT_VALUE_PROVIDER_ID,
+                    "providers": {
+                        DEFAULT_VALUE_PROVIDER_ID: {
+                            "id": DEFAULT_VALUE_PROVIDER_ID,
+                            "name": legacy_rankings.get("source") or "Draft rankings",
+                            "profile_registry_blob_name": None,
+                            "profile_count": 0,
+                        },
+                    },
+                }
+    if isinstance(registry, dict) and isinstance(registry.get("providers"), dict):
+        if blob_loader is None:
+            _PROVIDER_REGISTRY_CACHE[year] = (time.monotonic(), registry)
+        return registry
+    if blob_loader is None:
+        _PROVIDER_REGISTRY_CACHE.pop(year, None)
+    return None
+
+
+def load_value_provider_status(
+    year: Any, provider_id: str,
+    *, blob_loader: Optional[Callable[[str], Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    cache_key = f"{year}:{provider_id}"
+    if blob_loader is None:
+        cached = _PROVIDER_STATUS_CACHE.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _SOURCE_CACHE_TTL_SECONDS:
+            return cached[1]
+    loader = blob_loader or load_blob
+    try:
+        status = loader(value_provider_status_blob_name(year, provider_id))
+    except Exception:
+        status = None
+    if isinstance(status, dict):
+        if blob_loader is None:
+            _PROVIDER_STATUS_CACHE[cache_key] = (time.monotonic(), status)
+        return status
+    if blob_loader is None:
+        _PROVIDER_STATUS_CACHE.pop(cache_key, None)
     return None
 
 
@@ -120,6 +227,7 @@ def value_map_for(repo: Optional[RankingsRepository], league_cfg: Dict[str, Any]
 def rankings_config_players(
     year: Any, teams: int, ppr: float, superflex: bool,
     *, profile_id: Optional[str] = None,
+    provider_id: str = DEFAULT_VALUE_PROVIDER_ID,
     blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Player rows for a (year, teams, ppr, superflex) config -- drives the
@@ -127,15 +235,40 @@ def rankings_config_players(
     blob) is merged in when available; absent it, the sim falls back to VBD
     order. When the season value sheet is absent, a current ADP-only pool is
     returned if available so the browser can attach uploaded values."""
-    repo = load_rankings_repo(year, profile_id=profile_id, blob_loader=blob_loader)
+    repo = load_rankings_repo(
+        year, profile_id=profile_id, provider_id=provider_id,
+        blob_loader=blob_loader,
+    )
     if not repo:
         return _adp_only_config_players(
             year, teams, ppr, superflex, blob_loader=blob_loader,
         )
-    cfg = repo.get_config(int(teams), float(ppr), bool(superflex))
+    cfg = repo.get_config(int(teams), float(ppr), bool(superflex), fallback=False)
     if not cfg:
         return []
     adp = _adp_for_config(year, teams, ppr, superflex, blob_loader=blob_loader)
+    provider_values: Dict[str, Dict[str, Dict[str, Any]]] = defaultdict(dict)
+    provider_registry = load_value_providers_registry(
+        year, blob_loader=blob_loader,
+    ) or {}
+    for comparison_provider_id in (provider_registry.get("providers") or {}):
+        comparison_repo = load_rankings_repo(
+            year, profile_id=profile_id,
+            provider_id=comparison_provider_id,
+            blob_loader=blob_loader,
+        )
+        comparison_cfg = comparison_repo.get_config(
+            int(teams), float(ppr), bool(superflex), fallback=False,
+        ) if comparison_repo else None
+        if not comparison_cfg:
+            continue
+        for comparison_player in comparison_cfg.players:
+            provider_values[comparison_player.player_id][comparison_provider_id] = {
+                "value": comparison_player.vbd,
+                "rank": comparison_player.overall_rank,
+                "points": comparison_player.provider_points,
+                "tier": comparison_player.tier,
+            }
     rows: List[Dict[str, Any]] = []
     for p in cfg.players:
         row = p.to_dict()
@@ -147,6 +280,7 @@ def rankings_config_players(
             row["adp_sample_size"] = entry.get("times_drafted")
             row["adp_high"] = entry.get("high")
             row["adp_low"] = entry.get("low")
+        row["provider_values"] = provider_values.get(row["player_id"], {})
         rows.append(row)
     return rows
 
@@ -154,11 +288,20 @@ def rankings_config_players(
 def rankings_config_sources(
     year: Any, teams: int, ppr: float, superflex: bool,
     *, profile_id: Optional[str] = None,
+    provider_id: str = DEFAULT_VALUE_PROVIDER_ID,
     blob_loader: Optional[Callable[[str], Any]] = None,
 ) -> Dict[str, Any]:
     """Source/freshness metadata for a board configuration."""
-    repo = load_rankings_repo(year, profile_id=profile_id, blob_loader=blob_loader)
-    registry = load_profile_registry(year, blob_loader=blob_loader) or {}
+    repo = load_rankings_repo(
+        year, profile_id=profile_id, provider_id=provider_id,
+        blob_loader=blob_loader,
+    )
+    registry = load_profile_registry(
+        year, provider_id=provider_id, blob_loader=blob_loader,
+    ) or {}
+    provider_registry = load_value_providers_registry(
+        year, blob_loader=blob_loader,
+    ) or {}
     blob = _load_adp_blob(year, blob_loader=blob_loader) or {}
     if repo:
         value_source = repo.source or repo.source_file or "draft rankings"
@@ -172,6 +315,27 @@ def rankings_config_sources(
         _ADP_CACHE.pop(str(year), None)
         blob = _load_adp_blob(year, force_reload=True) or {}
         cfg = (blob.get("configs") or {}).get(key) or {}
+    available_providers: List[Dict[str, Any]] = []
+    for available_provider_id, raw_entry in (
+        provider_registry.get("providers") or {}
+    ).items():
+        entry = dict(raw_entry) if isinstance(raw_entry, dict) else {
+            "id": available_provider_id,
+        }
+        available_repo = load_rankings_repo(
+            year, profile_id=profile_id,
+            provider_id=available_provider_id,
+            blob_loader=blob_loader,
+        )
+        entry["available"] = bool(
+            available_repo and available_repo.has_config(
+                int(teams), float(ppr), bool(superflex),
+            )
+        )
+        entry["status"] = load_value_provider_status(
+            year, available_provider_id, blob_loader=blob_loader,
+        )
+        available_providers.append(entry)
     return {
         "values": {
             "source": value_source,
@@ -183,7 +347,10 @@ def rankings_config_sources(
             "attribution": repo.attribution if repo else None,
             "profile": repo.profile if repo else None,
             "requested_profile_id": profile_id,
+            "selected_provider_id": provider_id,
+            "available_providers": available_providers,
             "available_profiles": list((registry.get("profiles") or {}).values()),
+            "source_revision": repo.source_content_sha256 if repo else None,
         },
         "adp": {
             "source": blob.get("source"),

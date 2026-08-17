@@ -41,11 +41,38 @@ def value_profile_id(starters: Dict[str, Any], bench_size: int, passing_td: int)
 
 
 def profile_rankings_blob_name(year: Any, profile_id: str) -> str:
-    return f"draft_rankings_{year}_elboberto_{profile_id}.json"
+    return provider_profile_rankings_blob_name(
+        year, ELBOBERTO_PROVIDER, profile_id,
+    )
+
+
+def provider_profile_rankings_blob_name(
+    year: Any, provider_id: str, profile_id: str,
+) -> str:
+    provider = str(provider_id).strip().lower()
+    profile = str(profile_id).strip().lower()
+    allowed = "abcdefghijklmnopqrstuvwxyz0123456789-"
+    if not provider or any(ch not in allowed for ch in provider):
+        raise ValueError(f"Invalid value provider id: {provider_id!r}")
+    if not profile or any(ch not in allowed for ch in profile):
+        raise ValueError(f"Invalid value profile id: {profile_id!r}")
+    return f"draft_rankings_{year}_{provider}_{profile}.json"
 
 
 def profile_registry_blob_name(year: Any) -> str:
     return f"draft_value_profiles_{year}.json"
+
+
+def value_providers_registry_blob_name(year: Any) -> str:
+    return f"draft_value_providers_{year}.json"
+
+
+def value_provider_status_blob_name(year: Any, provider_id: str) -> str:
+    provider = str(provider_id).strip().lower()
+    allowed = "abcdefghijklmnopqrstuvwxyz0123456789-"
+    if not provider or any(ch not in allowed for ch in provider):
+        raise ValueError(f"Invalid value provider id: {provider_id!r}")
+    return f"draft_value_provider_status_{year}_{provider}.json"
 
 
 def _ppr_label(ppr: float) -> str:
@@ -244,6 +271,36 @@ def validate_profile_registry(registry: Any, *, expected_year: Any) -> List[str]
             errors.append(f"{profile_id}: id does not match settings")
         if not str(entry.get("blob_name") or "").endswith(".json"):
             errors.append(f"{profile_id}: blob_name is invalid")
+    return errors
+
+
+def validate_provider_registry(registry: Any, *, expected_year: Any) -> List[str]:
+    if not isinstance(registry, dict):
+        return ["provider registry is not an object"]
+    errors: List[str] = []
+    if int(registry.get("schema_version") or 0) != SCHEMA_VERSION:
+        errors.append("unsupported provider registry schema_version")
+    if str(registry.get("year")) != str(expected_year):
+        errors.append("provider registry year mismatch")
+    providers = registry.get("providers")
+    if not isinstance(providers, dict) or not providers:
+        return errors + ["provider registry has no providers"]
+    default_id = str(registry.get("default_provider_id") or "")
+    if default_id not in providers:
+        errors.append("default_provider_id is missing from providers")
+    for provider_id, entry in providers.items():
+        if not isinstance(entry, dict):
+            errors.append(f"{provider_id}: provider entry is not an object")
+            continue
+        if str(entry.get("id") or "") != str(provider_id):
+            errors.append(f"{provider_id}: id mismatch")
+        registry_name = str(entry.get("profile_registry_blob_name") or "")
+        if not registry_name.endswith(".json"):
+            errors.append(f"{provider_id}: profile registry blob is invalid")
+        try:
+            provider_profile_rankings_blob_name(expected_year, provider_id, "profile")
+        except ValueError as exc:
+            errors.append(str(exc))
     return errors
 
 

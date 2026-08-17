@@ -357,12 +357,13 @@ def test_recommend_pick_respects_custom_slots():
 # ---------------------------------------------------------------------------
 def test_sim_players_from_config_players():
     cfg_players = [
-        {"player_id": "1", "name": "Josh Allen", "pos": "QB", "overall_rank": 3, "fpts": 360.5},
+        {"player_id": "1", "name": "Josh Allen", "pos": "QB", "overall_rank": 3,
+         "fpts": 360.5, "vbd": 80.5},
         {"player_id": None, "name": "skip"},  # missing id -> skipped
     ]
     sps = sim_players_from_config_players(cfg_players)
     assert len(sps) == 1
-    assert sps[0].adp == 3.0 and sps[0].proj == pytest.approx(360.5)
+    assert sps[0].adp == 3.0 and sps[0].proj == pytest.approx(80.5)
 
 
 def test_sim_players_custom_value_overrides_vbd_and_flex_value():
@@ -380,13 +381,13 @@ def test_sim_players_custom_value_overrides_vbd_and_flex_value():
     assert players["rb1"].proj == pytest.approx(60.0)
 
 
-def test_sim_players_prefers_vbd_as_value_currency():
+def test_sim_players_requires_finished_value_currency():
     sps = sim_players_from_config_players([
         {"player_id": "1", "name": "A", "pos": "RB", "overall_rank": 1, "fpts": 300, "vbd": 120},
         {"player_id": "2", "name": "B", "pos": "QB", "overall_rank": 2, "fpts": 380},  # no vbd
     ])
     assert sps[0].proj == pytest.approx(120)   # VBD is used when present
-    assert sps[1].proj == pytest.approx(380)   # falls back to raw points
+    assert [player.player_id for player in sps] == ["1"]
 
 
 def test_sim_players_uses_real_adp_with_modeled_stdev_fallback():

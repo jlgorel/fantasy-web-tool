@@ -105,6 +105,7 @@ const LiveDraftView: React.FC = () => {
 
   const [players, setPlayers] = useState<RankingsPlayerRow[]>([]);
   const [sources, setSources] = useState<RankingsResponse['sources']>();
+  const [simulationProviderId, setSimulationProviderId] = useState('elboberto');
   const [customSettings, setCustomSettings] = useState<CustomDraftSettings>(
     emptyCustomDraftSettings(),
   );
@@ -252,9 +253,7 @@ const LiveDraftView: React.FC = () => {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [autoRefresh, draftId, loadDirectDraft]);
 
-  const starterCount = Object.values(live?.config?.slots || {})
-    .reduce((total, count) => total + count, 0);
-  const liveBenchSize = Math.max(0, (live?.config?.rounds || 0) - starterCount - 2);
+  const liveBenchSize = live?.config?.bench_size || 0;
   const requestedProfileId = centralizedProfileId(
     live?.config?.slots || {},
     Boolean(live?.config?.superflex),
@@ -272,23 +271,26 @@ const LiveDraftView: React.FC = () => {
       boardPpr,
       live.config.superflex,
       requestedProfileId,
+      simulationProviderId,
     ).then((response) => {
       if (cancelled) return;
       setPlayers(response.players || []);
       setSources(response.sources);
-    }).catch(() => {
-      if (!cancelled) setError('Draft connected, but its rankings board could not load.');
+      setSimulationProviderId(
+        response.sources?.values?.selected_provider_id || simulationProviderId,
+      );
+    }).catch((requestError) => {
+      if (!cancelled) setError(
+        requestError?.message || 'Draft connected, but its rankings board could not load.',
+      );
     });
     return () => { cancelled = true; };
-  }, [boardPassingTd, boardPpr, live?.config, live?.season, requestedProfileId]);
+  }, [boardPassingTd, boardPpr, live?.config, live?.season, requestedProfileId, simulationProviderId]);
 
   const storageKey = useMemo(() => {
     if (!live?.config || !live.season) return null;
-    const starterCount = Object.values(live.config.slots || {})
-      .reduce((total, count) => total + count, 0);
-    const benchSize = Math.max(0, live.config.rounds - starterCount - 2);
     const signature = profileStorageSignature(
-      live.config.slots || {}, false, benchSize, boardPassingTd,
+      live.config.slots || {}, false, live.config.bench_size, boardPassingTd,
     );
     return customDraftStorageKey(
       live.season,
@@ -330,15 +332,18 @@ const LiveDraftView: React.FC = () => {
     boardPassingTd,
   );
   const useProviderValues = !sources ? true : profileMatches;
+  const comparisonProviders = (sources?.values?.available_providers || []).filter(
+    (provider) => provider.available,
+  );
+  const pendingProviderUpdates = (
+    sources?.values?.available_providers || []
+  ).filter((provider) => provider.status?.update_available);
   const effectivePlayers = useMemo(() => players.map((player) => {
     const value = customSettings.entries[player.player_id]?.value;
     if (value !== undefined) return { ...player, vbd: value };
     if (useProviderValues) return player;
     return { ...player, vbd: null, fpts: null, auction: null, tier: null };
   }), [players, customSettings, useProviderValues]);
-  const providerById = useMemo(() => Object.fromEntries(
-    players.map((player) => [player.player_id, player]),
-  ), [players]);
   const pendingManualPicks = useMemo(() => {
     const authoritativeIds = new Set((live?.picks || []).map((pick) => pick.player_id));
     const authoritativePickNos = new Set((live?.picks || []).map((pick) => pick.pick_no));
@@ -456,6 +461,9 @@ const LiveDraftView: React.FC = () => {
         value_overrides: valueOverrides,
         use_provider_values: useProviderValues,
         profile_id: requestedProfileId || undefined,
+        simulation_provider_id: simulationProviderId,
+        bench_size: liveBenchSize,
+        passing_td: boardPassingTd,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityIds,
       });
@@ -465,7 +473,7 @@ const LiveDraftView: React.FC = () => {
     } finally {
       setSimLoading(false);
     }
-  }, [avoidIds, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, priorityIds, requestedProfileId, useProviderValues, valueOverrides, valuesReady]);
+  }, [avoidIds, boardPassingTd, boardPpr, displayCurrentPick, displayFuturePicks, displayMyRosterIds, drafted, live, liveBenchSize, priorityIds, requestedProfileId, simulationProviderId, useProviderValues, valueOverrides, valuesReady]);
 
   // Run once per changed on-clock state/value revision. Manual refresh remains.
   useEffect(() => {
@@ -693,8 +701,37 @@ const LiveDraftView: React.FC = () => {
               {sources?.values?.source_version ? ` v${sources.values.source_version}` : ''}
             </Badge>
             <Badge colorScheme="green">ADP: {adpSourceLabel(sources?.adp?.source)}</Badge>
+            {(sources?.values?.available_providers?.length || 0) > 1 && (
+              <Select
+                aria-label="Simulation value provider"
+                size="xs"
+                width="auto"
+                value={simulationProviderId}
+                onChange={(event) => setSimulationProviderId(event.target.value)}
+              >
+                {sources?.values?.available_providers?.map((provider) => (
+                  <option key={provider.id} value={provider.id} disabled={!provider.available}>
+                    Sim values: {provider.name || provider.id}
+                  </option>
+                ))}
+              </Select>
+            )}
+            {comparisonProviders.length > 1 && (
+              <Text fontSize="xs" color="gray.500">
+                Raw Value scales are provider-specific; #rank is comparable. Values are never blended.
+              </Text>
+            )}
             <Text fontSize="xs" color="gray.500">{valueCount} player values loaded</Text>
           </HStack>
+          {pendingProviderUpdates.map((provider) => (
+            <Alert key={provider.id} status="warning">
+              <AlertIcon />
+              {provider.name || provider.id} published a newer workbook
+              {provider.status?.latest_source_version
+                ? ` (${provider.status.latest_source_version})`
+                : ''}. Current values remain active until guarded recalculation finishes.
+            </Alert>
+          ))}
           {sources?.values?.provider && !useProviderValues && (
             <Alert status="warning">
               <AlertIcon />
@@ -830,7 +867,7 @@ const LiveDraftView: React.FC = () => {
             <Box gridColumn={{ lg: 'span 2' }}>
               <Heading size="xs" mb={2}>Available by ADP ({available.length})</Heading>
               <Box maxH="620px" overflowY="auto" borderWidth="1px" borderRadius="md">
-                <Table size="sm"><Thead position="sticky" top={0} bg="white" zIndex={1}><Tr><Th isNumeric>ADP</Th><Th>Player</Th><Th>Pos</Th><Th isNumeric>Source VBD</Th><Th isNumeric>Used VBD</Th><Th></Th></Tr></Thead>
+                <Table size="sm"><Thead position="sticky" top={0} bg="white" zIndex={1}><Tr><Th isNumeric>ADP</Th><Th>Player</Th><Th>Pos</Th>{comparisonProviders.map((provider) => <Th key={provider.id} isNumeric color={provider.id === simulationProviderId ? 'blue.600' : undefined} title="Raw provider Value and within-source rank; scales are not blended">{provider.name || provider.id} Value</Th>)}<Th isNumeric>Used VBD</Th><Th></Th></Tr></Thead>
                   <Tbody>{available.slice(0, 160).map((player) => {
                     const custom = customSettings.entries[player.player_id];
                     return (
@@ -838,7 +875,10 @@ const LiveDraftView: React.FC = () => {
                         <Td isNumeric>{player.adp?.toFixed(1)}</Td>
                         <Td><HStack spacing={2}><DraftPlayerAvatar playerId={player.player_id} name={player.name} team={player.team} /><Box>{player.name}{custom?.avoid && <Badge ml={1} colorScheme="red">avoid</Badge>}</Box></HStack></Td>
                         <Td>{player.pos}</Td>
-                        <Td isNumeric>{providerById[player.player_id]?.vbd?.toFixed(1) || '—'}</Td>
+                        {comparisonProviders.map((provider) => {
+                          const comparison = player.provider_values?.[provider.id];
+                          return <Td key={provider.id} isNumeric fontWeight={provider.id === simulationProviderId ? 'bold' : undefined}>{comparison?.value != null ? comparison.value.toFixed(1) : '—'}{comparison?.rank != null && <Text as="span" ml={1} fontSize="2xs" color="gray.500">#{comparison.rank}</Text>}</Td>;
+                        })}
                         <Td isNumeric color={custom?.value !== undefined ? 'blue.600' : undefined}>
                           {player.vbd?.toFixed(1) || '—'}
                         </Td>

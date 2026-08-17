@@ -121,6 +121,7 @@ const MockDraftView: React.FC = () => {
   // Board + draft state
   const [players, setPlayers] = useState<RankingsPlayerRow[] | null>(null);
   const [sources, setSources] = useState<RankingsResponse['sources']>();
+  const [simulationProviderId, setSimulationProviderId] = useState('elboberto');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [drafted, setDrafted] = useState<Record<string, number>>({}); // pid -> slot
@@ -188,6 +189,12 @@ const MockDraftView: React.FC = () => {
     starterSlots, superflex, benchSize, passingTd,
   );
   const useProviderValues = !sources ? true : profileMatches;
+  const comparisonProviders = (sources?.values?.available_providers || []).filter(
+    (provider) => provider.available,
+  );
+  const pendingProviderUpdates = (
+    sources?.values?.available_providers || []
+  ).filter((provider) => provider.status?.update_available);
   const effectivePlayers = useMemo(() => (players || []).map((player) => {
     const custom = customSettings.entries[player.player_id];
     if (custom?.value !== undefined) return { ...player, vbd: custom.value };
@@ -227,9 +234,6 @@ const MockDraftView: React.FC = () => {
     effectivePlayers.forEach((p) => { m[p.player_id] = p; });
     return m;
   }, [effectivePlayers]);
-  const providerById = useMemo(() => Object.fromEntries(
-    (players || []).map((player) => [player.player_id, player]),
-  ), [players]);
 
   const available = useMemo(() => {
     const list = effectivePlayers
@@ -254,24 +258,27 @@ const MockDraftView: React.FC = () => {
   );
   const confidence = confidencePresentation(sim?.recommendation_confidence);
 
-  const loadBoard = async () => {
+  const loadBoard = async (providerId = simulationProviderId) => {
     setLoading(true);
     setError(null);
     setSim(null);
     try {
       const resp = await api.getDraftHelpRankings(
-        year, teams, ppr, superflex, requestedProfileId,
+        year, teams, ppr, superflex, requestedProfileId, providerId,
       );
       if (!resp.players.length) {
         setError('No rankings available for that season/config.');
       }
       setPlayers(resp.players);
       setSources(resp.sources);
+      setSimulationProviderId(
+        resp.sources?.values?.selected_provider_id || providerId,
+      );
       setDrafted({});
       setMyRoster([]);
       setHistory([]);
-    } catch (e) {
-      setError('Failed to load the board.');
+    } catch (requestError: any) {
+      setError(requestError?.message || 'Failed to load the board.');
     } finally {
       setLoading(false);
     }
@@ -391,6 +398,9 @@ const MockDraftView: React.FC = () => {
         value_overrides: valueOverrides,
         use_provider_values: useProviderValues,
         profile_id: requestedProfileId || undefined,
+        simulation_provider_id: simulationProviderId,
+        bench_size: benchSize,
+        passing_td: passingTd,
         avoid_ids: avoidIds,
         priority_candidate_ids: priorityCandidateIds,
       });
@@ -500,7 +510,7 @@ const MockDraftView: React.FC = () => {
             </Checkbox>
           </Box>
           <Box alignSelf="flex-end">
-            <Button size="sm" colorScheme="blue" onClick={loadBoard} isLoading={loading}>
+            <Button size="sm" colorScheme="blue" onClick={() => loadBoard()} isLoading={loading}>
               {players ? 'Reload board' : 'Load board'}
             </Button>
           </Box>
@@ -540,6 +550,30 @@ const MockDraftView: React.FC = () => {
                   : sources.adp?.source || 'rank fallback'}
               {sources.adp?.total_drafts ? ` · ${sources.adp.total_drafts.toLocaleString()} drafts` : ''}
             </Badge>
+            {(sources.values?.available_providers?.length || 0) > 1 && (
+              <Select
+                aria-label="Simulation value provider"
+                size="xs"
+                width="auto"
+                value={simulationProviderId}
+                onChange={(event) => {
+                  const providerId = event.target.value;
+                  setSimulationProviderId(providerId);
+                  loadBoard(providerId);
+                }}
+              >
+                {sources.values?.available_providers?.map((provider) => (
+                  <option key={provider.id} value={provider.id} disabled={!provider.available}>
+                    Sim values: {provider.name || provider.id}
+                  </option>
+                ))}
+              </Select>
+            )}
+            {comparisonProviders.length > 1 && (
+              <Text fontSize="xs" color="gray.500">
+                Raw Value scales are provider-specific; #rank is comparable. Values are never blended.
+              </Text>
+            )}
             {sources.adp?.generated_at_utc && (
               <Text fontSize="xs" color="gray.500">
                 refreshed {new Date(sources.adp.generated_at_utc).toLocaleDateString()}
@@ -554,6 +588,15 @@ const MockDraftView: React.FC = () => {
             )}
           </HStack>
         )}
+        {pendingProviderUpdates.map((provider) => (
+          <Alert key={provider.id} status="warning" mt={3} borderRadius="md">
+            <AlertIcon />
+            {provider.name || provider.id} published a newer workbook
+            {provider.status?.latest_source_version
+              ? ` (${provider.status.latest_source_version})`
+              : ''}. Its current value grid remains active until guarded recalculation finishes.
+          </Alert>
+        ))}
         {players && sources?.values?.provider && !useProviderValues && (
           <Alert status="warning" mt={3} borderRadius="md" alignItems="flex-start">
             <AlertIcon />
@@ -831,9 +874,16 @@ const MockDraftView: React.FC = () => {
                       >
                         ADP{boardSort === 'adp' ? ' ↓' : ''}
                       </Th>
-                      <Th isNumeric title="Finished AvgVBD supplied by the selected provider">
-                        Source VBD
-                      </Th>
+                      {comparisonProviders.map((provider) => (
+                        <Th
+                          key={provider.id}
+                          isNumeric
+                          color={provider.id === simulationProviderId ? 'blue.600' : undefined}
+                          title="Raw provider Value and within-source overall rank; raw scales are not blended"
+                        >
+                          {provider.name || provider.id} Value
+                        </Th>
+                      ))}
                       <Th
                         isNumeric cursor="pointer" userSelect="none"
                         color={boardSort === 'vbd' ? 'blue.600' : undefined}
@@ -849,11 +899,26 @@ const MockDraftView: React.FC = () => {
                   <Tbody>
                     {available.map((p) => {
                       const custom = customSettings.entries[p.player_id];
-                      const provider = providerById[p.player_id];
                       return (
                       <Tr key={p.player_id} bg={custom?.avoid ? 'red.50' : undefined}>
                         <Td isNumeric>{p.adp != null ? Math.round(p.adp) : '—'}</Td>
-                        <Td isNumeric>{provider?.vbd != null ? Math.round(provider.vbd) : '—'}</Td>
+                        {comparisonProviders.map((comparisonProvider) => {
+                          const comparison = p.provider_values?.[comparisonProvider.id];
+                          return (
+                            <Td
+                              key={comparisonProvider.id}
+                              isNumeric
+                              fontWeight={comparisonProvider.id === simulationProviderId ? 'bold' : undefined}
+                            >
+                              {comparison?.value != null ? Math.round(comparison.value) : '—'}
+                              {comparison?.rank != null && (
+                                <Text as="span" ml={1} fontSize="2xs" color="gray.500">
+                                  #{comparison.rank}
+                                </Text>
+                              )}
+                            </Td>
+                          );
+                        })}
                         <Td isNumeric color={custom?.value !== undefined ? 'blue.600' : undefined} fontWeight={custom?.value !== undefined ? 'bold' : undefined}>
                           {p.vbd != null ? Math.round(p.vbd) : ''}
                         </Td>

@@ -146,6 +146,7 @@ venv.bak/
 # Azure Functions related
 local.settings.json
 *.funcignore
+!azure-functions/.funcignore
 bin/
 obj/
 
@@ -172,14 +173,52 @@ cython_debug/
 # Logs
 logs/
 *.log
+bootstrap_log.txt
 
-#frontend local stuff
-*.env.local*
+# Local environment and credential material. Keep deployable public settings
+# such as frontend/.env.production explicit and never place secrets there.
+**/.env
+**/.env.local
+**/.env.*.local
+!**/.env.example
+!**/.env.*.example
+**/local.settings.json
+**/service-account*.json
+**/*credentials*.json
+**/*credential*.json
+**/*secrets*.json
+**/*.pem
+**/*.key
+**/*.pfx
+**/*.p12
+**/.azure/
+
+# Deployment packages, function build output, and runtime/browser artifacts.
+**/release.zip
+**/.python_packages/
+azure-functions/chromium-*/
+azure-functions/firefox-*/
+azure-functions/webkit-*/
+azure-functions/ffmpeg-*/
+frontend/build/
+
+# Excel creates these transient lock files while a workbook is open.
+~$*.xls*
 
 # Local-only fixture blobs used with USE_FIXTURE_BLOBS=1 for offline dev.
 # These contain real Sleeper league ownership / projection data so they
 # should not be committed.
 tests/fixtures/blobs/
+
+# Downloaded provider workbooks are regenerated locally for Excel refreshes.
+# Existing tracked historical fixtures remain until their licensing is reviewed.
+tests/fixtures/drafthelp/*.xls
+tests/fixtures/drafthelp/*.xlsx
+tests/fixtures/drafthelp/*.xlsm
+
+# Local profile refresh scratch/output locations.
+tools/draft_values_output/
+tools/draftsheets_values_output/
 
 # Raw (unsanitized) API captures from tools/capture_api_fixtures.py --raw.
 # The sanitized siblings (without the .raw suffix) are safe to commit.

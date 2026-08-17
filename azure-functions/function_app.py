@@ -1,4 +1,5 @@
 import azure.functions as func
+import hashlib
 import os
 import json
 import re
@@ -16,6 +17,8 @@ from collections import defaultdict
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from draftkings_help import form_player_projections_dict, normalize_name_to_sleeper, form_all_projections_and_points_dict
 import draft_adp
+import draft_values
+import draftsheets_values
 import fantasypros_adp
 import vegas_accuracy
 import pytz
@@ -653,6 +656,217 @@ def refresh_draft_adp(year: int | None = None):
     return candidate
 
 
+def _publish_draftsheets_candidate(candidate, year):
+    """Validate and merge one exact-profile candidate into provider storage."""
+    profile = candidate["profile"]
+    profile_id = profile["id"]
+    config_keys = list(candidate.get("configs") or {})
+    errors = draft_values.validate_rankings_blob(
+        candidate, expected_year=year, required_keys=config_keys,
+        min_players_per_config=100,
+    )
+    if errors:
+        logging.error(
+            "refresh_draftsheets_values: rejected %s update: %s",
+            year, "; ".join(errors[:10]),
+        )
+        return None
+
+    blob_name = draft_values.provider_profile_rankings_blob_name(
+        year, draftsheets_values.PROVIDER_ID, profile_id,
+    )
+    profile_registry_name = (
+        f"draft_value_profiles_{year}_{draftsheets_values.PROVIDER_ID}.json"
+    )
+    existing_profile_registry = try_download_blob_json(profile_registry_name) or {}
+    profiles = dict(existing_profile_registry.get("profiles") or {})
+    profiles[profile_id] = {
+        "id": profile_id,
+        "blob_name": blob_name,
+        "profile": profile,
+        "config_count": len(config_keys),
+        "supported_config_keys": config_keys,
+        "generated_at_utc": candidate["generated_at_utc"],
+    }
+    default_profile_id = existing_profile_registry.get("default_profile_id")
+    if default_profile_id not in profiles:
+        default_profile_id = profile_id
+    profile_registry = {
+        "schema_version": 1,
+        "year": str(year),
+        "provider": draftsheets_values.PROVIDER_ID,
+        "default_profile_id": default_profile_id,
+        "generated_at_utc": candidate["generated_at_utc"],
+        "profiles": profiles,
+    }
+    errors = draft_values.validate_profile_registry(
+        profile_registry, expected_year=year,
+    )
+    if errors:
+        logging.error(
+            "refresh_draftsheets_values: rejected profile registry: %s",
+            "; ".join(errors),
+        )
+        return None
+
+    provider_registry_name = draft_values.value_providers_registry_blob_name(year)
+    existing_provider_registry = try_download_blob_json(provider_registry_name) or {}
+    providers = dict(existing_provider_registry.get("providers") or {})
+    providers[draftsheets_values.PROVIDER_ID] = {
+        "id": draftsheets_values.PROVIDER_ID,
+        "name": draftsheets_values.PROVIDER_NAME,
+        "attribution": draftsheets_values.PROVIDER_NAME,
+        "source_url": draftsheets_values.SOURCE_URL,
+        "source_version": candidate.get("source_version"),
+        "generated_at_utc": candidate["generated_at_utc"],
+        "profile_registry_blob_name": profile_registry_name,
+        "profile_count": len(profiles),
+    }
+    default_provider = existing_provider_registry.get("default_provider_id")
+    if default_provider not in providers:
+        default_provider = draftsheets_values.PROVIDER_ID
+    provider_registry = {
+        "schema_version": 1,
+        "year": str(year),
+        "default_provider_id": default_provider,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "providers": providers,
+    }
+    errors = draft_values.validate_provider_registry(
+        provider_registry, expected_year=year,
+    )
+    if errors:
+        logging.error(
+            "refresh_draftsheets_values: rejected provider registry: %s",
+            "; ".join(errors),
+        )
+        return None
+
+    # Dependency order is part of the safety contract. Readers cannot discover
+    # the provider until its exact blob and profile registry are both healthy.
+    draft_values.publish_json_with_snapshot(
+        candidate, blob_name,
+        upload=upload_to_azure_blob, load=try_download_blob_json,
+    )
+    draft_values.publish_json_with_snapshot(
+        profile_registry, profile_registry_name,
+        upload=upload_to_azure_blob, load=try_download_blob_json,
+    )
+    draft_values.publish_json_with_snapshot(
+        provider_registry, provider_registry_name,
+        upload=upload_to_azure_blob, load=try_download_blob_json,
+    )
+    logging.info(
+        "refresh_draftsheets_values: published %s / %s (%d players).",
+        profile_id, config_keys[0],
+        len(next(iter(candidate["configs"].values()))["players"]),
+    )
+    return candidate
+
+
+def refresh_draftsheets_values(year: int | None = None):
+    """Publish the provider's current public exact-profile finished values.
+
+    The public sheet is read-only. This refresh consumes only its exposed
+    Scoring and DraftSheet CSV results; it does not reproduce or change the
+    provider's formulas.
+    """
+    year = year or get_current_fantasy_year()
+    players = try_download_blob_json("players.json") or {}
+    if not players:
+        logging.info("refresh_draftsheets_values: players.json is unavailable.")
+        return None
+
+    scoring_csv = _http_get(draftsheets_values.SCORING_CSV_URL, timeout=60).text
+    draftsheet_csv = _http_get(draftsheets_values.DRAFTSHEET_CSV_URL, timeout=60).text
+    candidate = draftsheets_values.build_draftsheets_blob(
+        year, players, scoring_csv, draftsheet_csv,
+        resolver_factory=draftsheets_values.NameResolver,
+    )
+    return _publish_draftsheets_candidate(candidate, year)
+
+
+def check_elboberto_value_update(year: int | None = None):
+    """Detect a newly published ElBoberto workbook and expose refresh status."""
+    year = year or get_current_fantasy_year()
+    post = _http_get(draft_values.ELBOBERTO_POST_URL, timeout=30)
+    workbook_url = draft_values.discover_elboberto_workbook_url(post.text)
+    workbook = _http_get(workbook_url, timeout=120)
+    content = workbook.content
+    if len(content) < 100_000 or not content.startswith(b"PK"):
+        raise ValueError("ElBoberto download is not a plausible workbook")
+    latest_hash = hashlib.sha256(content).hexdigest()
+    current = try_download_blob_json(f"draft_rankings_{year}.json") or {}
+    current_hash = current.get("source_content_sha256")
+    status = {
+        "schema_version": 1,
+        "year": str(year),
+        "provider": draft_values.ELBOBERTO_PROVIDER,
+        "checked_at_utc": datetime.now(timezone.utc).isoformat(),
+        "latest_source_url": workbook_url,
+        "latest_source_version": draft_values.elboberto_version_from_url(workbook_url),
+        "latest_source_content_sha256": latest_hash,
+        "latest_source_content_bytes": len(content),
+        "current_source_version": current.get("source_version"),
+        "current_source_content_sha256": current_hash,
+        "update_available": bool(current_hash and current_hash != latest_hash),
+        "refresh_mode": "desktop_excel_required",
+    }
+    upload_to_azure_blob(
+        status,
+        draft_values.value_provider_status_blob_name(
+            year, draft_values.ELBOBERTO_PROVIDER,
+        ),
+    )
+    if status["update_available"]:
+        logging.warning(
+            "ElBoberto %s is newer than the published profile grid; desktop Excel refresh required.",
+            status.get("latest_source_version") or "workbook",
+        )
+    return status
+
+
+def check_draftsheets_value_update(year: int | None = None):
+    """Detect a changed public DraftSheets workbook without replacing profiles."""
+    year = year or get_current_fantasy_year()
+    workbook = _http_get(draftsheets_values.XLSX_EXPORT_URL, timeout=120)
+    content = workbook.content
+    if len(content) < 100_000 or not content.startswith(b"PK"):
+        raise ValueError("DraftSheets download is not a plausible workbook")
+    latest_hash = hashlib.sha256(content).hexdigest()
+    profile_registry = try_download_blob_json(
+        f"draft_value_profiles_{year}_{draftsheets_values.PROVIDER_ID}.json"
+    ) or {}
+    default_id = profile_registry.get("default_profile_id")
+    default_entry = (profile_registry.get("profiles") or {}).get(default_id) or {}
+    current = try_download_blob_json(default_entry.get("blob_name") or "") or {}
+    current_hash = current.get("source_content_sha256")
+    status = {
+        "schema_version": 1,
+        "year": str(year),
+        "provider": draftsheets_values.PROVIDER_ID,
+        "checked_at_utc": datetime.now(timezone.utc).isoformat(),
+        "latest_source_url": draftsheets_values.XLSX_EXPORT_URL,
+        "latest_source_content_sha256": latest_hash,
+        "latest_source_content_bytes": len(content),
+        "current_source_version": current.get("source_version"),
+        "current_source_content_sha256": current_hash,
+        "update_available": bool(current_hash and current_hash != latest_hash),
+        "refresh_mode": "weekly_local_excel",
+    }
+    upload_to_azure_blob(
+        status,
+        draft_values.value_provider_status_blob_name(
+            year, draftsheets_values.PROVIDER_ID,
+        ),
+    )
+    if status["update_available"]:
+        logging.warning(
+            "DraftSheets changed; run the guarded weekly local Excel refresh."
+        )
+    return status
+
+
 def download_necessary_fantasy_data(force: bool = False):
 
     now = datetime.now()
@@ -833,6 +1047,26 @@ def daily_draft_adp_refresh(mytimer: func.TimerRequest) -> None:
         logging.info("Outside draft season. Skipping ADP refresh.")
         return
     refresh_draft_adp()
+
+
+@app.function_name(name="daily_elboberto_update_check")
+@app.timer_trigger(schedule="0 0 11 * * *", arg_name="mytimer")
+def daily_elboberto_update_check(mytimer: func.TimerRequest) -> None:
+    """Detect provider workbook changes; regeneration still requires Excel."""
+    if not draft_adp.is_draft_season(datetime.now(timezone.utc)):
+        logging.info("Outside draft season. Skipping ElBoberto update check.")
+        return
+    check_elboberto_value_update()
+
+
+@app.function_name(name="daily_draftsheets_update_check")
+@app.timer_trigger(schedule="0 30 11 * * *", arg_name="mytimer")
+def daily_draftsheets_update_check(mytimer: func.TimerRequest) -> None:
+    """Detect public workbook changes; regeneration runs weekly on the laptop."""
+    if not draft_adp.is_draft_season(datetime.now(timezone.utc)):
+        logging.info("Outside draft season. Skipping DraftSheets update check.")
+        return
+    check_draftsheets_value_update()
 
 
 # ---------------------------------------------------------------------------

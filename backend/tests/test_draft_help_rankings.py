@@ -293,7 +293,7 @@ def test_generated_fixture_is_wellformed(year):
         # These are the workbook's AvgVBD cells (column Z), not an inverted
         # overall-rank sequence. The large gaps are intentional and important
         # to the recommender's cross-position utility scale.
-        assert by_name["Jahmyr Gibbs"].vbd == pytest.approx(211.01)
-        assert by_name["Bijan Robinson"].vbd == pytest.approx(206.53)
-        assert by_name["Christian McCaffrey"].vbd == pytest.approx(169.73)
-        assert by_name["Derrick Henry"].vbd == pytest.approx(138.38)
+        assert by_name["Jahmyr Gibbs"].vbd == pytest.approx(211.58)
+        assert by_name["Bijan Robinson"].vbd == pytest.approx(206.96)
+        assert by_name["Christian McCaffrey"].vbd == pytest.approx(170.12)
+        assert by_name["Derrick Henry"].vbd == pytest.approx(138.56)

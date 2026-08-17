@@ -164,6 +164,12 @@ export interface RankingsPlayerRow {
   adp_sample_size?: number | null;
   adp_high?: number | null;
   adp_low?: number | null;
+  provider_values?: Record<string, {
+    value?: number | null;
+    rank?: number | null;
+    points?: number | null;
+    tier?: string | null;
+  }>;
 }
 
 export interface RankingsResponse {
@@ -178,6 +184,25 @@ export interface RankingsResponse {
       generated_at_utc?: string | null;
       retrieved_at_utc?: string | null;
       attribution?: string | null;
+      source_revision?: string | null;
+      selected_provider_id?: string | null;
+      available_providers?: Array<{
+        id: string;
+        name?: string;
+        attribution?: string | null;
+        source_url?: string | null;
+        source_version?: string | null;
+        generated_at_utc?: string | null;
+        profile_count?: number;
+        available?: boolean;
+        status?: {
+          checked_at_utc?: string;
+          latest_source_version?: string | null;
+          current_source_version?: string | null;
+          update_available?: boolean;
+          refresh_mode?: string;
+        } | null;
+      }>;
       requested_profile_id?: string | null;
       available_profiles?: Array<{
         id: string;
@@ -303,6 +328,9 @@ export interface SimRequest {
   value_overrides?: Record<string, number>;
   use_provider_values?: boolean;
   profile_id?: string;
+  simulation_provider_id?: string;
+  bench_size?: number;
+  passing_td?: number;
   avoid_ids?: string[];
   priority_candidate_ids?: string[];
   my_future_pick_numbers?: number[];
@@ -312,6 +340,7 @@ export interface SimRequest {
 export interface LiveDraftConfig {
   teams: number;
   rounds: number;
+  bench_size: number;
   ppr: number;
   superflex: boolean;
   slots: Record<string, number>;

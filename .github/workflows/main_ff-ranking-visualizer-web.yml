@@ -1,6 +1,3 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
 name: Build and deploy Node.js app to Azure Web App - ff-ranking-visualizer-web
 
 on:
@@ -8,9 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+
 permissions:
   id-token: write
   contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,11 +22,15 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: npm install, build, and test
+      - name: Install, test, and build production frontend
+        env:
+          REACT_APP_API_BASE_URL: https://ff-ranking-visualizer.azurewebsites.net
+          CI: "true"
         run: |
           cd frontend
-          npm install
-          npm run build --if-present
+          npm ci
+          npm test -- --watchAll=false --runInBand
+          npm run build
 
       - name: Zip artifact for deployment
         run: zip release.zip frontend/build* -r
@@ -42,10 +45,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment:
-      name: 'Production'
+      name: Production
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
+      id-token: write
 
     steps:
       - name: Download artifact from build job
@@ -55,24 +58,16 @@ jobs:
 
       - name: Unzip artifact for deployment
         run: unzip release.zip
-      
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
           creds: '{"clientId":"${{ secrets.FRONTEND_AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.FRONTEND_AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.FRONTEND_AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.FRONTEEND_AZURE_TENANT_ID }}"}'
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'ff-ranking-visualizer-web'
-          slot-name: 'Production'
-          package: './frontend/build'
-          
-
-
-
-
-
-
-
+          app-name: ff-ranking-visualizer-web
+          slot-name: Production
+          package: ./frontend/build

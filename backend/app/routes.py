@@ -13,6 +13,10 @@ from app.services.draft_help import sim as draft_help_sim
 from app.services.draft_help import draft_fetch as draft_help_fetch
 from app.services.draft_help import live_draft as draft_help_live
 from app.services.draft_help.sim import sim_players_from_config_players
+from app.services.draft_help.rankings_source import (
+    DEFAULT_VALUE_PROVIDER_ID,
+    value_profile_id,
+)
 from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
 from app.services.sleeper_league_lookup import (
@@ -27,6 +31,12 @@ import math
 import hashlib
 
 main = Blueprint('main', __name__)
+
+
+@main.route('/health', methods=['GET'])
+def health_check():
+    """Process health endpoint; intentionally avoids storage and Redis I/O."""
+    return jsonify({'status': 'ok'}), 200
     
 @main.route('/load-sleeper-info', methods=['POST'])
 def load_sleeper_info():
@@ -401,15 +411,36 @@ def draft_help_rankings():
         ppr = float(request.args.get('ppr', 0.5))
         superflex = _parse_bool(request.args.get('sf'))
         profile_id = (request.args.get('profile') or '').strip() or None
+        requested_provider = (request.args.get('provider') or '').strip().lower()
+        provider_id = requested_provider or DEFAULT_VALUE_PROVIDER_ID
+        provider_registry = draft_help_summaries.load_value_providers_registry(year) or {}
+        if requested_provider and provider_id not in (provider_registry.get('providers') or {}):
+            return jsonify({
+                'error': 'value provider unavailable',
+                'provider_id': provider_id,
+            }), 409
+        sources = draft_help_summaries.rankings_config_sources(
+            year, teams, ppr, superflex, profile_id=profile_id,
+            provider_id=provider_id,
+        )
+        selected_capability = next((
+            entry for entry in sources.get('values', {}).get('available_providers', [])
+            if entry.get('id') == provider_id
+        ), None)
+        if requested_provider and not (selected_capability or {}).get('available'):
+            return jsonify({
+                'error': 'value provider unavailable for exact configuration',
+                'provider_id': provider_id,
+                'profile_id': profile_id,
+            }), 409
         players = draft_help_summaries.rankings_config_players(
             year, teams, ppr, superflex, profile_id=profile_id,
+            provider_id=provider_id,
         )
         return jsonify({
             'year': str(year),
             'config': {'teams': teams, 'ppr': ppr, 'superflex': superflex},
-            'sources': draft_help_summaries.rankings_config_sources(
-                year, teams, ppr, superflex, profile_id=profile_id,
-            ),
+            'sources': sources,
             'players': players,
         }), 200
     except Exception as e:
@@ -434,6 +465,46 @@ def draft_help_sim_route():
         ppr = float(body.get('ppr', 0.5))
         superflex = bool(body.get('superflex', False))
         profile_id = str(body.get('profile_id') or '').strip() or None
+        requested_provider = str(body.get('simulation_provider_id') or '').strip().lower()
+        provider_id = requested_provider or DEFAULT_VALUE_PROVIDER_ID
+        provider_registry = draft_help_summaries.load_value_providers_registry(year) or {}
+        if requested_provider and provider_id not in (provider_registry.get('providers') or {}):
+            return jsonify({
+                'error': 'value provider unavailable',
+                'provider_id': provider_id,
+            }), 409
+        if profile_id and body.get('bench_size') is not None and body.get('passing_td') is not None:
+            raw_slots = body.get('slots') if isinstance(body.get('slots'), dict) else {}
+            expected_profile_id = value_profile_id(
+                {
+                    slot: raw_slots.get(slot, 0)
+                    for slot in ('QB', 'RB', 'WR', 'TE', 'FLEX')
+                },
+                int(body.get('bench_size')),
+                int(body.get('passing_td')),
+            )
+            if profile_id != expected_profile_id:
+                return jsonify({
+                    'error': 'value profile does not match simulation settings',
+                    'profile_id': profile_id,
+                    'expected_profile_id': expected_profile_id,
+                }), 400
+        if requested_provider:
+            source_metadata = draft_help_summaries.rankings_config_sources(
+                year, teams, ppr, superflex, profile_id=profile_id,
+                provider_id=provider_id,
+            )
+            selected_capability = next((
+                entry
+                for entry in source_metadata.get('values', {}).get('available_providers', [])
+                if entry.get('id') == provider_id
+            ), None)
+            if not (selected_capability or {}).get('available'):
+                return jsonify({
+                    'error': 'value provider unavailable for exact configuration',
+                    'provider_id': provider_id,
+                    'profile_id': profile_id,
+                }), 409
         use_provider_values = body.get('use_provider_values', True) is not False
         value_overrides = _parse_value_overrides(body.get('value_overrides'))
         avoid_ids = _parse_avoid_ids(body.get('avoid_ids'))
@@ -447,6 +518,7 @@ def draft_help_sim_route():
             my_future_pick_numbers = sorted(my_future_pick_numbers)
         config_players = draft_help_summaries.rankings_config_players(
             year, teams, ppr, superflex, profile_id=profile_id,
+            provider_id=provider_id,
         )
         simulation_config_players = config_players
         if not use_provider_values:
@@ -495,10 +567,13 @@ def draft_help_sim_route():
             for row in simulation_config_players
         ]
         cache_spec = {
-            'version': 4,
+            'version': 5,
             'year': str(year), 'teams': teams, 'rounds': rounds,
             'my_slot': my_slot, 'ppr': ppr, 'superflex': superflex,
             'profile_id': profile_id,
+            'simulation_provider_id': provider_id,
+            'bench_size': body.get('bench_size'),
+            'passing_td': body.get('passing_td'),
             'use_provider_values': use_provider_values,
             'slots': slots, 'current_pick': body.get('current_pick'),
             'n_sims': n_sims, 'top_k': top_k, 'seed': body.get('seed'),
@@ -512,7 +587,7 @@ def draft_help_sim_route():
         cache_digest = hashlib.sha256(json.dumps(
             cache_spec, sort_keys=True, separators=(',', ':'),
         ).encode('utf-8')).hexdigest()
-        cache_key = f'draft_help_sim_v4_{cache_digest}'
+        cache_key = f'draft_help_sim_v5_{cache_digest}'
         redis_client = getattr(current_app, 'redis_client', None)
         try:
             cached = redis_client.get(cache_key) if redis_client else None
