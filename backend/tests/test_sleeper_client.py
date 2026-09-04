@@ -178,6 +178,45 @@ class TestSleeperEdgeCases:
         sc = self._patch(monkeypatch, fake)
         assert sc.get_sleeper_rosters_for_user("jlgorel") == []
 
+    def test_guillotine_league_with_empty_user_roster_is_skipped(
+        self, monkeypatch
+    ):
+        """Sleeper emits players=null after a guillotine roster is chopped."""
+        league_detail = copy.deepcopy(_load("league_LEAGUE_001.json"))
+        rosters_blob = [{
+            "owner_id": "USER_001",
+            "players": None,
+            "starters": None,
+        }]
+
+        def fake(url: str, **_kw: Any) -> Any:
+            if url.endswith("/v1/user/jlgorel"):
+                return _load("user.json")
+            if "/leagues/nfl/" in url:
+                return [{
+                    "name": "Empty Guillotine Team",
+                    "league_id": "LEAGUE_EMPTY",
+                    "status": "in_season",
+                }]
+            if url.endswith("/league/LEAGUE_EMPTY"):
+                return league_detail
+            if url.endswith("/league/LEAGUE_EMPTY/rosters"):
+                return rosters_blob
+            raise AssertionError(url)
+
+        sc = self._patch(monkeypatch, fake)
+        assert sc.get_sleeper_rosters_for_user("jlgorel") == []
+
+    def test_position_groups_tolerate_nullable_pids(self):
+        from app.services.player_data import prepare_position_groups_for_leagues
+
+        result = prepare_position_groups_for_leagues(
+            [{"league": "Empty Team", "pids": None}],
+            {},
+        )
+
+        assert result == {"Empty Team": {}}
+
     def test_skips_non_active_league_status(self, monkeypatch):
         """Drafted/complete leagues outside pre_draft/in_season/post_season are filtered."""
         def fake(url: str, **_kw: Any) -> Any:

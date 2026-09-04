@@ -78,6 +78,21 @@ def cache_sleeper_user_info(
     else:
         raise ValueError("Unsupported website " + repr(website_name))
 
+    # Sleeper represents an empty guillotine roster as players=null. Exclude
+    # empty teams before every lineup/free-agent consumer so one chopped team
+    # cannot fail the entire user's My Teams request. This also protects other
+    # roster providers if they ever return the same shape.
+    nonempty_rosters = []
+    for roster in user_rosters:
+        if roster.get("pids"):
+            nonempty_rosters.append(roster)
+        else:
+            logger.info(
+                "Skipping league %s because the user's roster has no players",
+                roster.get("league", "unknown"),
+            )
+    user_rosters = nonempty_rosters
+
     boris_chen_dict = prepare_boris_chen_tier_dict()
     league_position_groups = prepare_position_groups_for_leagues(user_rosters, pid_to_player)
 

@@ -76,6 +76,13 @@ def get_sleeper_rosters_for_user(username: str) -> List[Dict[str, Any]]:
         if your_roster is None:
             logger.info("User not found with a roster in league %s", league["name"])
             continue
+        roster_players = your_roster.get("players") or []
+        if not roster_players:
+            logger.info(
+                "Skipping league %s because the user's roster has no players",
+                league["name"],
+            )
+            continue
 
         all_owned_players: List[str] = []
         for roster in rosters:
@@ -93,7 +100,7 @@ def get_sleeper_rosters_for_user(username: str) -> List[Dict[str, Any]]:
 
         curr_rosters.append({
             "league": league["name"],
-            "pids": your_roster["players"],
+            "pids": roster_players,
             "settings": scoring_settings,
             "positions": starting_pos,
             "all_owned": all_owned_players,

@@ -34,7 +34,7 @@ def prepare_position_groups_for_leagues(
     for roster in user_rosters:
         league_name = roster["league"]
         position_groups: Dict[str, List[str]] = defaultdict(list)
-        for pid in roster["pids"]:
+        for pid in roster.get("pids") or []:
             player = pid_to_player.get(pid)
             if player is None:
                 logger.info("Player pid %s missing from players.json", pid)
