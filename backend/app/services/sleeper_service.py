@@ -46,6 +46,60 @@ from app.services.sleeper_client import get_sleeper_rosters_for_user
 logger = logging.getLogger(__name__)
 
 
+def build_lineup_recommendations(
+    user_rosters: List[Dict[str, Any]],
+    *,
+    include_free_agents: bool = True,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, List[Dict[str, Any]]]]]:
+    """Run normalized rosters through the shared My Teams lineup pipeline."""
+    pid_to_player, name_to_pid = prepare_pid_to_name_dict()
+
+    nonempty_rosters = []
+    for roster in user_rosters:
+        if roster.get("pids"):
+            nonempty_rosters.append(roster)
+        else:
+            logger.info(
+                "Skipping league %s because the user's roster has no players",
+                roster.get("league", "unknown"),
+            )
+    user_rosters = nonempty_rosters
+
+    boris_chen_dict = prepare_boris_chen_tier_dict()
+    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pid_to_player)
+
+    boris_lineups = form_suggested_starts_based_on_boris(
+        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="boris"
+    )
+    vegas_lineups = form_suggested_starts_based_on_boris(
+        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="vegas"
+    )
+    your_lineups = build_your_lineup(user_rosters, name_to_pid, boris_chen_dict)
+
+    combined: Dict[str, Dict[str, Any]] = {}
+    for league_name in boris_lineups.keys():
+        boris = boris_lineups[league_name]
+        vegas = vegas_lineups.get(league_name, [])
+        yours = your_lineups.get(league_name)
+
+        if yours:
+            annotate_lineup_deltas(boris, yours)
+            annotate_lineup_deltas(vegas, yours)
+
+        combined[league_name] = {
+            "boris_optimized": boris,
+            "vegas_optimized": vegas,
+            "your_lineup": yours,
+        }
+
+    free_agents = (
+        form_top_free_agents_parallel(user_rosters, name_to_pid)
+        if include_free_agents
+        else {str(roster["league"]): {} for roster in user_rosters}
+    )
+    return combined, free_agents
+
+
 def cache_sleeper_user_info(
     username: str, user_uuid: str, website_name: str = "Sleeper"
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Dict[str, List[Dict[str, Any]]]]]:
@@ -69,64 +123,18 @@ def cache_sleeper_user_info(
     The new shape is wrapper-compatible: callers that only need league names
     just iterate the top-level keys, same as before.
     """
-    pid_to_player, name_to_pid = prepare_pid_to_name_dict()
-
     if website_name == "Sleeper":
         user_rosters = get_sleeper_rosters_for_user(username)
     elif website_name == "Fleaflicker":
+        _pid_to_player, name_to_pid = prepare_pid_to_name_dict()
         user_rosters = get_fleaflicker_rosters_and_convert_to_sleeper(username, name_to_pid)
     else:
         raise ValueError("Unsupported website " + repr(website_name))
-
-    # Sleeper represents an empty guillotine roster as players=null. Exclude
-    # empty teams before every lineup/free-agent consumer so one chopped team
-    # cannot fail the entire user's My Teams request. This also protects other
-    # roster providers if they ever return the same shape.
-    nonempty_rosters = []
-    for roster in user_rosters:
-        if roster.get("pids"):
-            nonempty_rosters.append(roster)
-        else:
-            logger.info(
-                "Skipping league %s because the user's roster has no players",
-                roster.get("league", "unknown"),
-            )
-    user_rosters = nonempty_rosters
-
-    boris_chen_dict = prepare_boris_chen_tier_dict()
-    league_position_groups = prepare_position_groups_for_leagues(user_rosters, pid_to_player)
-
-    boris_lineups = form_suggested_starts_based_on_boris(
-        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="boris"
-    )
-    vegas_lineups = form_suggested_starts_based_on_boris(
-        user_rosters, league_position_groups, boris_chen_dict, name_to_pid, mode="vegas"
-    )
-    your_lineups = build_your_lineup(user_rosters, name_to_pid, boris_chen_dict)
-
-    # Combine into a per-league dict and annotate optimized lineups with
-    # deltas vs the user's actual starters (when we have them).
-    combined: Dict[str, Dict[str, Any]] = {}
-    for league_name in boris_lineups.keys():
-        boris = boris_lineups[league_name]
-        vegas = vegas_lineups.get(league_name, [])
-        yours = your_lineups.get(league_name)
-
-        if yours:
-            annotate_lineup_deltas(boris, yours)
-            annotate_lineup_deltas(vegas, yours)
-
-        combined[league_name] = {
-            "boris_optimized": boris,
-            "vegas_optimized": vegas,
-            "your_lineup": yours,
-        }
-
-    free_agents = form_top_free_agents_parallel(user_rosters, name_to_pid)
-    return combined, free_agents
+    return build_lineup_recommendations(user_rosters)
 
 
 __all__ = [
+    "build_lineup_recommendations",
     "cache_sleeper_user_info",
     "load_blob",
     "load_json_from_azure_storage",

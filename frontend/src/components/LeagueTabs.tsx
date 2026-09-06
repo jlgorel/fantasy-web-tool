@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import PlayerTable from "./PlayerTable";
-import LineupConfidence from "./LineupConfidence";
+import React, { useState, useEffect, useCallback } from "react";
+import LineupResults from "./LineupResults";
 import { useUUID } from "../context/UUIDContext";
-import { VStack, HStack, Button, Text, Box, Spinner, ButtonGroup } from "@chakra-ui/react";
+import { VStack, HStack, Button, Text, Spinner } from "@chakra-ui/react";
 import { api } from "../api/client";
 import { FreeAgentRecs, Player } from "../types/player";
-
-type LineupView = "boris" | "vegas" | "your";
 
 interface DynamicTabsProps {
   showTabs: boolean;
@@ -19,7 +16,6 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
   const [vegasOptimized, setVegasOptimized] = useState<Player[] | null>(null);
   const [yourLineup, setYourLineup] = useState<Player[] | null>(null);
   const [freeAgentRecs, setFreeAgentRecs] = useState<FreeAgentRecs | null>(null);
-  const [lineupView, setLineupView] = useState<LineupView>("boris");
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -82,17 +78,6 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
     fetchLeagueData(leagueName, { keepStale: true });
   };
 
-  // Pick which lineup to render. If the user picked "your" but this league
-  // has no user-set starters available, fall back to the boris optimizer.
-  const displayedLineup = useMemo<Player[] | null>(() => {
-    if (lineupView === "vegas") return vegasOptimized ?? borisOptimized;
-    if (lineupView === "your") return yourLineup ?? borisOptimized;
-    return borisOptimized;
-  }, [lineupView, borisOptimized, vegasOptimized, yourLineup]);
-
-  const hasYourLineup = !!yourLineup;
-  const hasVegasLineup = !!vegasOptimized;
-
   if (!showTabs) return null;
 
   return (
@@ -116,68 +101,18 @@ const DynamicTabs: React.FC<DynamicTabsProps> = ({ showTabs }) => {
         </Text>
       )}
 
-      {selectedTab && displayedLineup && (
-        <Box position="relative" opacity={refreshing ? 0.55 : 1} transition="opacity 0.15s">
-          {/* Lineup view selector. Hide entirely if there's no comparison
-              available (no vegas + no your-lineup) so off-season / Fleaflicker
-              users don't see a useless 1-button toggle. */}
-          {(hasYourLineup || hasVegasLineup) && (
-            <HStack justify="center" mb={2}>
-              <ButtonGroup size="sm" isAttached variant="outline">
-                <Button
-                  onClick={() => setLineupView("boris")}
-                  colorScheme={lineupView === "boris" ? "blue" : "gray"}
-                  variant={lineupView === "boris" ? "solid" : "outline"}
-                >
-                  Boris-Optimized
-                </Button>
-                {hasVegasLineup && (
-                  <Button
-                    onClick={() => setLineupView("vegas")}
-                    colorScheme={lineupView === "vegas" ? "blue" : "gray"}
-                    variant={lineupView === "vegas" ? "solid" : "outline"}
-                  >
-                    Vegas-Optimized
-                  </Button>
-                )}
-                {hasYourLineup && (
-                  <Button
-                    onClick={() => setLineupView("your")}
-                    colorScheme={lineupView === "your" ? "blue" : "gray"}
-                    variant={lineupView === "your" ? "solid" : "outline"}
-                  >
-                    Your Lineup
-                  </Button>
-                )}
-              </ButtonGroup>
-            </HStack>
-          )}
-
-          <LineupConfidence starters={displayedLineup} />
-          <PlayerTable data={displayedLineup} freeAgentRecs={freeAgentRecs ?? undefined} />
-          {refreshing && (
-            <Box
-              position="absolute"
-              top={4}
-              right={4}
-              bg="white"
-              borderWidth="1px"
-              borderRadius="md"
-              px={3}
-              py={2}
-              boxShadow="md"
-              zIndex={2}
-            >
-              <HStack gap={2}>
-                <Spinner size="sm" />
-                <Text fontSize="sm">Loading {selectedTab}...</Text>
-              </HStack>
-            </Box>
-          )}
-        </Box>
+      {selectedTab && borisOptimized && (
+        <LineupResults
+          borisOptimized={borisOptimized}
+          vegasOptimized={vegasOptimized}
+          yourLineup={yourLineup}
+          freeAgentRecs={freeAgentRecs ?? undefined}
+          refreshing={refreshing}
+          loadingLabel={selectedTab}
+        />
       )}
 
-      {selectedTab && !displayedLineup && refreshing && (
+      {selectedTab && !borisOptimized && refreshing && (
         <VStack minH="40vh" justify="center">
           <Spinner size="xl" />
           <Text>Loading {selectedTab}...</Text>

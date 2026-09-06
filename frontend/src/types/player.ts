@@ -1,6 +1,69 @@
 // Shared player + ranking types used across components and pages.
 
-export type WebsiteName = 'Sleeper' | 'Fleaflicker';
+export type WebsiteName = 'Sleeper' | 'Fleaflicker' | 'Manual Roster';
+
+export type ManualRosterSlot =
+  | 'QB' | 'RB' | 'WR' | 'TE' | 'REC_FLEX' | 'FLEX' | 'SUPER_FLEX' | 'K' | 'DEF' | 'BN';
+
+export interface ManualRosterLimits {
+  QB: number;
+  RB: number;
+  WR: number;
+  TE: number;
+  REC_FLEX: number;
+  FLEX: number;
+  SUPER_FLEX: number;
+  DEF: number;
+  K: number;
+  BN: number;
+}
+
+export interface ManualScoringSettings {
+  ppr: 0 | 0.5 | 1;
+  passing_td_points: 4 | 6;
+}
+
+export interface ManualCatalogPlayer {
+  player_id: string;
+  name: string;
+  position: string;
+  team?: string | null;
+}
+
+export interface ManualRosterPlayer {
+  player_id: string;
+  cached_name: string;
+  cached_position: string;
+  cached_team?: string | null;
+  slot: ManualRosterSlot;
+}
+
+export interface ManualRoster {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  scoring: ManualScoringSettings;
+  lineup_limits: ManualRosterLimits;
+  players: ManualRosterPlayer[];
+}
+
+export interface ManualRosterStore {
+  version: 1;
+  updated_at: string;
+  rosters: ManualRoster[];
+}
+
+export interface ManualPlayerCatalogResponse {
+  players: ManualCatalogPlayer[];
+}
+
+export interface ManualLineupRequest {
+  name: string;
+  scoring: ManualScoringSettings;
+  lineup_limits: ManualRosterLimits;
+  players: Array<{ player_id: string; slot: ManualRosterSlot }>;
+}
 
 export interface Player {
   NAME: string;
@@ -78,6 +141,7 @@ export interface LeagueDataResponse {
   // (e.g. Fleaflicker today).
   your_lineup?: Player[] | null;
   free_agent_recs: FreeAgentRecs;
+  free_agent_model?: 'not_available';
 }
 
 export interface CachedStartsResponse {

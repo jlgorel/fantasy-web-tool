@@ -5,6 +5,7 @@ import importlib
 import csv
 import io
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,22 @@ def test_parses_exact_scoring_profile(modules):
     assert scoring["ppr"] == 0.5
     assert scoring["profile_id"] == "qb1-rb2-wr2-te1-flex1-bn5-ptd4"
     assert scoring["superflex"] is False
+
+
+def test_parses_gviz_export_when_merged_headers_are_omitted(modules):
+    adapter, _ = modules
+    csv_text = """Updated:,8/31/2026,LEAGUE SETTINGS & SCORING INPUTS,,,,,,,,,,,,,,
+INPUT YOUR LEAGUE SCORING HERE,,,,,,,,LEAGUE & ROSTER SETTINGS,,,,,,,
+Setting:,,DESCRIPTION,,,,,,#TEAMS:,,,WR:,,,,
+PASSING,,,,,,,,12,1,2,2,1,1,6,0
+PassTDs,4
+RB PPR,0.5
+WR PPR,0.5
+TE PPR,0.5
+"""
+    scoring = adapter.parse_scoring_csv(csv_text)
+    assert scoring["starters"] == {"QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 1}
+    assert scoring["bench_size"] == 6
 
 
 def test_parses_side_by_side_position_blocks(modules):
@@ -150,3 +167,20 @@ def test_common_bridge_grid_is_complete_and_unique(modules):
         for ppr in (0.0, 0.5, 1.0)
         for superflex in (False, True)
     }
+
+
+def test_bridge_payload_hash_supports_excel_date_cells(modules):
+    adapter, _ = modules
+    profile = adapter.build_draftsheets_profile_from_bridge(
+        "2026", {}, {
+            "ok": True,
+            "results": [{
+                "scoring_values": [
+                    ["Updated:", datetime(2026, 8, 31)],
+                    *list(csv.reader(io.StringIO(SCORING_CSV))),
+                ],
+                "draftsheet_values": list(csv.reader(io.StringIO(DRAFTSHEET_CSV))),
+            }],
+        }, resolver_factory=Resolver,
+    )
+    assert profile["source_content_sha256"]

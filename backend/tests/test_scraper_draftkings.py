@@ -232,6 +232,95 @@ class TestNormalizeName:
         assert dk_module.normalize_name_to_sleeper(dk_name) == expected
 
 
+class TestDraftKingsHttpFetch:
+    @pytest.mark.parametrize("raw,expected", [
+        ("−160", -160),
+        ("-160", -160),
+        ("+285", 285),
+        (110, 110),
+    ])
+    def test_parse_american_odds(self, dk_module, raw, expected):
+        assert dk_module.parse_american_odds(raw) == expected
+
+    def test_fetch_uses_verified_headers_and_accepts_empty_market(
+        self, dk_module, monkeypatch
+    ):
+        calls = []
+
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"selections": []}
+
+        class FakeSession:
+            def __init__(self):
+                self.headers = {}
+
+            def get(self, url, timeout):
+                calls.append((url, timeout, dict(self.headers)))
+                return FakeResponse()
+
+        monkeypatch.setattr(dk_module.requests, "Session", FakeSession)
+        monkeypatch.setattr(dk_module.time, "sleep", lambda _seconds: None)
+        monkeypatch.setattr(
+            dk_module.Config,
+            "prop_name_to_ids_map",
+            {"Interceptions Over Under": (1000, 15937)},
+        )
+        monkeypatch.setattr(
+            dk_module.Config,
+            "prop_name_to_stat_name_map",
+            {"Interceptions Over Under": "Interceptions"},
+        )
+
+        result = dk_module.get_draftkings_data()
+
+        assert result == {"Interceptions": {"selections": []}}
+        assert len(calls) == 2
+        warmup_url, _, _ = calls[0]
+        assert warmup_url == dk_module.DRAFTKINGS_WARMUP_URL
+        url, timeout, headers = calls[1]
+        assert "/categories/1000/subcategories/15937?format=json" in url
+        assert timeout == dk_module.DRAFTKINGS_REQUEST_TIMEOUT_SECONDS
+        assert headers["Accept-Language"] == "en-US,en;q=0.9"
+        assert "Mozilla/5.0" in headers["User-Agent"]
+
+    def test_fetch_raises_on_http_failure(self, dk_module, monkeypatch):
+        class FakeResponse:
+            status_code = 200
+
+            def raise_for_status(self):
+                raise dk_module.requests.HTTPError("403 Client Error")
+
+        class FakeSession:
+            def __init__(self):
+                self.headers = {}
+
+            def get(self, _url, timeout):
+                assert timeout == dk_module.DRAFTKINGS_REQUEST_TIMEOUT_SECONDS
+                return FakeResponse()
+
+        monkeypatch.setattr(dk_module.requests, "Session", FakeSession)
+        monkeypatch.setattr(dk_module.time, "sleep", lambda _seconds: None)
+        monkeypatch.setattr(
+            dk_module.Config,
+            "prop_name_to_ids_map",
+            {"Anytime Scorer": (1003, 12438)},
+        )
+        monkeypatch.setattr(
+            dk_module.Config,
+            "prop_name_to_stat_name_map",
+            {"Anytime Scorer": "Anytime Touchdown"},
+        )
+
+        with pytest.raises(dk_module.requests.HTTPError, match="403"):
+            dk_module.get_draftkings_data()
+
+
 # ---------------------------------------------------------------------------
 # has_all_vegas_stats — branching for QB / RB / WR-TE
 # ---------------------------------------------------------------------------
@@ -380,3 +469,44 @@ class TestFormPlayerProjections:
             and "error" in s["Simulations"]
         ]
         assert errored, "expected at least one player flagged with insufficient data"
+
+    def test_pipeline_skips_dst_touchdown_rows_without_participants(
+        self, dk_module, monkeypatch
+    ):
+        anytime = {
+            "selections": [
+                {
+                    "label": "KC Chiefs D/ST",
+                    "outcomeType": "To Score 2 Or More",
+                    "participants": None,
+                    "displayOdds": {"american": "+4000"},
+                },
+                {
+                    "label": "Christian McCaffrey",
+                    "outcomeType": "Anytime Scorer",
+                    "participants": [{"name": "Christian McCaffrey"}],
+                    "displayOdds": {"american": "−160"},
+                },
+            ]
+        }
+        players = {
+            "pid_cmc": {
+                "full_name": "Christian McCaffrey",
+                "fantasy_positions": ["RB"],
+            }
+        }
+        monkeypatch.setattr(
+            dk_module,
+            "get_draftkings_data",
+            lambda: {"Anytime Touchdown": anytime},
+        )
+        monkeypatch.setattr(
+            dk_module,
+            "load_json_from_azure_storage",
+            lambda *args, **kwargs: players,
+        )
+
+        result = dk_module.form_player_projections_dict()
+
+        assert "christianmccaffrey" in result
+        assert "kcchiefsdst" not in result

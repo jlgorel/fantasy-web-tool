@@ -3,6 +3,7 @@ import { Box, VStack, HStack, Image, Text, Spinner } from "@chakra-ui/react";
 import { useUUID } from "../context/UUIDContext";
 import DynamicTabs from "../components/LeagueTabs";
 import UsernameForm from "../components/UsernameForm";
+import ManualRosterBuilder from "../components/ManualRosterBuilder";
 import { api } from "../api/client";
 import { WebsiteName } from "../types/player";
 
@@ -24,10 +25,11 @@ const HomePage: React.FC = () => {
   }, []);
 
   const handleSaveClick = useCallback(async () => {
-    if (!userUUID || !name.trim()) return;
+    if (!userUUID || (website !== "Manual Roster" && !name.trim())) return;
 
     setShowTabs(false);
     setShowInstructions(false);
+    if (website === "Manual Roster") return;
     setLoading(true);
 
     try {
@@ -63,7 +65,7 @@ const HomePage: React.FC = () => {
         {showInstructions && (
           <VStack align="stretch" gap={4}>
             <Text fontSize="xl" fontWeight="bold" textAlign="center">
-              Choose your league type and enter your username to load your fantasy football teams!
+              Choose Sleeper, Fleaflicker, or build a saved manual roster to load your fantasy football teams!
             </Text>
             <Text fontSize="sm" color="gray.700" textAlign="center">
               This tool automatically suggests starters based on <b>Boris Chen tiers</b>,
@@ -79,6 +81,7 @@ const HomePage: React.FC = () => {
               username={name}
               onUsernameChange={setName}
               onSubmit={handleSaveClick}
+              submitLabel={website === "Manual Roster" ? "Build Rosters" : "Load Teams"}
             />
           </VStack>
         )}
@@ -93,14 +96,16 @@ const HomePage: React.FC = () => {
               </VStack>
             ) : (
               <>
-                <DynamicTabs showTabs={showTabs} />
+                {website === "Manual Roster"
+                  ? <ManualRosterBuilder />
+                  : <DynamicTabs showTabs={showTabs} />}
                 <UsernameForm
                   website={website}
                   onWebsiteChange={setWebsite}
                   username={name}
                   onUsernameChange={setName}
                   onSubmit={handleSaveClick}
-                  submitLabel="Reload Teams"
+                  submitLabel={website === "Manual Roster" ? "Open Manual Rosters" : "Reload Teams"}
                 />
               </>
             )}

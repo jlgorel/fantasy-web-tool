@@ -26,18 +26,26 @@ const UsernameForm: React.FC<UsernameFormProps> = ({
   <VStack gap={2}>
     <HStack gap={2} justify="center">
       <WebsitePicker website={website} onChange={onWebsiteChange} />
-      <Input
-        placeholder={placeholderFor(website)}
-        value={username}
-        onChange={(e) => onUsernameChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSubmit();
-        }}
-        maxW="300px"
-      />
+      {website !== 'Manual Roster' && (
+        <Input
+          placeholder={placeholderFor(website)}
+          value={username}
+          onChange={(e) => onUsernameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSubmit();
+          }}
+          maxW="300px"
+        />
+      )}
     </HStack>
     <HStack justify="center">
-      <Button onClick={onSubmit} colorScheme="blue" maxWidth="120px">
+      <Button
+        onClick={onSubmit}
+        colorScheme="blue"
+        minW={website === 'Manual Roster' ? '190px' : '120px'}
+        maxW="100%"
+        whiteSpace="normal"
+      >
         {submitLabel}
       </Button>
     </HStack>

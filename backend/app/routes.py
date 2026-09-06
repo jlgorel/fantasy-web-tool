@@ -19,6 +19,11 @@ from app.services.draft_help.rankings_source import (
 )
 from app.services.blob_store import load_blob
 from app.services.player_detail import get_player_detail
+from app.services.manual_roster import (
+    ManualRosterValidationError,
+    evaluate_manual_roster,
+    get_manual_player_catalog,
+)
 from app.services.sleeper_league_lookup import (
     get_league_season_chain,
     get_user_leagues,
@@ -178,6 +183,19 @@ def load_league_data():
         "your_lineup": league_data.get("your_lineup"),
         "free_agent_recs": free_agent_recs,
     }), 200
+
+
+@main.route('/manual/players', methods=['GET'])
+def manual_players():
+    return jsonify({'players': get_manual_player_catalog()}), 200
+
+
+@main.route('/manual/lineup', methods=['POST'])
+def manual_lineup():
+    try:
+        return jsonify(evaluate_manual_roster(request.get_json(silent=True))), 200
+    except ManualRosterValidationError as exc:
+        return jsonify({'error': str(exc)}), 400
 
 @main.route('/load-last-run-info', methods=['GET'])
 def load_last_run_info():

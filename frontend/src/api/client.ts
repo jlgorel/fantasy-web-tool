@@ -6,6 +6,8 @@ import {
   CachedStartsResponse,
   LeagueDataResponse,
   LoadSleeperInfoResponse,
+  ManualLineupRequest,
+  ManualPlayerCatalogResponse,
   OverallRankingsPayload,
   PlayerDetailResponse,
   RisersFallersResponse,
@@ -86,6 +88,18 @@ export const api = {
   loadLeagueData(uuid: string, league: string): Promise<LeagueDataResponse> {
     const url = `/load-league-data?league=${encodeURIComponent(league)}`;
     return request<LeagueDataResponse>(url, { headers: uuidHeaders(uuid) });
+  },
+
+  getManualPlayers(): Promise<ManualPlayerCatalogResponse> {
+    return request<ManualPlayerCatalogResponse>('/manual/players');
+  },
+
+  postManualLineup(uuid: string, body: ManualLineupRequest): Promise<LeagueDataResponse> {
+    return request<LeagueDataResponse>('/manual/lineup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...uuidHeaders(uuid) },
+      body: JSON.stringify(body),
+    });
   },
 
   getOverallRankings(): Promise<OverallRankingsPayload> {
